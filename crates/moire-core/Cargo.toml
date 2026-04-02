@@ -1,0 +1,11 @@
+[package]
+name = "moire-core"
+version = "0.1.0"
+edition = "2021"
+description = "Computation library for moire superlattice and Cooper-pair density modulation"
+
+[dependencies]
+nalgebra = "0.33"
+rustfft = "6.2"
+num-complex = "0.4"
+serde = { version = "1", features = ["derive"] }

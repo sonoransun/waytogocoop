@@ -1,0 +1,13 @@
+[package]
+name = "moire-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "Native desktop visualization for moire superlattice patterns"
+
+[dependencies]
+moire-core = { path = "../moire-core" }
+eframe = { version = "0.31", features = ["default_fonts", "persistence"] }
+egui = "0.31"
+egui_plot = "0.31"
+egui_extras = "0.31"
+serde = { version = "1", features = ["derive"] }
