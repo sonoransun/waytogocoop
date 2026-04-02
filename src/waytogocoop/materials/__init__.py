@@ -8,6 +8,16 @@ from waytogocoop.materials.lattice import (
     lattice_vectors,
     reciprocal_vectors,
 )
+from waytogocoop.materials.isotopes import (
+    Isotope,
+    ElementData,
+    ELEMENTS,
+    MATERIAL_COMPOSITION,
+    get_element,
+    get_composition,
+    natural_average_mass,
+    formula_unit_avg_mass,
+)
 
 __all__ = [
     "Material",
@@ -19,4 +29,12 @@ __all__ = [
     "apply_rotation",
     "lattice_vectors",
     "reciprocal_vectors",
+    "Isotope",
+    "ElementData",
+    "ELEMENTS",
+    "MATERIAL_COMPOSITION",
+    "get_element",
+    "get_composition",
+    "natural_average_mass",
+    "formula_unit_avg_mass",
 ]

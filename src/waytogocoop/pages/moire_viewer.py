@@ -8,6 +8,7 @@ import dash_bootstrap_components as dbc
 
 from waytogocoop.components.material_selector import create_material_selector
 from waytogocoop.components.parameter_panel import create_parameter_panel
+from waytogocoop.components.isotope_panel import create_isotope_panel
 from waytogocoop.components.figure_factory import (
     create_moire_heatmap,
     create_gap_heatmap,
@@ -16,7 +17,8 @@ from waytogocoop.components.figure_factory import (
 )
 from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.computation.superconducting import gap_modulation, cpdm_amplitude
-from waytogocoop.config import DELTA_AVG, DELTA_AMPLITUDE
+from waytogocoop.computation.isotope_effects import compute_isotope_effects
+from waytogocoop.config import DELTA_1, DELTA_2, DELTA_AVG, DELTA_AMPLITUDE
 from waytogocoop.materials.database import get_material
 
 dash.register_page(
@@ -37,6 +39,7 @@ layout = dbc.Container(
                     [
                         create_material_selector(_PREFIX),
                         create_parameter_panel(_PREFIX),
+                        create_isotope_panel(_PREFIX),
                         dbc.Card(
                             dbc.CardBody(
                                 [
@@ -89,12 +92,19 @@ layout = dbc.Container(
     Output(f"{_PREFIX}-moire-graph", "figure"),
     Output(f"{_PREFIX}-gap-graph", "figure"),
     Output(f"{_PREFIX}-info", "children"),
+    Output(f"{_PREFIX}-isotope-info", "children"),
     Input(f"{_PREFIX}-substrate-dropdown", "value"),
     Input(f"{_PREFIX}-overlayer-dropdown", "value"),
     Input(f"{_PREFIX}-twist-slider", "value"),
     Input(f"{_PREFIX}-grid-size", "value"),
     Input(f"{_PREFIX}-physical-extent", "value"),
     Input(f"{_PREFIX}-view-mode", "value"),
+    Input(f"{_PREFIX}-isotope-enabled", "value"),
+    Input(f"{_PREFIX}-fe-mass", "value"),
+    Input(f"{_PREFIX}-te-mass", "value"),
+    Input(f"{_PREFIX}-sb-mass", "value"),
+    Input(f"{_PREFIX}-isotope-alpha", "value"),
+    Input(f"{_PREFIX}-isotope-comparison", "value"),
 )
 def _update_viewer(
     substrate_formula: str,
@@ -103,6 +113,12 @@ def _update_viewer(
     grid_size: int,
     physical_extent: float,
     view_mode: str,
+    isotope_enabled: list,
+    fe_mass: float,
+    te_mass: float,
+    sb_mass: float,
+    isotope_alpha: float,
+    isotope_comparison: list,
 ):
     substrate = get_material(substrate_formula)
     overlayer = get_material(overlayer_formula)
@@ -112,21 +128,88 @@ def _update_viewer(
     twist_angle = float(twist_angle or 0.0)
     view_mode = view_mode or "heatmap"
 
+    isotope_on = bool(isotope_enabled and "on" in isotope_enabled)
+    show_comparison = bool(isotope_comparison and "on" in isotope_comparison)
+
+    # Compute isotope effects when enabled
+    sub_a = substrate.a
+    over_a = overlayer.a
+    dw_sub = 1.0
+    dw_over = 1.0
+    d_avg = DELTA_AVG
+    d_amp = DELTA_AMPLITUDE
+    coh_len = 20.0
+    isotope_info_children = []
+
+    if isotope_on:
+        mass_overrides = {
+            "Fe": float(fe_mass or 0),
+            "Te": float(te_mass or 0),
+            "Sb": float(sb_mass or 0),
+        }
+        alpha = float(isotope_alpha or 0.25)
+
+        effects = compute_isotope_effects(
+            substrate_formula=substrate.formula,
+            overlayer_formula=overlayer.formula,
+            substrate_a=substrate.a,
+            overlayer_a=overlayer.a,
+            overlayer_lattice_type=overlayer.lattice_type,
+            delta_1=DELTA_1,
+            delta_2=DELTA_2,
+            mass_overrides=mass_overrides,
+            alpha=alpha,
+        )
+
+        sub_a = effects.substrate_a_modified
+        over_a = effects.overlayer_a_modified
+        dw_sub = effects.dw_factor_substrate
+        dw_over = effects.dw_factor_overlayer
+        d_avg = (effects.delta_1_modified + effects.delta_2_modified) / 2.0
+        d_amp = (effects.delta_2_modified - effects.delta_1_modified) / 2.0
+        coh_len = effects.coherence_length_modified
+
+        isotope_info_children = [
+            html.Small(
+                [
+                    html.Strong("Isotope modifications (speculative):"),
+                    html.Br(),
+                    f"Substrate da: {effects.substrate_delta_a:+.5f} A",
+                    html.Br(),
+                    f"Overlayer da: {effects.overlayer_delta_a:+.5f} A",
+                    html.Br(),
+                    f"Delta1: {effects.delta_1_modified:.3f} meV (was {DELTA_1:.2f})",
+                    html.Br(),
+                    f"Delta2: {effects.delta_2_modified:.3f} meV (was {DELTA_2:.2f})",
+                    html.Br(),
+                    f"Coherence: {effects.coherence_length_modified:.2f} A (was 20.00)",
+                    html.Br(),
+                    f"DW sub: {effects.dw_factor_substrate:.6f}",
+                    html.Br(),
+                    f"DW over: {effects.dw_factor_overlayer:.6f}",
+                ]
+            )
+        ]
+
     result = generate_moire_pattern(
-        substrate_a=substrate.a,
-        overlayer_a=overlayer.a,
+        substrate_a=sub_a,
+        overlayer_a=over_a,
         overlayer_lattice_type=overlayer.lattice_type,
         twist_angle_deg=twist_angle,
         grid_size=grid_size,
         physical_extent=physical_extent,
+        dw_factor_substrate=dw_sub,
+        dw_factor_overlayer=dw_over,
     )
 
-    gap = gap_modulation(result["pattern"], DELTA_AVG, DELTA_AMPLITUDE)
+    gap = gap_modulation(result["pattern"], d_avg, d_amp)
 
     x, y = result["x"], result["y"]
     pattern = result["pattern"]
-    moire_title = f"Moire: {substrate.formula} / {overlayer.formula}"
-    gap_title = "Superconducting Gap Modulation"
+
+    suffix = " [isotope-modified]" if isotope_on else ""
+    moire_title = f"Moire: {substrate.formula} / {overlayer.formula}{suffix}"
+    gap_title = f"Superconducting Gap Modulation{suffix}"
 
     if view_mode == "contour":
         moire_fig = create_2d_contour(
@@ -138,7 +221,6 @@ def _update_viewer(
             colorscale="RdBu_r", z_label="Delta (meV)",
         )
     elif view_mode == "3d":
-        # Subsample for performance when grid is large
         if grid_size > 150:
             x_s, y_s = x[::2], y[::2]
             pattern_s = pattern[::2, ::2]
@@ -161,16 +243,70 @@ def _update_viewer(
             x, y, gap, title=gap_title,
         )
 
-    mismatch = abs(substrate.a - overlayer.a) / substrate.a * 100.0
-    cpdm_amp = cpdm_amplitude(result["moire_period"])
+    # If comparison mode, overlay the natural pattern as contour lines
+    if isotope_on and show_comparison:
+        natural_result = generate_moire_pattern(
+            substrate_a=substrate.a,
+            overlayer_a=overlayer.a,
+            overlayer_lattice_type=overlayer.lattice_type,
+            twist_angle_deg=twist_angle,
+            grid_size=grid_size,
+            physical_extent=physical_extent,
+        )
+        import plotly.graph_objects as go
+
+        nat_period = natural_result["moire_period"]
+        mod_period = result["moire_period"]
+        period_shift = mod_period - nat_period
+
+        isotope_info_children.append(
+            html.Small(
+                [
+                    html.Br(),
+                    html.Strong("Comparison:"),
+                    html.Br(),
+                    f"Natural period: {nat_period:.4f} A",
+                    html.Br(),
+                    f"Modified period: {mod_period:.4f} A",
+                    html.Br(),
+                    f"Period shift: {period_shift:+.4f} A",
+                ]
+            )
+        )
+
+        if view_mode == "heatmap":
+            diff = result["pattern"] - natural_result["pattern"]
+            moire_fig.add_trace(
+                go.Contour(
+                    x=x,
+                    y=y,
+                    z=diff,
+                    contours=dict(
+                        coloring="lines",
+                        showlabels=True,
+                    ),
+                    line=dict(width=1),
+                    colorscale="RdBu_r",
+                    opacity=0.5,
+                    showscale=False,
+                    name="Difference",
+                )
+            )
+            moire_fig.update_layout(
+                title=f"Moire: {substrate.formula} / {overlayer.formula} "
+                "[enriched + difference contours]"
+            )
+
+    mismatch = abs(sub_a - over_a) / sub_a * 100.0
+    cpdm_amp = cpdm_amplitude(result["moire_period"], coherence_length=coh_len)
 
     info = [
-        html.P(f"Substrate: {substrate.formula} (a = {substrate.a} A)"),
-        html.P(f"Overlayer: {overlayer.formula} (a = {overlayer.a} A)"),
+        html.P(f"Substrate: {substrate.formula} (a = {sub_a:.4f} A)"),
+        html.P(f"Overlayer: {overlayer.formula} (a = {over_a:.4f} A)"),
         html.P(f"Lattice mismatch: {mismatch:.2f}%"),
         html.P(f"Twist angle: {twist_angle:.1f} deg"),
         html.P(f"Moire period: {result['moire_period']:.2f} A"),
         html.P(f"CPDM amplitude: {cpdm_amp:.4f}"),
     ]
 
-    return moire_fig, gap_fig, info
+    return moire_fig, gap_fig, info, isotope_info_children

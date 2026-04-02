@@ -114,6 +114,15 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
         changed = true;
     }
 
+    ui.add_space(16.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    // --- Isotope Effects ---
+    if super::isotope_panel::show_isotope_panel(ui, app) {
+        changed = true;
+    }
+
     if changed {
         app.needs_recompute = true;
     }

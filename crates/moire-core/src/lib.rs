@@ -4,8 +4,12 @@ pub mod moire;
 pub mod density;
 pub mod fft;
 pub mod colormap;
+pub mod isotopes;
+pub mod isotope_effects;
 
 pub use materials::{LatticeType, Material};
 pub use lattice::Lattice2D;
 pub use moire::{MoireConfig, MoireResult};
 pub use density::{DensityConfig, DensityResult};
+pub use isotopes::IsotopeConfig;
+pub use isotope_effects::{IsotopeEffects, IsotopeEffectsConfig};

@@ -1,5 +1,7 @@
 use eframe::egui;
 use moire_core::density::{DensityConfig, DensityResult};
+use moire_core::isotope_effects::{IsotopeEffects, IsotopeEffectsConfig};
+use moire_core::isotopes::IsotopeConfig;
 use moire_core::materials;
 use moire_core::moire::{MoireConfig, MoireResult};
 
@@ -52,6 +54,23 @@ pub struct MoireApp {
     /// View mode (2D or 3D).
     pub view_mode: ViewMode,
 
+    // --- Isotope enrichment (speculative) ---
+    /// Whether isotope effects are enabled.
+    #[serde(default)]
+    pub isotope_enabled: bool,
+    /// Fe effective mass override (amu), None = natural average.
+    #[serde(default)]
+    pub fe_mass_override: Option<f64>,
+    /// Te effective mass override (amu).
+    #[serde(default)]
+    pub te_mass_override: Option<f64>,
+    /// Sb effective mass override (amu).
+    #[serde(default)]
+    pub sb_mass_override: Option<f64>,
+    /// BCS isotope exponent.
+    #[serde(default = "default_isotope_alpha")]
+    pub isotope_alpha: f64,
+
     // --- Runtime state (not serialized) ---
     /// Currently selected tab.
     #[serde(skip)]
@@ -95,6 +114,13 @@ pub struct MoireApp {
     /// Whether comparison textures need refresh.
     #[serde(skip)]
     pub comparison_needs_refresh: bool,
+    /// Cached isotope effects (when enabled).
+    #[serde(skip)]
+    pub isotope_effects: Option<IsotopeEffects>,
+}
+
+fn default_isotope_alpha() -> f64 {
+    0.25
 }
 
 // Custom Serialize/Deserialize for DensityConfig so the outer derive works.
@@ -141,6 +167,11 @@ impl Default for MoireApp {
             physical_extent: 200.0,
             density_config: DensityConfig::default(),
             view_mode: ViewMode::Flat2D,
+            isotope_enabled: false,
+            fe_mass_override: None,
+            te_mass_override: None,
+            sb_mass_override: None,
+            isotope_alpha: 0.25,
             active_tab: Tab::Pattern,
             needs_recompute: true,
             needs_surface_rerender: true,
@@ -155,6 +186,7 @@ impl Default for MoireApp {
             show_comparison: false,
             comparison_textures: None,
             comparison_needs_refresh: false,
+            isotope_effects: None,
         }
     }
 }
@@ -184,19 +216,58 @@ impl MoireApp {
         &overlayers[self.overlayer_idx.min(overlayers.len() - 1)]
     }
 
+    /// Build an IsotopeConfig from the current app state.
+    fn isotope_config(&self) -> IsotopeConfig {
+        IsotopeConfig {
+            fe_mass: self.fe_mass_override,
+            te_mass: self.te_mass_override,
+            sb_mass: self.sb_mass_override,
+        }
+    }
+
     /// Run computation and create 2D textures.
     fn recompute(&mut self, ctx: &egui::Context) {
         let substrate = self.substrate_material();
         let overlayer = self.overlayer_material();
 
+        let (sub_a, over_a, dw_sub, dw_over) = if self.isotope_enabled {
+            let iso_cfg = IsotopeEffectsConfig {
+                substrate_formula: substrate.formula,
+                overlayer_formula: overlayer.formula,
+                substrate_a: substrate.a,
+                overlayer_a: overlayer.a,
+                substrate_lattice_type: substrate.lattice_type,
+                overlayer_lattice_type: overlayer.lattice_type,
+                delta_1: self.density_config.delta_1,
+                delta_2: self.density_config.delta_2,
+                coherence_length: 20.0,
+                isotope_config: self.isotope_config(),
+                alpha: self.isotope_alpha,
+            };
+            let effects = moire_core::isotope_effects::compute_isotope_effects(&iso_cfg);
+            let result = (
+                effects.substrate_a_modified,
+                effects.overlayer_a_modified,
+                effects.dw_factor_substrate,
+                effects.dw_factor_overlayer,
+            );
+            self.isotope_effects = Some(effects);
+            result
+        } else {
+            self.isotope_effects = None;
+            (substrate.a, overlayer.a, 1.0, 1.0)
+        };
+
         let config = MoireConfig {
-            substrate_a: substrate.a,
+            substrate_a: sub_a,
             substrate_lattice_type: substrate.lattice_type,
-            overlayer_a: overlayer.a,
+            overlayer_a: over_a,
             overlayer_lattice_type: overlayer.lattice_type,
             twist_angle_deg: self.twist_angle,
             resolution: self.resolution,
             physical_extent: self.physical_extent,
+            dw_factor_substrate: dw_sub,
+            dw_factor_overlayer: dw_over,
         };
 
         let moire = moire_core::moire::compute_moire(&config);
@@ -338,6 +409,8 @@ impl MoireApp {
                 twist_angle_deg: self.twist_angle,
                 resolution: comp_res,
                 physical_extent: self.physical_extent,
+                dw_factor_substrate: 1.0,
+                dw_factor_overlayer: 1.0,
             };
             let moire = moire_core::moire::compute_moire(&config);
 

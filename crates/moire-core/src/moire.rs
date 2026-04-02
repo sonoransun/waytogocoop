@@ -15,6 +15,10 @@ pub struct MoireConfig {
     pub resolution: usize,
     /// Viewport size in Angstroms.
     pub physical_extent: f64,
+    /// Debye-Waller amplitude scaling for substrate potential (default 1.0).
+    pub dw_factor_substrate: f64,
+    /// Debye-Waller amplitude scaling for overlayer potential (default 1.0).
+    pub dw_factor_overlayer: f64,
 }
 
 /// Result of a moire pattern computation.
@@ -129,7 +133,7 @@ pub fn compute_moire(config: &MoireConfig) -> MoireResult {
             // Overlayer potential: sum of cos(G . r)
             let v_over: f64 = g_over.iter().map(|g| g.dot(&r).cos()).sum();
 
-            let val = v_sub * v_over;
+            let val = (config.dw_factor_substrate * v_sub) * (config.dw_factor_overlayer * v_over);
             pattern[iy * n + ix] = val;
 
             if val < min_val {
@@ -203,6 +207,8 @@ mod tests {
             twist_angle_deg: 0.0,
             resolution: 64,
             physical_extent: 100.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
         };
         let result = compute_moire(&config);
         assert_eq!(result.pattern.len(), 64 * 64);
@@ -219,6 +225,8 @@ mod tests {
             twist_angle_deg: 0.0,
             resolution: 32,
             physical_extent: 80.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
         };
         let result = compute_moire(&config);
         let min_val = result.pattern.iter().cloned().fold(f64::MAX, f64::min);
@@ -237,6 +245,8 @@ mod tests {
             twist_angle_deg: 0.0,
             resolution: 16,
             physical_extent: 50.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
         };
         let result = compute_moire(&config);
         let expected = ((4.264 - 3.82) / 3.82) * 100.0;

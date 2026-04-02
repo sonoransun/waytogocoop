@@ -109,6 +109,8 @@ def generate_moire_pattern(
     twist_angle_deg: float = 0.0,
     grid_size: int = 200,
     physical_extent: float = 100.0,
+    dw_factor_substrate: float = 1.0,
+    dw_factor_overlayer: float = 1.0,
 ) -> dict:
     """Generate a moire interference pattern for a substrate/overlayer pair.
 
@@ -129,6 +131,10 @@ def generate_moire_pattern(
         Number of grid points per axis.
     physical_extent : float
         Half-width of the real-space window (Angstrom).
+    dw_factor_substrate : float
+        Debye-Waller amplitude scaling for substrate potential (default 1.0).
+    dw_factor_overlayer : float
+        Debye-Waller amplitude scaling for overlayer potential (default 1.0).
 
     Returns
     -------
@@ -157,7 +163,7 @@ def generate_moire_pattern(
     v_over = _plane_wave_sum(g_over, x, y)
 
     # Moire pattern = product, normalized to [0, 1]
-    pattern = v_sub * v_over
+    pattern = (dw_factor_substrate * v_sub) * (dw_factor_overlayer * v_over)
     p_min = pattern.min()
     p_max = pattern.max()
     if p_max - p_min > 1e-12:

@@ -37,6 +37,13 @@ DEFAULT_COHERENCE_LENGTH: float = 20.0
 DEFAULT_FFT_THRESHOLD_FRACTION: float = 0.3
 
 # ---------------------------------------------------------------------------
+# Isotope-effect parameters (speculative)
+# ---------------------------------------------------------------------------
+AMU_TO_KG: float = 1.66053906660e-27       # atomic mass unit -> kg
+HBAR_J_S: float = 1.054571817e-34          # hbar in J*s
+DEFAULT_ISOTOPE_EXPONENT: float = 0.25     # BCS isotope exponent for FeTe (anomalous)
+
+# ---------------------------------------------------------------------------
 # Conversion helpers
 # ---------------------------------------------------------------------------
 ANGSTROM_TO_NM: float = 0.1
