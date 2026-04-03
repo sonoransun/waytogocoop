@@ -6,6 +6,8 @@ pub mod fft;
 pub mod colormap;
 pub mod isotopes;
 pub mod isotope_effects;
+pub mod magnetic;
+pub mod topological;
 
 pub use materials::{LatticeType, Material};
 pub use lattice::Lattice2D;
@@ -13,3 +15,5 @@ pub use moire::{MoireConfig, MoireResult};
 pub use density::{DensityConfig, DensityResult};
 pub use isotopes::IsotopeConfig;
 pub use isotope_effects::{IsotopeEffects, IsotopeEffectsConfig};
+pub use magnetic::{MagneticFieldConfig, VortexLatticeResult, ZeemanResult};
+pub use topological::{ProximityConfig, ProximityResult, CooperSurface3D};

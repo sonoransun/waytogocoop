@@ -11,6 +11,8 @@ pub fn show_viewport(ui: &mut Ui, app: &mut MoireApp) {
         ui.selectable_value(&mut app.active_tab, Tab::Pattern, "Moire Pattern");
         ui.selectable_value(&mut app.active_tab, Tab::Density, "Density Modulation");
         ui.selectable_value(&mut app.active_tab, Tab::Fourier, "Fourier Spectrum");
+        ui.selectable_value(&mut app.active_tab, Tab::MagneticField, "Magnetic");
+        ui.selectable_value(&mut app.active_tab, Tab::CooperSurface3D, "Cooper 3D");
         ui.separator();
         if ui
             .selectable_value(&mut app.view_mode, ViewMode::Flat2D, "2D")
@@ -44,6 +46,8 @@ fn show_flat_2d(ui: &mut Ui, app: &MoireApp) {
         Tab::Pattern => app.pattern_texture.as_ref(),
         Tab::Density => app.density_texture.as_ref(),
         Tab::Fourier => app.fft_texture.as_ref(),
+        Tab::MagneticField => app.magnetic_texture.as_ref(),
+        Tab::CooperSurface3D => app.density_texture.as_ref(), // z-slice placeholder
     };
 
     if let Some(tex) = texture {

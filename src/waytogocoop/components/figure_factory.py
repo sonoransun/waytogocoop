@@ -258,3 +258,336 @@ def create_2d_contour(
         margin=dict(l=60, r=20, t=50, b=50),
     )
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Magnetic / topological figure constructors
+# ---------------------------------------------------------------------------
+
+
+def create_vortex_overlay_heatmap(
+    x: np.ndarray,
+    y: np.ndarray,
+    gap_field: np.ndarray,
+    vortex_positions: np.ndarray,
+    title: str = "Gap + Vortex Lattice",
+) -> go.Figure:
+    """Gap heatmap with vortex core positions overlaid as markers."""
+    fig = go.Figure()
+    fig.add_trace(
+        go.Heatmap(
+            z=gap_field, x=x, y=y,
+            colorscale="RdBu_r",
+            colorbar=dict(title="Delta (meV)"),
+        )
+    )
+    if vortex_positions.size > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=vortex_positions[:, 0],
+                y=vortex_positions[:, 1],
+                mode="markers",
+                marker=dict(size=6, color="black", symbol="x"),
+                name="Vortex cores",
+            )
+        )
+    fig.update_layout(
+        title=title,
+        xaxis_title="x (Angstrom)",
+        yaxis_title="y (Angstrom)",
+        yaxis_scaleanchor="x",
+        margin=dict(l=60, r=20, t=50, b=50),
+    )
+    return fig
+
+
+def create_3d_isosurface(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    values: np.ndarray,
+    title: str = "3D Cooper Surface",
+    iso_min: float | None = None,
+    iso_max: float | None = None,
+    colorscale: str = "RdBu_r",
+) -> go.Figure:
+    """3D isosurface of Delta(x,y,z) using go.Isosurface.
+
+    Parameters
+    ----------
+    x, y, z : np.ndarray
+        1D coordinate arrays.
+    values : np.ndarray
+        3D array (nz, ny, nx).
+    """
+    nz, ny, nx = values.shape
+    X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
+
+    if iso_min is None:
+        iso_min = float(np.percentile(values, 20))
+    if iso_max is None:
+        iso_max = float(np.percentile(values, 80))
+
+    fig = go.Figure(
+        data=go.Isosurface(
+            x=X.flatten(),
+            y=Y.flatten(),
+            z=Z.flatten(),
+            value=values.transpose(2, 1, 0).flatten(),
+            isomin=iso_min,
+            isomax=iso_max,
+            surface_count=5,
+            colorscale=colorscale,
+            caps=dict(x_show=False, y_show=False, z_show=False),
+            colorbar=dict(title="Delta (meV)"),
+        )
+    )
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title="x (Angstrom)",
+            yaxis_title="y (Angstrom)",
+            zaxis_title="z (Angstrom)",
+            aspectmode="manual",
+            aspectratio=dict(x=1, y=1, z=0.5),
+            camera=dict(eye=dict(x=1.5, y=1.5, z=1.0)),
+        ),
+        margin=dict(l=20, r=20, t=50, b=20),
+    )
+    return fig
+
+
+def create_z_decay_profile(
+    z: np.ndarray,
+    profile: np.ndarray,
+    title: str = "Proximity Decay Profile",
+) -> go.Figure:
+    """Line plot of the proximity decay profile f(z)."""
+    fig = go.Figure(
+        data=go.Scatter(
+            x=z, y=profile,
+            mode="lines",
+            line=dict(color="steelblue", width=2),
+            name="f(z)",
+        )
+    )
+    fig.add_vline(x=0, line=dict(dash="dash", color="gray"), annotation_text="Interface")
+    fig.update_layout(
+        title=title,
+        xaxis_title="z (Angstrom)",
+        yaxis_title="f(z)",
+        margin=dict(l=60, r=20, t=50, b=50),
+    )
+    return fig
+
+
+def create_majorana_density_map(
+    x: np.ndarray,
+    y: np.ndarray,
+    density: np.ndarray,
+    vortex_positions: np.ndarray,
+    title: str = "Majorana ZM Density (SPECULATIVE)",
+) -> go.Figure:
+    """Heatmap of Majorana zero-mode probability density."""
+    fig = go.Figure()
+    fig.add_trace(
+        go.Heatmap(
+            z=density, x=x, y=y,
+            colorscale="Hot",
+            colorbar=dict(title="|psi|^2"),
+        )
+    )
+    if vortex_positions.size > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=vortex_positions[:, 0],
+                y=vortex_positions[:, 1],
+                mode="markers",
+                marker=dict(size=8, color="cyan", symbol="circle-open", line=dict(width=2)),
+                name="Vortex cores",
+            )
+        )
+    fig.update_layout(
+        title=title,
+        xaxis_title="x (Angstrom)",
+        yaxis_title="y (Angstrom)",
+        yaxis_scaleanchor="x",
+        margin=dict(l=60, r=20, t=50, b=50),
+    )
+    return fig
+
+
+def create_quiver_field(
+    x: np.ndarray,
+    y: np.ndarray,
+    jx: np.ndarray,
+    jy: np.ndarray,
+    base_field: np.ndarray,
+    title: str = "Screening Currents",
+    skip: int = 8,
+) -> go.Figure:
+    """Background heatmap with arrow overlay for vector field.
+
+    Parameters
+    ----------
+    skip : int
+        Subsample every ``skip`` grid points for arrows.
+    """
+    fig = go.Figure()
+    fig.add_trace(
+        go.Heatmap(
+            z=base_field, x=x, y=y,
+            colorscale="RdBu_r",
+            colorbar=dict(title="Delta (meV)"),
+            opacity=0.6,
+        )
+    )
+
+    # Subsample for arrows
+    xs, ys = x[::skip], y[::skip]
+    jxs, jys = jx[::skip, ::skip], jy[::skip, ::skip]
+
+    # Scale factor for arrow length
+    scale = (x[-1] - x[0]) / max(len(xs), 1) * 0.8
+    mag = np.sqrt(jxs**2 + jys**2)
+    mag_max = mag.max() if mag.size > 0 else 1.0
+    if mag_max > 1e-30:
+        jxs = jxs / mag_max * scale
+        jys = jys / mag_max * scale
+
+    Xs, Ys = np.meshgrid(xs, ys)
+    for i in range(Xs.shape[0]):
+        for j in range(Xs.shape[1]):
+            x0, y0 = Xs[i, j], Ys[i, j]
+            dx, dy = jxs[i, j], jys[i, j]
+            if abs(dx) + abs(dy) < 1e-10:
+                continue
+            fig.add_annotation(
+                x=x0 + dx, y=y0 + dy,
+                ax=x0, ay=y0,
+                xref="x", yref="y", axref="x", ayref="y",
+                showarrow=True,
+                arrowhead=3, arrowsize=1, arrowwidth=1.5,
+                arrowcolor="white",
+            )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="x (Angstrom)",
+        yaxis_title="y (Angstrom)",
+        yaxis_scaleanchor="x",
+        margin=dict(l=60, r=20, t=50, b=50),
+    )
+    return fig
+
+
+def create_susceptibility_heatmap(
+    x: np.ndarray,
+    y: np.ndarray,
+    chi: np.ndarray,
+    title: str = "Local Susceptibility (SPECULATIVE)",
+) -> go.Figure:
+    """Heatmap of local magnetic susceptibility."""
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=chi, x=x, y=y,
+            colorscale="Plasma",
+            colorbar=dict(title="chi (a.u.)"),
+        )
+    )
+    fig.update_layout(
+        title=title,
+        xaxis_title="x (Angstrom)",
+        yaxis_title="y (Angstrom)",
+        yaxis_scaleanchor="x",
+        margin=dict(l=60, r=20, t=50, b=50),
+    )
+    return fig
+
+
+def create_phase_colormap(
+    param_x: np.ndarray,
+    param_y: np.ndarray,
+    phase_index: np.ndarray,
+    title: str = "Topological Phase Diagram (SPECULATIVE)",
+    x_label: str = "B (Tesla)",
+    y_label: str = "Delta (meV)",
+) -> go.Figure:
+    """2D colormap of topological phase index with boundary overlay."""
+    fig = go.Figure()
+    fig.add_trace(
+        go.Heatmap(
+            z=phase_index,
+            x=param_x,
+            y=param_y,
+            colorscale=[[0, "steelblue"], [1, "firebrick"]],
+            colorbar=dict(title="Phase", tickvals=[0, 1], ticktext=["Trivial", "Topological"]),
+            zmin=0,
+            zmax=1,
+        )
+    )
+    fig.add_trace(
+        go.Contour(
+            z=phase_index.astype(float),
+            x=param_x,
+            y=param_y,
+            contours=dict(start=0.5, end=0.5, size=1),
+            line=dict(color="white", width=2),
+            showscale=False,
+            name="Phase boundary",
+        )
+    )
+    fig.update_layout(
+        title=title,
+        xaxis_title=x_label,
+        yaxis_title=y_label,
+        margin=dict(l=60, r=20, t=50, b=50),
+    )
+    return fig
+
+
+def create_commensuration_sweep(
+    B_values: np.ndarray,
+    a_v_values: np.ndarray,
+    moire_period: float,
+    title: str = "Vortex-Moire Commensuration",
+) -> go.Figure:
+    """Dual-axis plot: a_v(B) and a_v/L_m ratio vs B."""
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(
+        go.Scatter(
+            x=B_values, y=a_v_values,
+            name="a_v (Angstrom)",
+            mode="lines",
+            line=dict(color="steelblue"),
+        ),
+        secondary_y=False,
+    )
+
+    ratio = a_v_values / moire_period if moire_period > 0 else np.zeros_like(a_v_values)
+    fig.add_trace(
+        go.Scatter(
+            x=B_values, y=ratio,
+            name="a_v / L_m",
+            mode="lines",
+            line=dict(color="firebrick"),
+        ),
+        secondary_y=True,
+    )
+
+    for n in [1, 2, 3, 4]:
+        fig.add_hline(
+            y=n, secondary_y=True,
+            line=dict(dash="dot", color="gray", width=1),
+            annotation_text=f"n={n}",
+        )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="B (Tesla)",
+        margin=dict(l=60, r=60, t=50, b=50),
+    )
+    fig.update_yaxes(title_text="Vortex period (Angstrom)", secondary_y=False)
+    fig.update_yaxes(title_text="a_v / L_m", secondary_y=True)
+    return fig

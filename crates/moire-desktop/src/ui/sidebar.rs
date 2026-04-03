@@ -123,6 +123,16 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
         changed = true;
     }
 
+    ui.add_space(16.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    // --- Magnetic / Topological ---
+    let mag_changed = super::magnetic_panel::show_magnetic_panel(ui, app);
+    if mag_changed {
+        app.needs_magnetic_recompute = true;
+    }
+
     if changed {
         app.needs_recompute = true;
     }

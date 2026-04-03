@@ -47,6 +47,26 @@ DEFAULT_ISOTOPE_EXPONENT: float = 0.4      # BCS isotope exponent — literature
 # 0.4 is the corrected consensus value (PRB 82, 212505).
 
 # ---------------------------------------------------------------------------
+# Magnetic / topological constants
+# ---------------------------------------------------------------------------
+PHI_0: float = 2.0678e-15              # Magnetic flux quantum h/(2e) in Wb
+MU_B_EV_T: float = 5.788e-5            # Bohr magneton in eV/T
+MU_B_MEV_T: float = 5.788e-2           # Bohr magneton in meV/T
+V_F_TI: float = 5.0e5                  # TI surface Dirac fermion velocity (m/s)
+G_FACTOR_TSS: float = 30.0             # Effective g-factor for topological surface states
+                                        # Literature range: 20–50 (Fu & Kane, PRL 2008)
+LAMBDA_L_FETE: float = 5000.0          # London penetration depth for FeTe (Angstrom)
+                                        # ~500 nm typical for iron chalcogenides
+XI_PROXIMITY_DEFAULT: float = 100.0    # Proximity coherence length into TI (Angstrom)
+                                        # Literature: 5–20 nm → 50–200 Angstrom
+XI_MAJORANA_DEFAULT: float = 50.0      # Majorana localization length (Angstrom), speculative
+K_F_TSS: float = 0.1                   # TI surface Fermi wavevector (1/Angstrom)
+                                        # Approximate; depends on Fermi level tuning
+BC2_FETE: float = 47.0                 # Upper critical field Hc2 for FeTe (Tesla)
+                                        # Literature: ~47 T at low temperature
+ANGSTROM_TO_M: float = 1.0e-10         # Angstrom → metre conversion
+
+# ---------------------------------------------------------------------------
 # Conversion helpers
 # ---------------------------------------------------------------------------
 ANGSTROM_TO_NM: float = 0.1

@@ -2,6 +2,8 @@ use eframe::egui;
 use moire_core::density::{DensityConfig, DensityResult};
 use moire_core::isotope_effects::{IsotopeEffects, IsotopeEffectsConfig};
 use moire_core::isotopes::IsotopeConfig;
+use moire_core::magnetic::{MagneticFieldConfig, VortexLatticeResult, ZeemanResult};
+use moire_core::topological::ProximityConfig;
 use moire_core::materials;
 use moire_core::moire::{MoireConfig, MoireResult};
 
@@ -14,6 +16,8 @@ pub enum Tab {
     Pattern,
     Density,
     Fourier,
+    MagneticField,
+    CooperSurface3D,
 }
 
 /// 2D flat or 3D surface view mode.
@@ -71,6 +75,23 @@ pub struct MoireApp {
     #[serde(default = "default_isotope_alpha")]
     pub isotope_alpha: f64,
 
+    // --- Magnetic field parameters ---
+    /// Magnetic field configuration.
+    #[serde(default)]
+    pub magnetic_config: MagneticFieldConfig,
+    /// Proximity effect configuration.
+    #[serde(default)]
+    pub proximity_config: ProximityConfig,
+    /// Effective g-factor.
+    #[serde(default = "default_g_factor")]
+    pub g_factor: f64,
+    /// Whether to show vortex core markers.
+    #[serde(default)]
+    pub show_vortices: bool,
+    /// Whether to show Majorana density (speculative).
+    #[serde(default)]
+    pub show_majorana: bool,
+
     // --- Runtime state (not serialized) ---
     /// Currently selected tab.
     #[serde(skip)]
@@ -117,10 +138,29 @@ pub struct MoireApp {
     /// Cached isotope effects (when enabled).
     #[serde(skip)]
     pub isotope_effects: Option<IsotopeEffects>,
+    /// Cached vortex lattice result.
+    #[serde(skip)]
+    pub vortex_result: Option<VortexLatticeResult>,
+    /// Cached Zeeman result.
+    #[serde(skip)]
+    pub zeeman_result: Option<ZeemanResult>,
+    /// Whether magnetic effects need recompute.
+    #[serde(skip)]
+    pub needs_magnetic_recompute: bool,
+    /// Texture for the magnetic field visualization.
+    #[serde(skip)]
+    pub magnetic_texture: Option<egui::TextureHandle>,
+    /// Z-slice index for proximity 3D view.
+    #[serde(skip)]
+    pub z_slice_index: usize,
 }
 
 fn default_isotope_alpha() -> f64 {
     0.25
+}
+
+fn default_g_factor() -> f64 {
+    30.0
 }
 
 // Custom Serialize/Deserialize for DensityConfig so the outer derive works.
@@ -172,6 +212,11 @@ impl Default for MoireApp {
             te_mass_override: None,
             sb_mass_override: None,
             isotope_alpha: 0.4,
+            magnetic_config: MagneticFieldConfig::default(),
+            proximity_config: ProximityConfig::default(),
+            g_factor: 30.0,
+            show_vortices: false,
+            show_majorana: false,
             active_tab: Tab::Pattern,
             needs_recompute: true,
             needs_surface_rerender: true,
@@ -187,6 +232,11 @@ impl Default for MoireApp {
             comparison_textures: None,
             comparison_needs_refresh: false,
             isotope_effects: None,
+            vortex_result: None,
+            zeeman_result: None,
+            needs_magnetic_recompute: true,
+            magnetic_texture: None,
+            z_slice_index: 0,
         }
     }
 }
@@ -331,7 +381,7 @@ impl MoireApp {
                     return;
                 }
             }
-            Tab::Density => {
+            Tab::Density | Tab::CooperSurface3D => {
                 if let Some(ref d) = self.density_result {
                     // Normalize for colormap
                     let min = d.gap_field.iter().cloned().fold(f64::MAX, f64::min);
@@ -357,10 +407,39 @@ impl MoireApp {
                     return;
                 }
             }
+            Tab::MagneticField => {
+                // Use suppression-modulated density for 3D surface
+                if let Some(ref vr) = self.vortex_result {
+                    if let Some(ref d) = self.density_result {
+                        let combined = moire_core::magnetic::combined_gap_with_vortices(
+                            &d.gap_field,
+                            &vr.suppression_field,
+                        );
+                        let min = combined.iter().cloned().fold(f64::MAX, f64::min);
+                        let max = combined.iter().cloned().fold(f64::MIN, f64::max);
+                        let range = max - min;
+                        if range < 1e-15 {
+                            return;
+                        }
+                        let norm: Vec<f64> = combined.iter().map(|v| (v - min) / range).collect();
+                        let img = render::surface3d::render_surface_3d(
+                            &norm,
+                            d.resolution,
+                            512, 512,
+                            &self.camera,
+                            moire_core::colormap::coolwarm,
+                        );
+                        self.surface_texture =
+                            Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
+                        return;
+                    }
+                }
+                return;
+            }
         };
 
         // Special handling for density (needs normalization)
-        if self.active_tab == Tab::Density {
+        if self.active_tab == Tab::Density || self.active_tab == Tab::CooperSurface3D {
             if let Some(ref d) = self.density_result {
                 let min = d.gap_field.iter().cloned().fold(f64::MAX, f64::min);
                 let max = d.gap_field.iter().cloned().fold(f64::MIN, f64::max);
@@ -391,6 +470,92 @@ impl MoireApp {
             render::surface3d::render_surface_3d(data, n, 512, 512, &self.camera, colormap);
         self.surface_texture =
             Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
+    }
+
+    /// Run magnetic field computation and create overlay texture.
+    fn recompute_magnetic(&mut self, ctx: &egui::Context) {
+        let moire_period = self
+            .moire_result
+            .as_ref()
+            .map(|r| r.moire_period)
+            .unwrap_or(f64::INFINITY);
+
+        let resolution = self
+            .moire_result
+            .as_ref()
+            .map(|r| r.resolution)
+            .unwrap_or(self.resolution);
+
+        let extent = self
+            .moire_result
+            .as_ref()
+            .map(|r| r.physical_extent)
+            .unwrap_or(self.physical_extent);
+
+        // Compute vortex lattice + suppression
+        let vortex = moire_core::magnetic::compute_magnetic_effects(
+            &self.magnetic_config,
+            moire_period,
+            resolution,
+            extent,
+            20.0, // coherence length
+        );
+
+        // Combine gap with vortex suppression
+        if let Some(ref density) = self.density_result {
+            let combined = moire_core::magnetic::combined_gap_with_vortices(
+                &density.gap_field,
+                &vortex.suppression_field,
+            );
+
+            // Normalize for colormap
+            let min_val = combined.iter().cloned().fold(f64::MAX, f64::min);
+            let max_val = combined.iter().cloned().fold(f64::MIN, f64::max);
+            let range = max_val - min_val;
+            let norm: Vec<f64> = if range > 1e-15 {
+                combined.iter().map(|v| (v - min_val) / range).collect()
+            } else {
+                vec![0.5; combined.len()]
+            };
+
+            // Build ColorImage from colormapped data
+            let pixels: Vec<egui::Color32> = norm
+                .iter()
+                .map(|&v| {
+                    let [r, g, b, a] = moire_core::colormap::coolwarm(v);
+                    egui::Color32::from_rgba_premultiplied(r, g, b, a)
+                })
+                .collect();
+
+            let mut img = egui::ColorImage {
+                size: [resolution, resolution],
+                pixels,
+            };
+
+            // Overlay vortex markers if enabled
+            if self.show_vortices && !vortex.vortex_positions.is_empty() {
+                render::overlay::overlay_cross_markers(
+                    &mut img,
+                    &vortex.vortex_positions,
+                    extent,
+                    [0, 0, 0, 255],
+                    3,
+                );
+            }
+
+            self.magnetic_texture = Some(
+                ctx.load_texture("magnetic_overlay", img, egui::TextureOptions::LINEAR),
+            );
+        }
+
+        // Compute Zeeman
+        let delta_avg = (self.density_config.delta_1 + self.density_config.delta_2) / 2.0;
+        self.zeeman_result = Some(moire_core::magnetic::compute_zeeman(
+            &self.magnetic_config,
+            delta_avg,
+        ));
+
+        self.vortex_result = Some(vortex);
     }
 
     /// Compute and render comparison textures for all 3 overlayers.
@@ -480,7 +645,13 @@ impl eframe::App for MoireApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.needs_recompute {
             self.recompute(ctx);
+            self.needs_magnetic_recompute = true;
             self.needs_recompute = false;
+        }
+
+        if self.needs_magnetic_recompute {
+            self.recompute_magnetic(ctx);
+            self.needs_magnetic_recompute = false;
         }
 
         if self.needs_surface_rerender && self.view_mode == ViewMode::Surface3D {
