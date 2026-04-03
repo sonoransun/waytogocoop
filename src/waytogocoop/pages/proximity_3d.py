@@ -99,9 +99,9 @@ layout = dbc.Container(
                 ),
                 dbc.Col(
                     [
-                        dcc.Graph(id=f"{_PREFIX}-main-graph"),
+                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-main-graph")),
                         html.Hr(),
-                        dcc.Graph(id=f"{_PREFIX}-decay-graph"),
+                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-decay-graph")),
                         html.Hr(),
                         html.Div(id=f"{_PREFIX}-info"),
                     ],
@@ -118,20 +118,22 @@ layout = dbc.Container(
     Output(f"{_PREFIX}-main-graph", "figure"),
     Output(f"{_PREFIX}-decay-graph", "figure"),
     Output(f"{_PREFIX}-info", "children"),
-    Input(f"{_PREFIX}-substrate", "value"),
-    Input(f"{_PREFIX}-overlayer", "value"),
-    Input(f"{_PREFIX}-twist", "value"),
+    Input(f"{_PREFIX}-substrate-dropdown", "value"),
+    Input(f"{_PREFIX}-overlayer-dropdown", "value"),
+    Input(f"{_PREFIX}-twist-slider", "value"),
     Input(f"{_PREFIX}-grid-size", "value"),
-    Input(f"{_PREFIX}-extent", "value"),
+    Input(f"{_PREFIX}-physical-extent", "value"),
     Input(f"{_PREFIX}-xi-prox", "value"),
     Input(f"{_PREFIX}-transparency", "value"),
     Input(f"{_PREFIX}-z-slice", "value"),
     Input(f"{_PREFIX}-view-mode", "value"),
+    Input("theme-store", "data"),
 )
 def update_proximity(
     substrate_key, overlayer_key, twist, grid_size, extent,
-    xi_prox, transparency, z_slice_idx, view_mode,
+    xi_prox, transparency, z_slice_idx, view_mode, theme,
 ):
+    dark = theme == "dark"
     substrate = get_material(substrate_key)
     overlayer = get_material(overlayer_key)
 
@@ -147,9 +149,8 @@ def update_proximity(
     result = generate_moire_pattern(
         substrate_a=substrate.a,
         overlayer_a=overlayer.a,
-        substrate_lattice=substrate.lattice_type,
-        overlayer_lattice=overlayer.lattice_type,
-        twist_angle=twist,
+        overlayer_lattice_type=overlayer.lattice_type,
+        twist_angle_deg=twist,
         grid_size=grid_3d,
         physical_extent=extent,
     )
@@ -169,7 +170,7 @@ def update_proximity(
     prox_result = gap_3d(gap_field, config)
 
     # Decay profile figure
-    decay_fig = create_z_decay_profile(prox_result.z_coords, prox_result.decay_profile)
+    decay_fig = create_z_decay_profile(prox_result.z_coords, prox_result.decay_profile, dark=dark)
 
     # Clamp z-slice index
     z_idx = min(max(int(z_slice_idx), 0), n_z - 1)
@@ -180,6 +181,7 @@ def update_proximity(
         main_fig = create_3d_isosurface(
             x, y, prox_result.z_coords, prox_result.gap_3d,
             title=f"3D Cooper Surface — {overlayer.formula}/{substrate.formula}",
+            dark=dark,
         )
     else:
         # Z-slice heatmap
@@ -187,6 +189,7 @@ def update_proximity(
         main_fig = create_gap_heatmap(
             x, y, slice_data,
             title=f"Gap at z = {z_val:.1f} A",
+            dark=dark,
         )
 
     info = dbc.Card(

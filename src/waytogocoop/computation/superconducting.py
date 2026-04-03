@@ -43,7 +43,7 @@ def gap_modulation(
     )
 
 
-def cpdm_amplitude(moire_period: float, coherence_length: float = 20.0) -> float:
+def cpdm_amplitude(moire_period, coherence_length=20.0):
     """Estimate the Cooper-pair density modulation amplitude.
 
     A simple scaling ansatz:
@@ -58,16 +58,20 @@ def cpdm_amplitude(moire_period: float, coherence_length: float = 20.0) -> float
 
     Parameters
     ----------
-    moire_period : float
+    moire_period : float or array_like
         Moire superlattice period (Angstrom).
     coherence_length : float
         BCS coherence length (Angstrom).
 
     Returns
     -------
-    float
+    float or np.ndarray
         Dimensionless CPDM amplitude in (0, 1].
     """
-    if np.isinf(moire_period) or moire_period <= 0:
-        return 0.0
-    return float(np.exp(-coherence_length / moire_period))
+    moire_period = np.asarray(moire_period, dtype=float)
+    result = np.where(
+        np.isinf(moire_period) | (moire_period <= 0),
+        0.0,
+        np.exp(-coherence_length / np.where(moire_period > 0, moire_period, 1.0)),
+    )
+    return float(result) if result.ndim == 0 else result

@@ -165,13 +165,16 @@ layout = dbc.Container(
     Input(f"{_PREFIX}-grid-size", "value"),
     Input(f"{_PREFIX}-physical-extent", "value"),
     Input(f"{_PREFIX}-view-mode", "value"),
+    Input("theme-store", "data"),
 )
 def _update_comparison(
     twist_angle: float,
     grid_size: int,
     physical_extent: float,
     view_mode: str,
+    theme: str,
 ):
+    dark = theme == "dark"
     grid_size = int(grid_size or 100)
     physical_extent = float(physical_extent or 100.0)
     twist_angle = float(twist_angle or 0.0)
@@ -206,10 +209,12 @@ def _update_comparison(
             moire_fig = create_2d_contour(
                 x, y, pattern, title=moire_title,
                 colorscale="Viridis", z_label="Intensity",
+                dark=dark,
             )
             gap_fig = create_2d_contour(
                 x, y, gap, title=gap_title,
                 colorscale="RdBu_r", z_label="Delta (meV)",
+                dark=dark,
             )
         elif view_mode == "3d":
             # Subsample for performance when grid is large
@@ -222,17 +227,21 @@ def _update_comparison(
             moire_fig = create_3d_surface(
                 x_s, y_s, pattern_s, title=moire_title,
                 colorscale="Viridis", z_label="Intensity",
+                dark=dark,
             )
             gap_fig = create_3d_surface(
                 x_s, y_s, gap_s, title=gap_title,
                 colorscale="RdBu_r", z_label="Delta (meV)",
+                dark=dark,
             )
         else:
             moire_fig = create_moire_heatmap(
                 x, y, pattern, title=moire_title,
+                dark=dark,
             )
             gap_fig = create_gap_heatmap(
                 x, y, gap, title=gap_title,
+                dark=dark,
             )
 
         moire_figs.append(moire_fig)

@@ -1,4 +1,5 @@
 use crate::moire::MoireResult;
+use rayon::prelude::*;
 use std::f64::consts::PI;
 
 /// Configuration for Cooper-pair density modulation computation.
@@ -35,7 +36,7 @@ pub struct DensityResult {
 
 /// Compute the Cooper-pair density modulation from a moire pattern.
 ///
-/// gap_field[i] = delta_avg + delta_amplitude * (moire.pattern[i] - 0.5) * 2.0
+/// gap_field[i] = delta_avg + delta_amplitude * cos(phase_shift + pi * moire.pattern[i])
 ///
 /// where delta_avg = (delta_1 + delta_2) / 2,
 ///       delta_amplitude = modulation_amplitude * delta_avg
@@ -48,8 +49,8 @@ pub fn compute_density_modulation(
 
     let gap_field: Vec<f64> = moire
         .pattern
-        .iter()
-        .map(|&p| delta_avg + delta_amplitude * (p - 0.5) * 2.0)
+        .par_iter()
+        .map(|&p| delta_avg + delta_amplitude * (config.phase_shift + PI * p).cos())
         .collect();
 
     DensityResult {
@@ -118,8 +119,8 @@ mod tests {
         let min_expected = delta_avg - delta_amplitude;
         let max_expected = delta_avg + delta_amplitude;
 
-        let min_val = result.gap_field.iter().cloned().fold(f64::MAX, f64::min);
-        let max_val = result.gap_field.iter().cloned().fold(f64::MIN, f64::max);
+        let min_val = result.gap_field.iter().copied().fold(f64::MAX, f64::min);
+        let max_val = result.gap_field.iter().copied().fold(f64::MIN, f64::max);
 
         assert!(min_val >= min_expected - 1e-10);
         assert!(max_val <= max_expected + 1e-10);
@@ -137,5 +138,55 @@ mod tests {
         let dev_low = (result.gap_field[0] - delta_avg).abs();
         let dev_high = (result.gap_field[7] - delta_avg).abs();
         assert!((dev_low - dev_high).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_density_equal_deltas() {
+        // When delta_1 == delta_2, modulation amplitude is still nonzero
+        // (it's modulation_amplitude * delta_avg, not delta_2 - delta_1)
+        let moire = make_test_moire();
+        let cfg = DensityConfig {
+            delta_1: 3.0,
+            delta_2: 3.0,
+            ..DensityConfig::default()
+        };
+        let result = compute_density_modulation(&moire, &cfg);
+        let delta_avg = 3.0;
+        // Midpoint (p=0.5) should still give delta_avg
+        assert!((result.gap_field[2] - delta_avg).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_density_phase_shift_effect() {
+        // With phase_shift=0, p=0 gives cos(0) = 1 → delta_avg + amplitude
+        // With phase_shift=PI, p=0 gives cos(PI) = -1 → delta_avg - amplitude
+        let moire = make_test_moire();
+        let delta_avg = (2.58 + 3.60) / 2.0;
+        let delta_amplitude = 0.15 * delta_avg;
+
+        let cfg_zero = DensityConfig {
+            phase_shift: 0.0,
+            ..DensityConfig::default()
+        };
+        let result_zero = compute_density_modulation(&moire, &cfg_zero);
+        assert!((result_zero.gap_field[0] - (delta_avg + delta_amplitude)).abs() < 1e-10);
+
+        let cfg_pi = DensityConfig::default(); // phase_shift = PI
+        let result_pi = compute_density_modulation(&moire, &cfg_pi);
+        assert!((result_pi.gap_field[0] - (delta_avg - delta_amplitude)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_density_cosine_intermediate() {
+        // At p=0.25 with default phase_shift=PI:
+        // cos(PI + PI*0.25) = cos(1.25*PI) = -cos(0.25*PI) = -sqrt(2)/2
+        let moire = make_test_moire();
+        let cfg = DensityConfig::default();
+        let result = compute_density_modulation(&moire, &cfg);
+        let delta_avg = (cfg.delta_1 + cfg.delta_2) / 2.0;
+        let delta_amplitude = cfg.modulation_amplitude * delta_avg;
+        let expected = delta_avg + delta_amplitude * (PI + PI * 0.25).cos();
+        // pattern[1] = 0.25
+        assert!((result.gap_field[1] - expected).abs() < 1e-10);
     }
 }

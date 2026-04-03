@@ -114,37 +114,27 @@ layout = dbc.Container(
     State("sweep-range-start", "value"),
     State("sweep-range-end", "value"),
     State("sweep-num-points", "value"),
+    Input("theme-store", "data"),
     prevent_initial_call=False,
 )
-def _run_sweep(n_clicks, sweep_param, substrate_a, range_start, range_end, num_points):
+def _run_sweep(n_clicks, sweep_param, substrate_a, range_start, range_end, num_points, theme):
+    dark = theme == "dark"
     substrate_a = float(substrate_a or 3.82)
     range_start = float(range_start or 3.9)
     range_end = float(range_end or 5.0)
     num_points = int(num_points or 100)
 
     param_values = np.linspace(range_start, range_end, num_points)
-    periods = np.empty(num_points)
-    amplitudes = np.empty(num_points)
 
     if sweep_param == "twist_angle":
-        # Sweep twist angle in degrees; range values are degrees
-        for i, theta in enumerate(param_values):
-            if abs(theta) < 1e-6:
-                periods[i] = np.inf
-                amplitudes[i] = 0.0
-            else:
-                periods[i] = moire_periodicity_with_twist(substrate_a, theta)
-                amplitudes[i] = cpdm_amplitude(periods[i])
+        # Sweep twist angle in degrees — vectorized
+        periods = moire_periodicity_with_twist(substrate_a, param_values)
+        amplitudes = cpdm_amplitude(periods)
         param_name = "Twist angle (deg)"
     else:
-        # Sweep overlayer lattice constant
-        for i, a_over in enumerate(param_values):
-            if abs(a_over - substrate_a) < 1e-12:
-                periods[i] = np.inf
-                amplitudes[i] = 0.0
-            else:
-                periods[i] = moire_periodicity_1d(substrate_a, a_over)
-                amplitudes[i] = cpdm_amplitude(periods[i])
+        # Sweep overlayer lattice constant — vectorized
+        periods = moire_periodicity_1d(substrate_a, param_values)
+        amplitudes = cpdm_amplitude(periods)
         param_name = "Overlayer lattice constant (A)"
 
     # Cap infinite periods for plotting
@@ -155,7 +145,7 @@ def _run_sweep(n_clicks, sweep_param, substrate_a, range_start, range_end, num_p
         max_period = 1000.0
     periods = np.where(finite_mask, periods, max_period)
 
-    fig = create_sweep_plot(param_values, periods, amplitudes, param_name)
+    fig = create_sweep_plot(param_values, periods, amplitudes, param_name, dark=dark)
 
     # Mark actual material lattice constants
     markers_info = []

@@ -105,6 +105,7 @@ layout = dbc.Container(
     Input(f"{_PREFIX}-sb-mass", "value"),
     Input(f"{_PREFIX}-isotope-alpha", "value"),
     Input(f"{_PREFIX}-isotope-comparison", "value"),
+    Input("theme-store", "data"),
 )
 def _update_viewer(
     substrate_formula: str,
@@ -119,7 +120,9 @@ def _update_viewer(
     sb_mass: float,
     isotope_alpha: float,
     isotope_comparison: list,
+    theme: str,
 ):
+    dark = theme == "dark"
     substrate = get_material(substrate_formula)
     overlayer = get_material(overlayer_formula)
 
@@ -218,10 +221,12 @@ def _update_viewer(
         moire_fig = create_2d_contour(
             x, y, pattern, title=moire_title,
             colorscale="Viridis", z_label="Intensity",
+            dark=dark,
         )
         gap_fig = create_2d_contour(
             x, y, gap, title=gap_title,
             colorscale="RdBu_r", z_label="Delta (meV)",
+            dark=dark,
         )
     elif view_mode == "3d":
         if grid_size > 150:
@@ -233,17 +238,21 @@ def _update_viewer(
         moire_fig = create_3d_surface(
             x_s, y_s, pattern_s, title=moire_title,
             colorscale="Viridis", z_label="Intensity",
+            dark=dark,
         )
         gap_fig = create_3d_surface(
             x_s, y_s, gap_s, title=gap_title,
             colorscale="RdBu_r", z_label="Delta (meV)",
+            dark=dark,
         )
     else:
         moire_fig = create_moire_heatmap(
             x, y, pattern, title=moire_title,
+            dark=dark,
         )
         gap_fig = create_gap_heatmap(
             x, y, gap, title=gap_title,
+            dark=dark,
         )
 
     # If comparison mode, overlay the natural pattern as contour lines

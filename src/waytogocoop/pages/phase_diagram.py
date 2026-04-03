@@ -140,9 +140,9 @@ layout = dbc.Container(
                 ),
                 dbc.Col(
                     [
-                        dcc.Graph(id=f"{_PREFIX}-phase-graph"),
+                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-phase-graph")),
                         html.Hr(),
-                        dcc.Graph(id=f"{_PREFIX}-comm-graph"),
+                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-comm-graph")),
                     ],
                     md=9,
                 ),
@@ -156,8 +156,8 @@ layout = dbc.Container(
 @callback(
     Output(f"{_PREFIX}-phase-graph", "figure"),
     Output(f"{_PREFIX}-comm-graph", "figure"),
-    Input(f"{_PREFIX}-substrate", "value"),
-    Input(f"{_PREFIX}-overlayer", "value"),
+    Input(f"{_PREFIX}-substrate-dropdown", "value"),
+    Input(f"{_PREFIX}-overlayer-dropdown", "value"),
     Input(f"{_PREFIX}-b-min", "value"),
     Input(f"{_PREFIX}-b-max", "value"),
     Input(f"{_PREFIX}-d-min", "value"),
@@ -165,11 +165,13 @@ layout = dbc.Container(
     Input(f"{_PREFIX}-mu", "value"),
     Input(f"{_PREFIX}-g-factor", "value"),
     Input(f"{_PREFIX}-resolution", "value"),
+    Input("theme-store", "data"),
 )
 def update_phase(
     substrate_key, overlayer_key,
-    b_min, b_max, d_min, d_max, mu, g_factor, resolution,
+    b_min, b_max, d_min, d_max, mu, g_factor, resolution, theme,
 ):
+    dark = theme == "dark"
     substrate = get_material(substrate_key)
     overlayer = get_material(overlayer_key)
 
@@ -189,6 +191,7 @@ def update_phase(
     phase_fig = create_phase_colormap(
         B_values, delta_values, phase,
         title=f"Topological Phase: {overlayer.formula}/{substrate.formula}",
+        dark=dark,
     )
 
     # Mark the material's actual delta
@@ -208,6 +211,7 @@ def update_phase(
     comm_fig = create_commensuration_sweep(
         B_comm_range, a_v_values, moire_period,
         title=f"Commensuration: a_v/L_m ({overlayer.formula}/{substrate.formula})",
+        dark=dark,
     )
 
     return phase_fig, comm_fig

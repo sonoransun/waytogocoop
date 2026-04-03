@@ -6,6 +6,7 @@
 //!
 //! Established physics unless marked **SPECULATIVE**.
 
+use rayon::prelude::*;
 use std::f64::consts::PI;
 
 // ---------------------------------------------------------------------------
@@ -260,34 +261,36 @@ pub fn majorana_probability_density(
     k_f: f64,
 ) -> MajoranaResult {
     let n = resolution;
-    let mut density = vec![0.0_f64; n * n];
 
     if vortex_positions.is_empty() {
         return MajoranaResult {
-            probability_density: density,
+            probability_density: vec![0.0_f64; n * n],
             localization_length: xi_m,
             n_vortices_with_mzm: 0,
             resolution,
         };
     }
 
-    for iy in 0..n {
-        let y = (iy as f64 / (n - 1).max(1) as f64 - 0.5) * physical_extent;
-        for ix in 0..n {
-            let x = (ix as f64 / (n - 1).max(1) as f64 - 0.5) * physical_extent;
-            let idx = iy * n + ix;
-
-            for &[vx, vy] in vortex_positions {
-                let r = ((x - vx).powi(2) + (y - vy).powi(2)).sqrt();
-                let envelope = (-2.0 * r / xi_m).exp();
-                let osc = bessel_j0(k_f * r).powi(2);
-                density[idx] += envelope * osc;
-            }
-        }
-    }
+    let mut density: Vec<f64> = (0..n)
+        .into_par_iter()
+        .flat_map(|iy| {
+            let y = (iy as f64 / (n - 1).max(1) as f64 - 0.5) * physical_extent;
+            (0..n).map(move |ix| {
+                let x = (ix as f64 / (n - 1).max(1) as f64 - 0.5) * physical_extent;
+                let mut val = 0.0_f64;
+                for &[vx, vy] in vortex_positions {
+                    let r = ((x - vx).powi(2) + (y - vy).powi(2)).sqrt();
+                    let envelope = (-2.0 * r / xi_m).exp();
+                    let osc = bessel_j0(k_f * r).powi(2);
+                    val += envelope * osc;
+                }
+                val
+            }).collect::<Vec<f64>>()
+        })
+        .collect();
 
     // Normalise
-    let peak = density.iter().cloned().fold(0.0_f64, f64::max);
+    let peak = density.iter().copied().fold(0.0_f64, f64::max);
     if peak > 1e-30 {
         for v in density.iter_mut() {
             *v /= peak;

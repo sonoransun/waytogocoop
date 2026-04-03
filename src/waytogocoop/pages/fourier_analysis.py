@@ -78,6 +78,7 @@ layout = dbc.Container(
     Input(f"{_PREFIX}-twist-slider", "value"),
     Input(f"{_PREFIX}-grid-size", "value"),
     Input(f"{_PREFIX}-physical-extent", "value"),
+    Input("theme-store", "data"),
 )
 def _update_fourier(
     substrate_formula: str,
@@ -85,7 +86,9 @@ def _update_fourier(
     twist_angle: float,
     grid_size: int,
     physical_extent: float,
+    theme: str,
 ):
+    dark = theme == "dark"
     substrate = get_material(substrate_formula)
     overlayer = get_material(overlayer_formula)
 
@@ -110,6 +113,7 @@ def _update_fourier(
         fft_result["ky"],
         fft_result["power_spectrum"],
         title=f"FFT: {substrate.formula} / {overlayer.formula}",
+        dark=dark,
     )
 
     peaks = identify_peaks(

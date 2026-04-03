@@ -51,8 +51,8 @@ pub fn compute_fft_2d(data: &[f64], n: usize) -> Vec<f64> {
     }
 
     // Normalize to [0, 1]
-    let min_val = shifted.iter().cloned().fold(f64::MAX, f64::min);
-    let max_val = shifted.iter().cloned().fold(f64::MIN, f64::max);
+    let min_val = shifted.iter().copied().fold(f64::MAX, f64::min);
+    let max_val = shifted.iter().copied().fold(f64::MIN, f64::max);
     let range = max_val - min_val;
     if range > 1e-15 {
         for v in shifted.iter_mut() {
@@ -86,7 +86,7 @@ mod tests {
         let result = compute_fft_2d(&data, n);
         // DC component (center after shift) should be the maximum
         let center = n / 2 * n + n / 2;
-        let max_val = result.iter().cloned().fold(f64::MIN, f64::max);
+        let max_val = result.iter().copied().fold(f64::MIN, f64::max);
         assert!((result[center] - max_val).abs() < 1e-10);
     }
 
@@ -95,8 +95,8 @@ mod tests {
         let n = 8;
         let data: Vec<f64> = (0..n * n).map(|i| (i as f64 * 0.1).sin()).collect();
         let result = compute_fft_2d(&data, n);
-        let min_val = result.iter().cloned().fold(f64::MAX, f64::min);
-        let max_val = result.iter().cloned().fold(f64::MIN, f64::max);
+        let min_val = result.iter().copied().fold(f64::MAX, f64::min);
+        let max_val = result.iter().copied().fold(f64::MIN, f64::max);
         assert!(min_val >= -1e-10);
         assert!(max_val <= 1.0 + 1e-10);
     }
@@ -121,8 +121,32 @@ mod tests {
             .collect();
         let result = compute_fft_2d(&data, n);
         // Result should not be all identical (i.e., there are spectral features)
-        let min_val = result.iter().cloned().fold(f64::MAX, f64::min);
-        let max_val = result.iter().cloned().fold(f64::MIN, f64::max);
+        let min_val = result.iter().copied().fold(f64::MAX, f64::min);
+        let max_val = result.iter().copied().fold(f64::MIN, f64::max);
         assert!(max_val - min_val > 0.01);
+    }
+
+    #[test]
+    fn test_fft_all_zeros() {
+        // All zeros: FFT gives all zeros, log(0+1) = 0 for all,
+        // range = 0, so normalization falls back to all 0.5
+        let input = vec![0.0; 64];
+        let result = compute_fft_2d(&input, 8);
+        // Should not panic. All values should be the same (fallback normalization)
+        let first = result[0];
+        for &v in &result {
+            assert!((v - first).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_fft_dc_only() {
+        // Constant nonzero input: all energy at DC
+        let input = vec![5.0; 64];
+        let result = compute_fft_2d(&input, 8);
+        // Center pixel (DC) should be the maximum
+        let center = result[4 * 8 + 4]; // n/2 * n + n/2 for n=8
+        let max_val = result.iter().copied().fold(f64::MIN, f64::max);
+        assert!((center - max_val).abs() < 1e-10);
     }
 }

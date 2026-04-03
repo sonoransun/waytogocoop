@@ -24,6 +24,7 @@ impl Default for Camera3D {
 /// Render a 2D heightmap as a 3D perspective-projected surface.
 ///
 /// `data` is row-major `n x n` values in [0, 1].
+/// `bg_color` is the background fill color for unpainted pixels.
 /// Returns a `ColorImage` of `width x height` pixels.
 pub fn render_surface_3d(
     data: &[f64],
@@ -33,7 +34,20 @@ pub fn render_surface_3d(
     camera: &Camera3D,
     colormap: fn(f64) -> [u8; 4],
 ) -> ColorImage {
-    let mut pixels = vec![Color32::from_rgb(30, 30, 35); width * height];
+    render_surface_3d_with_bg(data, n, width, height, camera, colormap, Color32::from_rgb(30, 30, 35))
+}
+
+/// Like `render_surface_3d` but with an explicit background color.
+pub fn render_surface_3d_with_bg(
+    data: &[f64],
+    n: usize,
+    width: usize,
+    height: usize,
+    camera: &Camera3D,
+    colormap: fn(f64) -> [u8; 4],
+    bg_color: Color32,
+) -> ColorImage {
+    let mut pixels = vec![bg_color; width * height];
     let mut zbuf = vec![f32::MAX; width * height];
 
     // Subsample: target ~64x64 mesh

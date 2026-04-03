@@ -6,6 +6,7 @@ description = "Computation library for moire superlattice and Cooper-pair densit
 
 [dependencies]
 nalgebra = "0.33"
+rayon = "1.10"
 rustfft = "6.2"
 num-complex = "0.4"
 serde = { version = "1", features = ["derive"] }

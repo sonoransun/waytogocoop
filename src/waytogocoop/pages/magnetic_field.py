@@ -64,7 +64,7 @@ layout = dbc.Container(
                 # Right — visualization
                 dbc.Col(
                     [
-                        dcc.Graph(id=f"{_PREFIX}-main-graph"),
+                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-main-graph")),
                         html.Hr(),
                         html.Div(id=f"{_PREFIX}-info-panel"),
                     ],
@@ -105,22 +105,24 @@ def _toggle_prox(n_clicks, is_open):
     Output(f"{_PREFIX}-main-graph", "figure"),
     Output(f"{_PREFIX}-info-panel", "children"),
     Output(f"{_PREFIX}-mag-info", "children"),
-    Input(f"{_PREFIX}-substrate", "value"),
-    Input(f"{_PREFIX}-overlayer", "value"),
-    Input(f"{_PREFIX}-twist", "value"),
+    Input(f"{_PREFIX}-substrate-dropdown", "value"),
+    Input(f"{_PREFIX}-overlayer-dropdown", "value"),
+    Input(f"{_PREFIX}-twist-slider", "value"),
     Input(f"{_PREFIX}-grid-size", "value"),
-    Input(f"{_PREFIX}-extent", "value"),
+    Input(f"{_PREFIX}-physical-extent", "value"),
     Input(f"{_PREFIX}-bz", "value"),
     Input(f"{_PREFIX}-bx", "value"),
     Input(f"{_PREFIX}-by", "value"),
     Input(f"{_PREFIX}-viz-mode", "value"),
     Input(f"{_PREFIX}-xi-prox", "value"),
     Input(f"{_PREFIX}-g-factor", "value"),
+    Input("theme-store", "data"),
 )
 def update_magnetic(
     substrate_key, overlayer_key, twist, grid_size, extent,
-    Bz, Bx, By, viz_mode, xi_prox, g_factor,
+    Bz, Bx, By, viz_mode, xi_prox, g_factor, theme,
 ):
+    dark = theme == "dark"
     substrate = get_material(substrate_key)
     overlayer = get_material(overlayer_key)
 
@@ -135,9 +137,8 @@ def update_magnetic(
     result = generate_moire_pattern(
         substrate_a=substrate.a,
         overlayer_a=overlayer.a,
-        substrate_lattice=substrate.lattice_type,
-        overlayer_lattice=overlayer.lattice_type,
-        twist_angle=twist,
+        overlayer_lattice_type=overlayer.lattice_type,
+        twist_angle_deg=twist,
         grid_size=grid_size,
         physical_extent=extent,
     )
@@ -159,20 +160,20 @@ def update_magnetic(
 
     # Build figure based on viz_mode
     if viz_mode == "vortex":
-        fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos)
+        fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos, dark=dark)
     elif viz_mode == "combined":
-        fig = create_gap_heatmap(x, y, combined_gap, title="Combined Gap (Moire + Vortex)")
+        fig = create_gap_heatmap(x, y, combined_gap, title="Combined Gap (Moire + Vortex)", dark=dark)
     elif viz_mode == "currents":
         Jx, Jy = screening_currents(x, y, vortex_pos)
-        fig = create_quiver_field(x, y, Jx, Jy, combined_gap)
+        fig = create_quiver_field(x, y, Jx, Jy, combined_gap, dark=dark)
     elif viz_mode == "chi":
         chi = local_susceptibility(combined_gap)
-        fig = create_susceptibility_heatmap(x, y, chi)
+        fig = create_susceptibility_heatmap(x, y, chi, dark=dark)
     elif viz_mode == "majorana":
         mzm = majorana_probability_density(x, y, vortex_pos)
-        fig = create_majorana_density_map(x, y, mzm.probability_density, vortex_pos)
+        fig = create_majorana_density_map(x, y, mzm.probability_density, vortex_pos, dark=dark)
     else:
-        fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos)
+        fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos, dark=dark)
 
     # Info panel
     comm_ratio = a_v / moire_period if np.isfinite(a_v) and moire_period > 0 else float("inf")

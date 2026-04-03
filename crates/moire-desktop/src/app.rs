@@ -10,6 +10,21 @@ use moire_core::moire::{MoireConfig, MoireResult};
 use crate::render;
 use crate::ui;
 
+/// Default BCS coherence length for FeTe (Angstrom).
+const DEFAULT_COHERENCE_LENGTH: f64 = 20.0;
+
+/// Normalize a slice of f64 values to [0, 1] range.
+/// Returns None if the range is too small (< 1e-15).
+fn normalize_to_unit_range(data: &[f64]) -> Option<Vec<f64>> {
+    let min_val = data.iter().copied().fold(f64::MAX, f64::min);
+    let max_val = data.iter().copied().fold(f64::MIN, f64::max);
+    let range = max_val - min_val;
+    if range < 1e-15 {
+        return None;
+    }
+    Some(data.iter().map(|&v| (v - min_val) / range).collect())
+}
+
 /// Active visualization tab.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -92,6 +107,10 @@ pub struct MoireApp {
     #[serde(default)]
     pub show_majorana: bool,
 
+    /// Whether dark mode is enabled.
+    #[serde(default = "default_dark_mode")]
+    pub dark_mode: bool,
+
     // --- Runtime state (not serialized) ---
     /// Currently selected tab.
     #[serde(skip)]
@@ -153,6 +172,10 @@ pub struct MoireApp {
     /// Z-slice index for proximity 3D view.
     #[serde(skip)]
     pub z_slice_index: usize,
+}
+
+fn default_dark_mode() -> bool {
+    true
 }
 
 fn default_isotope_alpha() -> f64 {
@@ -217,6 +240,7 @@ impl Default for MoireApp {
             g_factor: 30.0,
             show_vortices: false,
             show_majorana: false,
+            dark_mode: true,
             active_tab: Tab::Pattern,
             needs_recompute: true,
             needs_surface_rerender: true,
@@ -249,6 +273,13 @@ impl MoireApp {
         } else {
             Self::default()
         };
+        // Apply persisted theme
+        if app.dark_mode {
+            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        } else {
+            cc.egui_ctx.set_visuals(egui::Visuals::light());
+        }
+
         // Always recompute on startup since textures are not persisted
         app.needs_recompute = true;
         app.needs_surface_rerender = true;
@@ -290,7 +321,7 @@ impl MoireApp {
                 overlayer_lattice_type: overlayer.lattice_type,
                 delta_1: self.density_config.delta_1,
                 delta_2: self.density_config.delta_2,
-                coherence_length: 20.0,
+                coherence_length: DEFAULT_COHERENCE_LENGTH,
                 isotope_config: self.isotope_config(),
                 alpha: self.isotope_alpha,
             };
@@ -335,18 +366,8 @@ impl MoireApp {
         ));
 
         // Normalize density for colormap
-        let density_min = density.gap_field.iter().cloned().fold(f64::MAX, f64::min);
-        let density_max = density.gap_field.iter().cloned().fold(f64::MIN, f64::max);
-        let density_range = density_max - density_min;
-        let density_norm: Vec<f64> = if density_range > 1e-15 {
-            density
-                .gap_field
-                .iter()
-                .map(|v| (v - density_min) / density_range)
-                .collect()
-        } else {
-            vec![0.5; density.gap_field.len()]
-        };
+        let density_norm: Vec<f64> = normalize_to_unit_range(&density.gap_field)
+            .unwrap_or_else(|| vec![0.5; density.gap_field.len()]);
 
         self.density_texture = Some(render::pattern::create_texture(
             ctx,
@@ -373,6 +394,12 @@ impl MoireApp {
 
     /// Re-render the 3D surface texture from cached data.
     fn rerender_surface(&mut self, ctx: &egui::Context) {
+        let surface_bg = if self.dark_mode {
+            egui::Color32::from_rgb(30, 30, 35)
+        } else {
+            egui::Color32::from_rgb(240, 240, 245)
+        };
+
         let (data, n, colormap): (&[f64], usize, fn(f64) -> [u8; 4]) = match self.active_tab {
             Tab::Pattern => {
                 if let Some(ref m) = self.moire_result {
@@ -383,11 +410,8 @@ impl MoireApp {
             }
             Tab::Density | Tab::CooperSurface3D => {
                 if let Some(ref d) = self.density_result {
-                    // Normalize for colormap
-                    let min = d.gap_field.iter().cloned().fold(f64::MAX, f64::min);
-                    let max = d.gap_field.iter().cloned().fold(f64::MIN, f64::max);
-                    let range = max - min;
-                    if range < 1e-15 {
+                    // Check if normalizable; actual rendering handled below
+                    if normalize_to_unit_range(&d.gap_field).is_none() {
                         return;
                     }
                     // We need owned data for density normalization — handle below
@@ -415,22 +439,18 @@ impl MoireApp {
                             &d.gap_field,
                             &vr.suppression_field,
                         );
-                        let min = combined.iter().cloned().fold(f64::MAX, f64::min);
-                        let max = combined.iter().cloned().fold(f64::MIN, f64::max);
-                        let range = max - min;
-                        if range < 1e-15 {
-                            return;
+                        if let Some(norm) = normalize_to_unit_range(&combined) {
+                            let img = render::surface3d::render_surface_3d_with_bg(
+                                &norm,
+                                d.resolution,
+                                512, 512,
+                                &self.camera,
+                                moire_core::colormap::coolwarm,
+                                surface_bg,
+                            );
+                            self.surface_texture =
+                                Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
                         }
-                        let norm: Vec<f64> = combined.iter().map(|v| (v - min) / range).collect();
-                        let img = render::surface3d::render_surface_3d(
-                            &norm,
-                            d.resolution,
-                            512, 512,
-                            &self.camera,
-                            moire_core::colormap::coolwarm,
-                        );
-                        self.surface_texture =
-                            Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
                         return;
                     }
                 }
@@ -441,23 +461,19 @@ impl MoireApp {
         // Special handling for density (needs normalization)
         if self.active_tab == Tab::Density || self.active_tab == Tab::CooperSurface3D {
             if let Some(ref d) = self.density_result {
-                let min = d.gap_field.iter().cloned().fold(f64::MAX, f64::min);
-                let max = d.gap_field.iter().cloned().fold(f64::MIN, f64::max);
-                let range = max - min;
-                if range < 1e-15 {
-                    return;
+                if let Some(norm) = normalize_to_unit_range(&d.gap_field) {
+                    let img = render::surface3d::render_surface_3d_with_bg(
+                        &norm,
+                        d.resolution,
+                        512,
+                        512,
+                        &self.camera,
+                        moire_core::colormap::coolwarm,
+                        surface_bg,
+                    );
+                    self.surface_texture =
+                        Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
                 }
-                let norm: Vec<f64> = d.gap_field.iter().map(|v| (v - min) / range).collect();
-                let img = render::surface3d::render_surface_3d(
-                    &norm,
-                    d.resolution,
-                    512,
-                    512,
-                    &self.camera,
-                    moire_core::colormap::coolwarm,
-                );
-                self.surface_texture =
-                    Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
             }
             return;
         }
@@ -467,7 +483,7 @@ impl MoireApp {
         }
 
         let img =
-            render::surface3d::render_surface_3d(data, n, 512, 512, &self.camera, colormap);
+            render::surface3d::render_surface_3d_with_bg(data, n, 512, 512, &self.camera, colormap, surface_bg);
         self.surface_texture =
             Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
     }
@@ -498,7 +514,7 @@ impl MoireApp {
             moire_period,
             resolution,
             extent,
-            20.0, // coherence length
+            DEFAULT_COHERENCE_LENGTH, // coherence length
         );
 
         // Combine gap with vortex suppression
@@ -509,14 +525,8 @@ impl MoireApp {
             );
 
             // Normalize for colormap
-            let min_val = combined.iter().cloned().fold(f64::MAX, f64::min);
-            let max_val = combined.iter().cloned().fold(f64::MIN, f64::max);
-            let range = max_val - min_val;
-            let norm: Vec<f64> = if range > 1e-15 {
-                combined.iter().map(|v| (v - min_val) / range).collect()
-            } else {
-                vec![0.5; combined.len()]
-            };
+            let norm: Vec<f64> = normalize_to_unit_range(&combined)
+                .unwrap_or_else(|| vec![0.5; combined.len()]);
 
             // Build ColorImage from colormapped data
             let pixels: Vec<egui::Color32> = norm
@@ -534,11 +544,16 @@ impl MoireApp {
 
             // Overlay vortex markers if enabled
             if self.show_vortices && !vortex.vortex_positions.is_empty() {
+                let marker_color = if self.dark_mode {
+                    [255, 255, 255, 255]
+                } else {
+                    [0, 0, 0, 255]
+                };
                 render::overlay::overlay_cross_markers(
                     &mut img,
                     &vortex.vortex_positions,
                     extent,
-                    [0, 0, 0, 255],
+                    marker_color,
                     3,
                 );
             }
@@ -560,6 +575,11 @@ impl MoireApp {
 
     /// Compute and render comparison textures for all 3 overlayers.
     fn refresh_comparison(&mut self, ctx: &egui::Context) {
+        let surface_bg = if self.dark_mode {
+            egui::Color32::from_rgb(30, 30, 35)
+        } else {
+            egui::Color32::from_rgb(240, 240, 245)
+        };
         let substrate = self.substrate_material();
         let overlayers = materials::overlayers();
         let mut textures = Vec::with_capacity(6);
@@ -580,13 +600,14 @@ impl MoireApp {
             let moire = moire_core::moire::compute_moire(&config);
 
             if self.view_mode == ViewMode::Surface3D {
-                let img = render::surface3d::render_surface_3d(
+                let img = render::surface3d::render_surface_3d_with_bg(
                     &moire.pattern,
                     comp_res,
                     256,
                     256,
                     &self.camera,
                     moire_core::colormap::viridis,
+                    surface_bg,
                 );
                 textures
                     .push(ctx.load_texture("comp_moire", img, egui::TextureOptions::LINEAR));
@@ -602,23 +623,18 @@ impl MoireApp {
 
             let density =
                 moire_core::density::compute_density_modulation(&moire, &self.density_config);
-            let d_min = density.gap_field.iter().cloned().fold(f64::MAX, f64::min);
-            let d_max = density.gap_field.iter().cloned().fold(f64::MIN, f64::max);
-            let d_range = d_max - d_min;
-            let d_norm: Vec<f64> = if d_range > 1e-15 {
-                density.gap_field.iter().map(|v| (v - d_min) / d_range).collect()
-            } else {
-                vec![0.5; density.gap_field.len()]
-            };
+            let d_norm: Vec<f64> = normalize_to_unit_range(&density.gap_field)
+                .unwrap_or_else(|| vec![0.5; density.gap_field.len()]);
 
             if self.view_mode == ViewMode::Surface3D {
-                let img = render::surface3d::render_surface_3d(
+                let img = render::surface3d::render_surface_3d_with_bg(
                     &d_norm,
                     comp_res,
                     256,
                     256,
                     &self.camera,
                     moire_core::colormap::coolwarm,
+                    surface_bg,
                 );
                 textures
                     .push(ctx.load_texture("comp_density", img, egui::TextureOptions::LINEAR));

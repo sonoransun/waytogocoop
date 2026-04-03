@@ -7,7 +7,7 @@ import numpy as np
 from waytogocoop.materials.lattice import apply_rotation
 
 
-def moire_periodicity_1d(a1: float, a2: float) -> float:
+def moire_periodicity_1d(a1, a2):
     """Compute the 1D moire period from two lattice constants.
 
     .. math::
@@ -16,18 +16,23 @@ def moire_periodicity_1d(a1: float, a2: float) -> float:
 
     Parameters
     ----------
-    a1, a2 : float
+    a1, a2 : float or array_like
         Lattice constants (Angstrom) of the two layers.
 
     Returns
     -------
-    float
+    float or np.ndarray
         Moire period in Angstrom.
     """
-    return a1 * a2 / abs(a1 - a2)
+    a2 = np.asarray(a2, dtype=float)
+    diff = np.abs(a1 - a2)
+    safe_diff = np.where(diff < 1e-12, 1.0, diff)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        result = np.where(diff < 1e-12, np.inf, a1 * a2 / safe_diff)
+    return float(result) if result.ndim == 0 else result
 
 
-def moire_periodicity_with_twist(a: float, theta_deg: float) -> float:
+def moire_periodicity_with_twist(a, theta_deg):
     """Compute the moire period for a homo-bilayer with twist angle.
 
     .. math::
@@ -38,19 +43,21 @@ def moire_periodicity_with_twist(a: float, theta_deg: float) -> float:
     ----------
     a : float
         Lattice constant (Angstrom).
-    theta_deg : float
+    theta_deg : float or array_like
         Twist angle in degrees.
 
     Returns
     -------
-    float
+    float or np.ndarray
         Moire period in Angstrom.
     """
+    theta_deg = np.asarray(theta_deg, dtype=float)
     theta = np.radians(theta_deg)
     sin_half = np.sin(theta / 2.0)
-    if abs(sin_half) < 1e-12:
-        return np.inf
-    return a / (2.0 * sin_half)
+    abs_sin = np.abs(sin_half)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        result = np.where(abs_sin < 1e-12, np.inf, a / (2.0 * abs_sin))
+    return float(result) if result.ndim == 0 else result
 
 
 def _reciprocal_g_vectors_square(a: float) -> np.ndarray:

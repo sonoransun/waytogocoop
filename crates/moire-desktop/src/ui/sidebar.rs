@@ -5,6 +5,22 @@ use crate::app::MoireApp;
 
 /// Render the sidebar controls for material selection and simulation parameters.
 pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
+    // --- Theme toggle ---
+    ui.horizontal(|ui| {
+        ui.label("Theme:");
+        if ui.selectable_label(app.dark_mode, "Dark").clicked() && !app.dark_mode {
+            app.dark_mode = true;
+            ui.ctx().set_visuals(egui::Visuals::dark());
+        }
+        if ui.selectable_label(!app.dark_mode, "Light").clicked() && app.dark_mode {
+            app.dark_mode = false;
+            ui.ctx().set_visuals(egui::Visuals::light());
+        }
+    });
+    ui.add_space(8.0);
+    ui.separator();
+    ui.add_space(8.0);
+
     ui.heading("Parameters");
     ui.add_space(8.0);
 

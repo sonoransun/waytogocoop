@@ -6,6 +6,7 @@
 //!
 //! Established physics unless marked **SPECULATIVE**.
 
+use rayon::prelude::*;
 use std::f64::consts::PI;
 
 // ---------------------------------------------------------------------------
@@ -23,6 +24,8 @@ const DEFAULT_G_FACTOR: f64 = 30.0;
 /// Upper critical field for FeTe in Tesla (used in tests).
 #[cfg(test)]
 const DEFAULT_BC2: f64 = 47.0;
+/// Vortex core cutoff multiplier: suppress beyond this many coherence lengths.
+const VORTEX_CUTOFF_FACTOR: f64 = 5.0;
 
 // ---------------------------------------------------------------------------
 // Data structures
@@ -162,30 +165,33 @@ pub fn vortex_suppression_field(
     coherence_length: f64,
 ) -> Vec<f64> {
     let n = resolution;
-    let mut suppression = vec![1.0_f64; n * n];
 
     if vortex_positions.is_empty() {
-        return suppression;
+        return vec![1.0_f64; n * n];
     }
 
-    let cutoff = 5.0 * coherence_length;
+    let cutoff = VORTEX_CUTOFF_FACTOR * coherence_length;
 
-    for iy in 0..n {
-        let y = (iy as f64 / (n - 1).max(1) as f64 - 0.5) * physical_extent;
-        for ix in 0..n {
-            let x = (ix as f64 / (n - 1).max(1) as f64 - 0.5) * physical_extent;
-            let idx = iy * n + ix;
-
-            for &[vx, vy] in vortex_positions {
-                let dx = x - vx;
-                let dy = y - vy;
-                let dist = (dx * dx + dy * dy).sqrt();
-                if dist < cutoff {
-                    suppression[idx] *= (dist / coherence_length).tanh();
+    let suppression: Vec<f64> = (0..n)
+        .into_par_iter()
+        .flat_map(|iy| {
+            let y = (iy as f64 / (n - 1).max(1) as f64 - 0.5) * physical_extent;
+            (0..n).map(move |ix| {
+                let x = (ix as f64 / (n - 1).max(1) as f64 - 0.5) * physical_extent;
+                let mut val = 1.0_f64;
+                for &[vx, vy] in vortex_positions {
+                    let dx = x - vx;
+                    let dy = y - vy;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    if dist < cutoff {
+                        val *= (dist / coherence_length).tanh();
+                    }
                 }
-            }
-        }
-    }
+                val
+            }).collect::<Vec<f64>>()
+        })
+        .collect();
+
     suppression
 }
 
@@ -310,7 +316,7 @@ pub fn screening_currents(
 ///
 /// chi(r) ~ -(1 - (Delta(r)/Delta_max)^2), normalised to [-1, 0].
 pub fn local_susceptibility(gap_field: &[f64]) -> Vec<f64> {
-    let gap_max = gap_field.iter().cloned().fold(0.0_f64, |a, b| a.max(b.abs()));
+    let gap_max = gap_field.iter().copied().fold(0.0_f64, |a, b| a.max(b.abs()));
     if gap_max < 1e-30 {
         return vec![0.0; gap_field.len()];
     }
@@ -583,5 +589,20 @@ mod tests {
         for &c in &chi {
             assert!(c.abs() < 1e-10, "chi = {}", c);
         }
+    }
+
+    #[test]
+    fn test_negative_bz_same_period() {
+        let p_pos = vortex_lattice_period(1.0);
+        let p_neg = vortex_lattice_period(-1.0);
+        assert!((p_pos - p_neg).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_infinite_moire_period_flux() {
+        // With infinite moire period, flux per cell should be 0 or infinity
+        // depending on implementation. Check it doesn't panic.
+        let flux = flux_per_moire_cell(1.0, f64::INFINITY);
+        assert!(flux.is_finite() || flux.is_infinite());
     }
 }

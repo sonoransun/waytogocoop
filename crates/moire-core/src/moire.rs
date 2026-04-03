@@ -1,5 +1,6 @@
 use crate::materials::LatticeType;
 use nalgebra::Vector2;
+use rayon::prelude::*;
 use std::f64::consts::PI;
 
 /// Configuration for a moire pattern computation.
@@ -117,32 +118,47 @@ pub fn compute_moire(config: &MoireConfig) -> MoireResult {
     let g_over_unrotated = reciprocal_g_vectors(config.overlayer_lattice_type, config.overlayer_a);
     let g_over = rotate_g_vectors(&g_over_unrotated, config.twist_angle_deg.to_radians());
 
-    // Compute pattern on grid
-    let mut pattern = vec![0.0_f64; n * n];
+    // Compute pattern on grid (parallel over rows)
+    let rows: Vec<(Vec<f64>, f64, f64)> = (0..n)
+        .into_par_iter()
+        .map(|iy| {
+            let y = (iy as f64 / (n - 1).max(1) as f64 - 0.5) * extent;
+            let mut row = Vec::with_capacity(n);
+            let mut local_min = f64::MAX;
+            let mut local_max = f64::MIN;
+
+            for ix in 0..n {
+                let x = (ix as f64 / (n - 1).max(1) as f64 - 0.5) * extent;
+                let r = Vector2::new(x, y);
+
+                // Substrate potential: sum of cos(G . r)
+                let v_sub: f64 = g_sub.iter().map(|g| g.dot(&r).cos()).sum();
+                // Overlayer potential: sum of cos(G . r)
+                let v_over: f64 = g_over.iter().map(|g| g.dot(&r).cos()).sum();
+
+                let val = (config.dw_factor_substrate * v_sub) * (config.dw_factor_overlayer * v_over);
+                row.push(val);
+
+                if val < local_min {
+                    local_min = val;
+                }
+                if val > local_max {
+                    local_max = val;
+                }
+            }
+
+            (row, local_min, local_max)
+        })
+        .collect();
+
+    // Flatten rows into pattern + compute global min/max
+    let mut pattern = Vec::with_capacity(n * n);
     let mut min_val = f64::MAX;
     let mut max_val = f64::MIN;
-
-    for iy in 0..n {
-        let y = (iy as f64 / (n - 1).max(1) as f64 - 0.5) * extent;
-        for ix in 0..n {
-            let x = (ix as f64 / (n - 1).max(1) as f64 - 0.5) * extent;
-            let r = Vector2::new(x, y);
-
-            // Substrate potential: sum of cos(G . r)
-            let v_sub: f64 = g_sub.iter().map(|g| g.dot(&r).cos()).sum();
-            // Overlayer potential: sum of cos(G . r)
-            let v_over: f64 = g_over.iter().map(|g| g.dot(&r).cos()).sum();
-
-            let val = (config.dw_factor_substrate * v_sub) * (config.dw_factor_overlayer * v_over);
-            pattern[iy * n + ix] = val;
-
-            if val < min_val {
-                min_val = val;
-            }
-            if val > max_val {
-                max_val = val;
-            }
-        }
+    for (row, rmin, rmax) in rows {
+        pattern.extend(row);
+        if rmin < min_val { min_val = rmin; }
+        if rmax > max_val { max_val = rmax; }
     }
 
     // Normalize to [0, 1]

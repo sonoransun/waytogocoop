@@ -2,6 +2,11 @@ use egui::{Color32, Ui};
 
 use crate::app::{MoireApp, Tab, ViewMode};
 
+/// Camera rotation sensitivity (radians per pixel of drag).
+const CAMERA_ROTATION_SENSITIVITY: f32 = 0.01;
+/// Camera zoom sensitivity (distance per pixel of scroll).
+const CAMERA_ZOOM_SENSITIVITY: f32 = 0.005;
+
 /// Render the main visualization viewport with tab bar and 2D/3D toggle.
 pub fn show_viewport(ui: &mut Ui, app: &mut MoireApp) {
     let prev_tab = app.active_tab;
@@ -75,8 +80,8 @@ fn show_surface_3d(ui: &mut Ui, app: &mut MoireApp) {
     // Handle mouse drag for camera rotation
     if response.dragged() {
         let delta = response.drag_delta();
-        app.camera.yaw += delta.x * 0.01;
-        app.camera.pitch = (app.camera.pitch + delta.y * 0.01).clamp(-1.4, 1.4);
+        app.camera.yaw += delta.x * CAMERA_ROTATION_SENSITIVITY;
+        app.camera.pitch = (app.camera.pitch + delta.y * CAMERA_ROTATION_SENSITIVITY).clamp(-1.4, 1.4);
         app.needs_surface_rerender = true;
     }
 
@@ -84,7 +89,7 @@ fn show_surface_3d(ui: &mut Ui, app: &mut MoireApp) {
     if response.hovered() {
         let scroll = ui.input(|i| i.smooth_scroll_delta.y);
         if scroll.abs() > 0.1 {
-            app.camera.distance = (app.camera.distance - scroll * 0.005).clamp(1.0, 5.0);
+            app.camera.distance = (app.camera.distance - scroll * CAMERA_ZOOM_SENSITIVITY).clamp(1.0, 5.0);
             app.needs_surface_rerender = true;
         }
     }
@@ -94,13 +99,13 @@ fn show_surface_3d(ui: &mut Ui, app: &mut MoireApp) {
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
     } else {
-        ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(30, 30, 35));
+        ui.painter().rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
         ui.painter().text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
             "Computing 3D view...",
             egui::FontId::default(),
-            Color32::WHITE,
+            ui.visuals().text_color(),
         );
     }
 
@@ -111,7 +116,7 @@ fn show_surface_3d(ui: &mut Ui, app: &mut MoireApp) {
             egui::Align2::LEFT_BOTTOM,
             "Drag to rotate \u{2022} Scroll to zoom",
             egui::FontId::proportional(12.0),
-            Color32::from_white_alpha(140),
+            ui.visuals().weak_text_color(),
         );
     }
 }

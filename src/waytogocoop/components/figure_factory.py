@@ -7,11 +7,29 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
+def _template(dark: bool = True) -> str:
+    """Return the Plotly template name for the current theme."""
+    return "plotly_dark" if dark else "plotly_white"
+
+
+def _line_colors(dark: bool = True) -> tuple[str, str, str]:
+    """Return (primary, secondary, muted) line colors for the theme."""
+    if dark:
+        return "#5dade2", "#ec7063", "#888"
+    return "steelblue", "firebrick", "gray"
+
+
+def _marker_color(dark: bool = True) -> str:
+    """Return marker color contrasting with the background."""
+    return "white" if dark else "black"
+
+
 def create_moire_heatmap(
     x: np.ndarray,
     y: np.ndarray,
     pattern: np.ndarray,
     title: str = "Moire Pattern",
+    dark: bool = True,
 ) -> go.Figure:
     """Create a heatmap of the real-space moire pattern.
 
@@ -23,6 +41,8 @@ def create_moire_heatmap(
         2D pattern values.
     title : str
         Figure title.
+    dark : bool
+        Whether to use dark theme styling.
     """
     fig = go.Figure(
         data=go.Heatmap(
@@ -39,6 +59,7 @@ def create_moire_heatmap(
         yaxis_title="y (Angstrom)",
         yaxis_scaleanchor="x",
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -48,6 +69,7 @@ def create_gap_heatmap(
     y: np.ndarray,
     gap_field: np.ndarray,
     title: str = "Gap Modulation",
+    dark: bool = True,
 ) -> go.Figure:
     """Create a heatmap of the spatially varying superconducting gap.
 
@@ -59,6 +81,8 @@ def create_gap_heatmap(
         2D gap values (meV).
     title : str
         Figure title.
+    dark : bool
+        Whether to use dark theme styling.
     """
     fig = go.Figure(
         data=go.Heatmap(
@@ -75,6 +99,7 @@ def create_gap_heatmap(
         yaxis_title="y (Angstrom)",
         yaxis_scaleanchor="x",
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -84,6 +109,7 @@ def create_fft_heatmap(
     ky: np.ndarray,
     power_spectrum: np.ndarray,
     title: str = "FFT Power Spectrum",
+    dark: bool = True,
 ) -> go.Figure:
     """Create a heatmap of the FFT power spectrum.
 
@@ -95,6 +121,8 @@ def create_fft_heatmap(
         2D log-scaled power spectrum.
     title : str
         Figure title.
+    dark : bool
+        Whether to use dark theme styling.
     """
     fig = go.Figure(
         data=go.Heatmap(
@@ -111,6 +139,7 @@ def create_fft_heatmap(
         yaxis_title="ky (1/Angstrom)",
         yaxis_scaleanchor="x",
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -120,6 +149,7 @@ def create_sweep_plot(
     periods: np.ndarray,
     amplitudes: np.ndarray,
     param_name: str = "Parameter",
+    dark: bool = True,
 ) -> go.Figure:
     """Create a dual-axis line plot for parameter sweeps.
 
@@ -135,7 +165,10 @@ def create_sweep_plot(
         CPDM amplitudes (dimensionless).
     param_name : str
         Label for the x-axis.
+    dark : bool
+        Whether to use dark theme styling.
     """
+    primary, secondary, _muted = _line_colors(dark)
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     fig.add_trace(
@@ -144,7 +177,7 @@ def create_sweep_plot(
             y=periods,
             name="Moire period (A)",
             mode="lines+markers",
-            line=dict(color="steelblue"),
+            line=dict(color=primary),
         ),
         secondary_y=False,
     )
@@ -155,7 +188,7 @@ def create_sweep_plot(
             y=amplitudes,
             name="CPDM amplitude",
             mode="lines+markers",
-            line=dict(color="firebrick"),
+            line=dict(color=secondary),
         ),
         secondary_y=True,
     )
@@ -164,6 +197,7 @@ def create_sweep_plot(
         title=f"Parameter Sweep: {param_name}",
         xaxis_title=param_name,
         margin=dict(l=60, r=60, t=50, b=50),
+        template=_template(dark),
     )
     fig.update_yaxes(title_text="Moire period (Angstrom)", secondary_y=False)
     fig.update_yaxes(title_text="CPDM amplitude", secondary_y=True)
@@ -177,6 +211,7 @@ def create_3d_surface(
     title: str,
     colorscale: str = "Viridis",
     z_label: str = "Intensity",
+    dark: bool = True,
 ) -> go.Figure:
     """3D rotatable surface plot using go.Surface.
 
@@ -192,6 +227,8 @@ def create_3d_surface(
         Plotly colorscale name.
     z_label : str
         Label for the colour bar and z-axis.
+    dark : bool
+        Whether to use dark theme styling.
     """
     fig = go.Figure(
         data=go.Surface(
@@ -213,6 +250,7 @@ def create_3d_surface(
             camera=dict(eye=dict(x=1.5, y=1.5, z=1.0)),
         ),
         margin=dict(l=20, r=20, t=50, b=20),
+        template=_template(dark),
     )
     return fig
 
@@ -224,6 +262,7 @@ def create_2d_contour(
     title: str,
     colorscale: str = "Viridis",
     z_label: str = "Intensity",
+    dark: bool = True,
 ) -> go.Figure:
     """2D contour/topographic map projection.
 
@@ -239,6 +278,8 @@ def create_2d_contour(
         Plotly colorscale name.
     z_label : str
         Label for the colour bar.
+    dark : bool
+        Whether to use dark theme styling.
     """
     fig = go.Figure(
         data=go.Contour(
@@ -256,6 +297,7 @@ def create_2d_contour(
         yaxis_title="y (Angstrom)",
         yaxis_scaleanchor="x",
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -271,8 +313,10 @@ def create_vortex_overlay_heatmap(
     gap_field: np.ndarray,
     vortex_positions: np.ndarray,
     title: str = "Gap + Vortex Lattice",
+    dark: bool = True,
 ) -> go.Figure:
     """Gap heatmap with vortex core positions overlaid as markers."""
+    marker_col = _marker_color(dark)
     fig = go.Figure()
     fig.add_trace(
         go.Heatmap(
@@ -287,7 +331,7 @@ def create_vortex_overlay_heatmap(
                 x=vortex_positions[:, 0],
                 y=vortex_positions[:, 1],
                 mode="markers",
-                marker=dict(size=6, color="black", symbol="x"),
+                marker=dict(size=6, color=marker_col, symbol="x"),
                 name="Vortex cores",
             )
         )
@@ -297,6 +341,7 @@ def create_vortex_overlay_heatmap(
         yaxis_title="y (Angstrom)",
         yaxis_scaleanchor="x",
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -310,6 +355,7 @@ def create_3d_isosurface(
     iso_min: float | None = None,
     iso_max: float | None = None,
     colorscale: str = "RdBu_r",
+    dark: bool = True,
 ) -> go.Figure:
     """3D isosurface of Delta(x,y,z) using go.Isosurface.
 
@@ -319,6 +365,8 @@ def create_3d_isosurface(
         1D coordinate arrays.
     values : np.ndarray
         3D array (nz, ny, nx).
+    dark : bool
+        Whether to use dark theme styling.
     """
     nz, ny, nx = values.shape
     X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
@@ -353,6 +401,7 @@ def create_3d_isosurface(
             camera=dict(eye=dict(x=1.5, y=1.5, z=1.0)),
         ),
         margin=dict(l=20, r=20, t=50, b=20),
+        template=_template(dark),
     )
     return fig
 
@@ -361,22 +410,25 @@ def create_z_decay_profile(
     z: np.ndarray,
     profile: np.ndarray,
     title: str = "Proximity Decay Profile",
+    dark: bool = True,
 ) -> go.Figure:
     """Line plot of the proximity decay profile f(z)."""
+    primary, _secondary, muted = _line_colors(dark)
     fig = go.Figure(
         data=go.Scatter(
             x=z, y=profile,
             mode="lines",
-            line=dict(color="steelblue", width=2),
+            line=dict(color=primary, width=2),
             name="f(z)",
         )
     )
-    fig.add_vline(x=0, line=dict(dash="dash", color="gray"), annotation_text="Interface")
+    fig.add_vline(x=0, line=dict(dash="dash", color=muted), annotation_text="Interface")
     fig.update_layout(
         title=title,
         xaxis_title="z (Angstrom)",
         yaxis_title="f(z)",
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -387,6 +439,7 @@ def create_majorana_density_map(
     density: np.ndarray,
     vortex_positions: np.ndarray,
     title: str = "Majorana ZM Density (SPECULATIVE)",
+    dark: bool = True,
 ) -> go.Figure:
     """Heatmap of Majorana zero-mode probability density."""
     fig = go.Figure()
@@ -413,6 +466,7 @@ def create_majorana_density_map(
         yaxis_title="y (Angstrom)",
         yaxis_scaleanchor="x",
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -425,6 +479,7 @@ def create_quiver_field(
     base_field: np.ndarray,
     title: str = "Screening Currents",
     skip: int = 8,
+    dark: bool = True,
 ) -> go.Figure:
     """Background heatmap with arrow overlay for vector field.
 
@@ -432,7 +487,10 @@ def create_quiver_field(
     ----------
     skip : int
         Subsample every ``skip`` grid points for arrows.
+    dark : bool
+        Whether to use dark theme styling.
     """
+    arrow_color = "white" if dark else "black"
     fig = go.Figure()
     fig.add_trace(
         go.Heatmap(
@@ -468,7 +526,7 @@ def create_quiver_field(
                 xref="x", yref="y", axref="x", ayref="y",
                 showarrow=True,
                 arrowhead=3, arrowsize=1, arrowwidth=1.5,
-                arrowcolor="white",
+                arrowcolor=arrow_color,
             )
 
     fig.update_layout(
@@ -477,6 +535,7 @@ def create_quiver_field(
         yaxis_title="y (Angstrom)",
         yaxis_scaleanchor="x",
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -486,6 +545,7 @@ def create_susceptibility_heatmap(
     y: np.ndarray,
     chi: np.ndarray,
     title: str = "Local Susceptibility (SPECULATIVE)",
+    dark: bool = True,
 ) -> go.Figure:
     """Heatmap of local magnetic susceptibility."""
     fig = go.Figure(
@@ -501,6 +561,7 @@ def create_susceptibility_heatmap(
         yaxis_title="y (Angstrom)",
         yaxis_scaleanchor="x",
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -512,6 +573,7 @@ def create_phase_colormap(
     title: str = "Topological Phase Diagram (SPECULATIVE)",
     x_label: str = "B (Tesla)",
     y_label: str = "Delta (meV)",
+    dark: bool = True,
 ) -> go.Figure:
     """2D colormap of topological phase index with boundary overlay."""
     fig = go.Figure()
@@ -520,7 +582,8 @@ def create_phase_colormap(
             z=phase_index,
             x=param_x,
             y=param_y,
-            colorscale=[[0, "steelblue"], [1, "firebrick"]],
+            colorscale=[[0, "#5dade2" if dark else "steelblue"],
+                        [1, "#ec7063" if dark else "firebrick"]],
             colorbar=dict(title="Phase", tickvals=[0, 1], ticktext=["Trivial", "Topological"]),
             zmin=0,
             zmax=1,
@@ -532,7 +595,7 @@ def create_phase_colormap(
             x=param_x,
             y=param_y,
             contours=dict(start=0.5, end=0.5, size=1),
-            line=dict(color="white", width=2),
+            line=dict(color="white" if dark else "black", width=2),
             showscale=False,
             name="Phase boundary",
         )
@@ -542,6 +605,7 @@ def create_phase_colormap(
         xaxis_title=x_label,
         yaxis_title=y_label,
         margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
     )
     return fig
 
@@ -551,8 +615,10 @@ def create_commensuration_sweep(
     a_v_values: np.ndarray,
     moire_period: float,
     title: str = "Vortex-Moire Commensuration",
+    dark: bool = True,
 ) -> go.Figure:
     """Dual-axis plot: a_v(B) and a_v/L_m ratio vs B."""
+    primary, secondary, muted = _line_colors(dark)
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     fig.add_trace(
@@ -560,7 +626,7 @@ def create_commensuration_sweep(
             x=B_values, y=a_v_values,
             name="a_v (Angstrom)",
             mode="lines",
-            line=dict(color="steelblue"),
+            line=dict(color=primary),
         ),
         secondary_y=False,
     )
@@ -571,7 +637,7 @@ def create_commensuration_sweep(
             x=B_values, y=ratio,
             name="a_v / L_m",
             mode="lines",
-            line=dict(color="firebrick"),
+            line=dict(color=secondary),
         ),
         secondary_y=True,
     )
@@ -579,7 +645,7 @@ def create_commensuration_sweep(
     for n in [1, 2, 3, 4]:
         fig.add_hline(
             y=n, secondary_y=True,
-            line=dict(dash="dot", color="gray", width=1),
+            line=dict(dash="dot", color=muted, width=1),
             annotation_text=f"n={n}",
         )
 
@@ -587,6 +653,7 @@ def create_commensuration_sweep(
         title=title,
         xaxis_title="B (Tesla)",
         margin=dict(l=60, r=60, t=50, b=50),
+        template=_template(dark),
     )
     fig.update_yaxes(title_text="Vortex period (Angstrom)", secondary_y=False)
     fig.update_yaxes(title_text="a_v / L_m", secondary_y=True)
