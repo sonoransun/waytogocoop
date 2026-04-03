@@ -41,7 +41,10 @@ DEFAULT_FFT_THRESHOLD_FRACTION: float = 0.3
 # ---------------------------------------------------------------------------
 AMU_TO_KG: float = 1.66053906660e-27       # atomic mass unit -> kg
 HBAR_J_S: float = 1.054571817e-34          # hbar in J*s
-DEFAULT_ISOTOPE_EXPONENT: float = 0.25     # BCS isotope exponent for FeTe (anomalous)
+DEFAULT_ISOTOPE_EXPONENT: float = 0.4      # BCS isotope exponent — literature consensus
+# Literature range: α = 0.35–0.8 for iron chalcogenides (Khasanov 2010, Liu 2009);
+# α = −0.18 inverse effect in (Ba,K)Fe₂As₂ (Shirage 2009).
+# 0.4 is the corrected consensus value (PRB 82, 212505).
 
 # ---------------------------------------------------------------------------
 # Conversion helpers

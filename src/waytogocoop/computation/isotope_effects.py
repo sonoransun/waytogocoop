@@ -5,6 +5,15 @@ lattice expansion, BCS isotope effect, Debye-Waller factor) to estimate
 how isotopic substitution might affect moire patterns and superconducting
 gap modulation.  Results are qualitative and have not been validated
 against experiment for these specific heterostructures.
+
+Literature basis for the BCS isotope exponent (alpha):
+  - FeSe: alpha_Fe = 0.81 ± 0.15 (Khasanov et al., arXiv:1002.2510)
+  - SmFeAsO_{1-x}F_x: alpha_Fe ~ 0.35 (Liu et al., Nature 459, 64, 2009)
+  - (Ba,K)Fe2As2: alpha_Fe = -0.18 — inverse effect (Shirage et al., PRL 103, 257003)
+  - Corrected consensus: alpha ~ 0.35-0.4 (PRB 82, 212505)
+  - No Te isotope data exists for FeTe; this is a key experimental gap.
+The ground state is theoretically a "phonon-dressed unconventional superconductor"
+where electronic pairing dominates but phonons dress the interaction (PMC6447578).
 """
 
 from __future__ import annotations
@@ -26,6 +35,7 @@ from waytogocoop.materials.isotopes import (
     ELEMENTS,
     MATERIAL_COMPOSITION,
     formula_unit_avg_mass,
+    te_125_spin_fraction,
 )
 
 
@@ -42,6 +52,7 @@ class IsotopeEffects:
     coherence_length_modified: float
     dw_factor_substrate: float
     dw_factor_overlayer: float
+    te_125_spin_fraction: float  # fraction of Te that is ¹²⁵Te (I=1/2)
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +267,9 @@ def compute_isotope_effects(
         overlayer_formula, overlayer_lattice_type, overlayer_a, mass_overrides
     )
 
+    overrides = mass_overrides or {}
+    spin_frac = te_125_spin_fraction(overrides.get("Te"))
+
     return IsotopeEffects(
         substrate_a_modified=sub_a_mod,
         substrate_delta_a=sub_da,
@@ -266,4 +280,5 @@ def compute_isotope_effects(
         coherence_length_modified=xi_mod,
         dw_factor_substrate=dw_sub,
         dw_factor_overlayer=dw_over,
+        te_125_spin_fraction=spin_frac,
     )

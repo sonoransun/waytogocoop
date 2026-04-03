@@ -80,9 +80,10 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
     ui.add_space(8.0);
 
     // --- BCS isotope exponent ---
-    ui.label("BCS isotope exponent (alpha):");
+    // Literature: α = 0.35–0.8 (iron chalcogenides); α = −0.18 (inverse, pnictides)
+    ui.label("BCS isotope exponent (α):");
     if ui
-        .add(egui::Slider::new(&mut app.isotope_alpha, 0.0..=0.5).step_by(0.01))
+        .add(egui::Slider::new(&mut app.isotope_alpha, -0.5..=1.0).step_by(0.01))
         .changed()
     {
         changed = true;
@@ -95,7 +96,7 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
         app.fe_mass_override = None;
         app.te_mass_override = None;
         app.sb_mass_override = None;
-        app.isotope_alpha = 0.25;
+        app.isotope_alpha = 0.4;
         changed = true;
     }
 

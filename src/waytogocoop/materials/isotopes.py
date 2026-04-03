@@ -128,6 +128,39 @@ def natural_average_mass(symbol: str) -> float:
     return sum(iso.atomic_mass * iso.natural_abundance for iso in elem.isotopes)
 
 
+def te_125_spin_fraction(te_mass_override: float | None = None) -> float:
+    """Estimate the ¹²⁵Te nuclear spin fraction for a given Te mass setting.
+
+    ¹²⁵Te (I=1/2) is the only spin-bearing stable Te isotope. When the user
+    selects a specific Te mass via the slider:
+    - If the mass matches ¹²⁵Te (124.904 amu), the fraction is 1.0 (pure ¹²⁵Te).
+    - If the mass is far from ¹²⁵Te, the fraction approaches 0.0.
+    - At the natural average mass, the fraction equals the natural abundance (0.071).
+
+    This uses a simple linear interpolation between the two nearest isotopes.
+    """
+    te = ELEMENTS["Te"]
+    if te_mass_override is None:
+        return 0.071  # natural abundance of ¹²⁵Te
+
+    target = te_mass_override
+    te_125_mass = 124.904
+
+    # Find the two isotopes bracketing the target mass
+    masses = sorted(iso.atomic_mass for iso in te.isotopes)
+    if target <= masses[0]:
+        return 1.0 if abs(masses[0] - te_125_mass) < 0.5 else 0.0
+    if target >= masses[-1]:
+        return 1.0 if abs(masses[-1] - te_125_mass) < 0.5 else 0.0
+
+    # If target is within 0.5 amu of ¹²⁵Te, it's essentially pure ¹²⁵Te
+    if abs(target - te_125_mass) < 0.5:
+        return 1.0
+
+    # Otherwise, ¹²⁵Te fraction is zero (enriched to a different isotope)
+    return 0.0
+
+
 def formula_unit_avg_mass(
     formula: str,
     mass_overrides: dict[str, float] | None = None,

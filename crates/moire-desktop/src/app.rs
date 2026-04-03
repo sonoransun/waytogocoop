@@ -171,7 +171,7 @@ impl Default for MoireApp {
             fe_mass_override: None,
             te_mass_override: None,
             sb_mass_override: None,
-            isotope_alpha: 0.25,
+            isotope_alpha: 0.4,
             active_tab: Tab::Pattern,
             needs_recompute: true,
             needs_surface_rerender: true,

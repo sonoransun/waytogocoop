@@ -2,7 +2,7 @@
 
 **Moire Engineering of Cooper-Pair Density Modulation States**
 
-A visualization and computation tool for exploring moire-induced Cooper-pair density modulation in topological-insulator / iron-chalcogenide heterostructures.
+A visualization and computation tool for exploring moire-induced Cooper-pair density modulation in topological-insulator / iron-chalcogenide heterostructures, with speculative isotope-engineering capabilities for precision moire tuning.
 
 Two implementations are provided:
 - **Python Web UI** (Plotly Dash) -- accessible via browser on any platform
@@ -22,8 +22,45 @@ In practice, you select a substrate and an overlayer material, optionally set a 
 2. **The moire periodicity** -- the characteristic wavelength of the emerging pattern
 3. **The Cooper-pair density modulation (CPDM)** -- how the superconducting gap varies spatially across the moire unit cell
 4. **The Fourier spectrum** -- reciprocal-space analysis revealing the dominant modulation wavevectors
+5. **Speculative isotope effects** -- how isotopic enrichment of substrate or overlayer elements shifts the superconducting gap, lattice constant, coherence length, and Debye-Waller contrast
 
 Results are displayed as interactive heatmaps, line plots, and parameter sweeps that update in real time as you adjust material parameters.
+
+```mermaid
+flowchart LR
+    subgraph Inputs
+        MAT[Material Selection<br/>FeTe substrate +<br/>TI overlayer]
+        PARAMS[Parameters<br/>twist angle, resolution,<br/>viewport extent]
+        ISO[Isotope Configuration<br/>Fe/Te/Sb mass overrides,<br/>BCS exponent alpha]
+    end
+
+    subgraph Computation
+        MOIRE[Moire Pattern<br/>Generator]
+        GAP[Gap Modulation<br/>Delta_1 / Delta_2]
+        FFT[2D FFT &<br/>Peak Detection]
+        ISOTOPE[Isotope Effects<br/>lattice shift, gap mod,<br/>DW factor, spin density]
+    end
+
+    subgraph Outputs
+        VIS[Real-Space<br/>Visualization]
+        GAPVIS[CPDM Gap<br/>Heatmap]
+        SPEC[Fourier<br/>Spectrum]
+        INFO[Computed<br/>Parameters]
+    end
+
+    MAT --> MOIRE
+    PARAMS --> MOIRE
+    ISO --> ISOTOPE
+    ISOTOPE -->|modified a, DW| MOIRE
+    ISOTOPE -->|modified Delta| GAP
+    MOIRE --> VIS
+    MOIRE --> GAP
+    MOIRE --> FFT
+    GAP --> GAPVIS
+    FFT --> SPEC
+    ISOTOPE --> INFO
+    MOIRE --> INFO
+```
 
 ### Concrete Examples by Substrate Combination
 
@@ -74,7 +111,13 @@ Beyond the built-in presets, both the web UI and desktop app allow you to overri
   - [Moire Engineering of CPDM States](#moire-engineering-of-cpdm-states)
   - [Materials](#materials)
   - [Key Equations](#key-equations)
+- [Speculative Isotope Engineering](#speculative-isotope-engineering)
+  - [Isotopic Tuning Mechanisms](#isotopic-tuning-mechanisms)
+  - [Isotope Database](#isotope-database)
+  - [Recommended Isotopic Configurations](#recommended-isotopic-configurations)
+  - [Nuclear Spin Engineering](#nuclear-spin-engineering)
 - [Features](#features)
+- [Architecture](#architecture)
 - [Installation and Usage](#installation-and-usage)
 - [Project Structure](#project-structure)
 - [References](#references)
@@ -159,15 +202,265 @@ where Q_moire are the moire reciprocal vectors, delta_Delta is the modulation am
 
 ---
 
+## Speculative Isotope Engineering
+
+> **SPECULATIVE** -- The isotope-effect models use simplified physics (zero-point lattice expansion, BCS isotope effect, Debye-Waller damping) to estimate how isotopic substitution might affect moire patterns and superconducting gap modulation. Results are qualitative and have not been validated against experiment for these specific heterostructures. The models are grounded in published isotope-effect measurements on related iron-chalcogenide systems.
+
+The software includes a speculative isotope-engineering module that models how enriching the substrate or overlayer with specific isotopes could tune CPDM properties. This provides a second axis of control beyond lattice-constant and twist-angle engineering.
+
+### Isotopic Tuning Mechanisms
+
+Four physical mechanisms connect isotopic composition to moire-modulated superconductivity:
+
+```mermaid
+flowchart TD
+    ISO[Isotope Mass<br/>Selection] --> ZP[Zero-Point<br/>Lattice Shift]
+    ISO --> BCS[BCS Gap<br/>Modification]
+    ISO --> DW[Debye-Waller<br/>Factor]
+    ISO --> SPIN[Nuclear Spin<br/>Density]
+
+    ZP -->|"da ~ 10^-4 A<br/>(negligible for<br/>moire period)"| LATTICE[Modified Lattice<br/>Constant a]
+    BCS -->|"Delta_mod = Delta_0 x<br/>(M_nat/M_enr)^alpha"| GAP[Modified<br/>Superconducting Gap]
+    DW -->|"exp(-G^2 x delta_u2)"| CONTRAST[Moire Pattern<br/>Contrast]
+    SPIN -->|"125Te I=1/2<br/>fraction"| DECOHERENCE[Nuclear Spin<br/>Decoherence Rate]
+
+    LATTICE --> MOIRE[Moire Period<br/>& Pattern]
+    GAP --> CPDM[CPDM Amplitude<br/>& Modulation]
+    CONTRAST --> MOIRE
+    GAP -->|"xi ~ 1/Delta"| COHERENCE[Coherence<br/>Length]
+    COHERENCE --> CPDM
+
+    style BCS fill:#fdd,stroke:#c33
+    style ZP fill:#ddf,stroke:#33c
+    style DW fill:#dfd,stroke:#3c3
+    style SPIN fill:#ffd,stroke:#cc3
+```
+
+**1. BCS Gap Modification (dominant effect)**
+
+The BCS isotope effect shifts the superconducting gap as:
+
+```
+Delta_mod = Delta_0 * (M_natural / M_enriched)^alpha
+```
+
+The isotope exponent alpha varies across iron-based superconductors:
+
+| System | alpha | Source |
+|--------|-------|--------|
+| FeSe (54Fe/56Fe) | 0.81 +/- 0.15 | Khasanov et al., arXiv:1002.2510 |
+| SmFeAsO (iron) | ~0.35 | Liu et al., Nature 459, 64 (2009) |
+| (Ba,K)Fe2As2 (iron) | -0.18 (inverse) | Shirage et al., PRL 103, 257003 |
+| Corrected consensus | 0.35 -- 0.4 | PRB 82, 212505 |
+| FeTe (tellurium) | unknown | No measurement exists |
+
+The software defaults to alpha = 0.4 (corrected consensus) with a slider range of [-0.5, 1.0] to explore both normal and inverse isotope effects. Lighter isotopes (e.g. 54Fe) increase the gap; heavier isotopes (e.g. 58Fe) decrease it.
+
+**2. Zero-Point Lattice Expansion**
+
+Isotopic mass affects zero-point vibrational amplitude, which shifts the equilibrium lattice constant through anharmonic effects:
+
+```
+da = -a * (3 * gamma * k_B * T_D) / (4 * E_coh) * (1 - sqrt(M_natural / M_enriched))
+```
+
+For the heavy elements in this system (Fe ~56 amu, Te ~128 amu), the lattice shifts are of order 10^-4 angstrom -- negligible compared to the 0.44 angstrom mismatch driving the moire pattern. This mechanism is implemented for completeness but does not meaningfully affect CPDM predictions.
+
+**3. Debye-Waller Factor**
+
+Isotopic mass changes the mean-square atomic displacement, modifying the strength of the periodic potential that generates the moire pattern:
+
+```
+DW_ratio = exp(-G^2 * delta<u^2>)
+```
+
+Heavier isotopes reduce thermal vibrations, producing a ~1--5% sharper moire pattern. Lighter isotopes slightly wash out the pattern contrast.
+
+**4. Nuclear Spin Density**
+
+125Te (I = 1/2, 7.07% natural abundance) is the only spin-bearing stable tellurium isotope. All other Te isotopes (122, 124, 126, 128, 130) have I = 0. The software computes the 125Te spin fraction for a given enrichment, relevant for:
+- Nuclear spin decoherence at the TI/SC interface (Majorana physics)
+- NMR/NQR probe sensitivity (125Te Knight shift measurements)
+
+### Isotope Database
+
+The software includes a comprehensive isotope database (AME2020 / NUBASE2020) for all constituent elements:
+
+```mermaid
+graph LR
+    subgraph "Iron (Fe) — Substrate"
+        FE54["54Fe<br/>53.94 amu<br/>5.8%"]
+        FE56["56Fe<br/>55.93 amu<br/>91.7%"]
+        FE57["57Fe<br/>56.94 amu<br/>2.2%"]
+        FE58["58Fe<br/>57.93 amu<br/>0.3%"]
+    end
+
+    subgraph "Tellurium (Te) — Both Layers"
+        TE122["122Te<br/>2.6%"]
+        TE124["124Te<br/>4.8%"]
+        TE125["125Te<br/>7.1%<br/>I=1/2"]
+        TE126["126Te<br/>18.9%"]
+        TE128["128Te<br/>31.7%"]
+        TE130["130Te<br/>34.1%"]
+    end
+
+    subgraph "Antimony (Sb) — Overlayer"
+        SB121["121Sb<br/>57.2%"]
+        SB123["123Sb<br/>42.8%"]
+    end
+
+    subgraph "Bismuth (Bi) — Overlayer"
+        BI209["209Bi<br/>100%<br/>monoisotopic"]
+    end
+
+    style TE125 fill:#ffd,stroke:#cc3
+    style BI209 fill:#ddd,stroke:#999
+```
+
+Each element also carries bulk thermodynamic properties used in the isotope-effect models:
+
+| Element | Debye Temp (K) | Gruneisen Parameter | Cohesive Energy (eV/atom) |
+|---------|:--------------:|:-------------------:|:-------------------------:|
+| Fe      | 260            | 1.5                 | 4.0                       |
+| Te      | 165            | 1.7                 | 2.1                       |
+| Sb      | 210            | 1.1                 | 2.7                       |
+| Bi      | 120            | 1.2                 | 2.2                       |
+
+### Recommended Isotopic Configurations
+
+Based on published literature on isotope effects in iron-chalcogenide superconductors, topological insulators, and related systems, the following configurations are ranked by expected impact on CPDM properties:
+
+```mermaid
+graph TD
+    subgraph "Tier 1 — High Impact, Feasible"
+        T1A["54Fe-enriched FeTe<br/>Gap enhancement +3-5%<br/>Strongest isotope knob<br/>~5-10 EUR/mg"]
+        T1B["130Te-enriched FeTe<br/>Eliminates 125Te spin bath<br/>Decoherence suppression<br/>~8-15 EUR/mg"]
+    end
+
+    subgraph "Tier 2 — Scientifically Interesting"
+        T2A["121Sb-pure Sb2Te3<br/>Removes Sb isotope disorder<br/>Phonon coherence improvement<br/>~5 EUR/mg"]
+        T2B["54Fe + 122Te FeTe<br/>All-light: max gap + Debye freq<br/>Very high cost for 122Te"]
+    end
+
+    subgraph "Tier 3 — Diagnostic Probes"
+        T3A["125Te-enriched FeTe<br/>Maximizes NMR signal<br/>Probes local SC state"]
+        T3B["57Fe-enriched FeTe<br/>Enables Mossbauer spectroscopy<br/>Local magnetic environment"]
+    end
+
+    T1A -.-|"dominant<br/>channel"| BCS_EFF["BCS gap<br/>modification"]
+    T1B -.-|"quantum<br/>coherence"| SPIN_EFF["nuclear spin<br/>elimination"]
+    T2A -.-|"phonon<br/>quality"| PHONON_EFF["isotope disorder<br/>scattering"]
+
+    style T1A fill:#bfb,stroke:#393
+    style T1B fill:#bfb,stroke:#393
+    style T2A fill:#ffb,stroke:#993
+    style T2B fill:#ffb,stroke:#993
+    style T3A fill:#bbf,stroke:#339
+    style T3B fill:#bbf,stroke:#339
+```
+
+**Key findings from literature:**
+
+- The codebase uses alpha = 0.4 (corrected consensus). For FeTe specifically, alpha could range from 0.35 to 0.81, meaning isotope gap effects may be underestimated by up to 2x.
+- Lattice constant isotope shifts are ppm-level for these heavy elements -- irrelevant for moire period tuning in the 11--15% mismatch regime.
+- No Te isotope effect on superconductivity has been measured for FeTe or Fe(Te,Se). This represents a key experimental gap.
+- The inverse isotope effect (alpha < 0) observed in (Ba,K)Fe2As2 is supported by theory where the ground state is a "phonon-dressed unconventional superconductor."
+- 130Te enrichment is the cheapest Te isotope modification and eliminates the nuclear spin bath.
+
+### Nuclear Spin Engineering
+
+125Te is the only stable Te isotope with a nuclear spin (I = 1/2). In natural tellurium it comprises 7.07% of atoms, creating a dilute nuclear spin bath that contributes to decoherence -- potentially relevant for Majorana zero modes at TI/SC interfaces.
+
+```mermaid
+pie title "Natural Tellurium Isotope Distribution"
+    "130Te (I=0)" : 34.1
+    "128Te (I=0)" : 31.7
+    "126Te (I=0)" : 18.9
+    "125Te (I=1/2)" : 7.1
+    "124Te (I=0)" : 4.8
+    "122Te (I=0)" : 2.6
+```
+
+Enriching to 130Te (or any I=0 isotope) eliminates this spin bath entirely. The software computes and displays the 125Te spin fraction for any isotope configuration, enabling direct comparison of nuclear spin environments across enrichment strategies.
+
+Published 125Te NMR on Fe(Te,Se) under pressure (arXiv:2505.11732) reveals that nematic fluctuations -- not antiferromagnetic ones -- dominate the superconducting state, making 125Te a valuable local probe. Conversely, depleting 125Te by enriching to spin-free isotopes would reduce nuclear-spin-induced decoherence, analogous to 28Si purification for silicon qubits.
+
+---
+
 ## Features
 
-- **Moire pattern visualization**: Real-space rendering of the moire superlattice formed by overlaying hexagonal and square lattices with configurable lattice constants.
+### Core Computation
+- **Moire pattern visualization**: Real-space rendering of the moire superlattice formed by overlaying hexagonal and square lattices with configurable lattice constants, via plane-wave superposition of reciprocal lattice vectors.
 - **Periodicity calculator**: Compute moire periodicity from lattice constants (a1, a2) and twist angle (theta).
-- **Material presets**: Built-in lattice parameters for Sb2Te3, Bi2Te3, FeTe, and Sb2Te.
-- **Gap modulation profile**: Visualize how the two superconducting gaps (Delta_1, Delta_2) are spatially modulated across the moire unit cell.
+- **Material presets**: Built-in lattice parameters for Sb2Te3, Bi2Te3, FeTe, and Sb2Te with crystallographic data (space groups, c-axis constants).
+- **Gap modulation profile**: Visualize how the two superconducting gaps (Delta_1 = 2.58 meV, Delta_2 = 3.60 meV) are spatially modulated across the moire unit cell.
+- **CPDM amplitude**: Exponential scaling A_CPDM = exp(-xi/L_m) relating coherence length to moire period.
 - **Interactive parameter tuning**: Adjust lattice constants, twist angle, and gap parameters with sliders and see results update in real time.
-- **Fourier analysis**: 2D FFT power spectrum revealing moire reciprocal lattice vectors.
+- **Fourier analysis**: 2D FFT power spectrum revealing moire reciprocal lattice vectors with automated peak detection.
 - **Parameter sweeps**: Explore how moire periodicity and CPDM amplitude vary with lattice constant or twist angle.
+- **Substrate comparison**: Side-by-side visualization of all three overlayer materials on FeTe.
+
+### Speculative Isotope Engineering
+- **Per-element mass sliders**: Continuously adjust effective atomic mass for Fe, Te, and Sb across the full isotope range.
+- **BCS isotope exponent**: Adjustable alpha from -0.5 (inverse effect) to 1.0, with literature-based marks at key values (-0.18 inverse, 0.4 consensus, 0.5 classical BCS, 0.81 FeSe-measured).
+- **Four-channel isotope effects**: Simultaneous computation of lattice shift, gap modification, Debye-Waller contrast, and coherence length scaling.
+- **125Te nuclear spin fraction**: Tracks the spin-bearing isotope fraction for decoherence assessment.
+- **Natural vs. enriched comparison**: Toggle overlay showing isotope-modified pattern against the natural-abundance baseline.
+
+### Visualization
+- **Multiple view modes**: 2D heatmap, contour, and interactive 3D surface rendering.
+- **Dual-panel display**: Moire pattern and gap modulation shown simultaneously.
+- **Real-time info panel**: Displays lattice mismatch, moire period, CPDM amplitude, and all isotope modifications.
+
+---
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "Python Web UI (Plotly Dash)"
+        APP[app.py<br/>Dash factory]
+        PAGES[pages/<br/>home, viewer, sweep,<br/>fourier, comparison]
+        COMP[components/<br/>material_selector,<br/>parameter_panel,<br/>isotope_panel,<br/>figure_factory]
+
+        APP --> PAGES
+        PAGES --> COMP
+    end
+
+    subgraph "Shared Physics"
+        PYCOMP[Python computation/<br/>moire, superconducting,<br/>fourier, isotope_effects]
+        PYMAT[Python materials/<br/>database, lattice,<br/>isotopes]
+        RSCORE[Rust moire-core<br/>moire, density, fft,<br/>isotope_effects,<br/>lattice, materials,<br/>isotopes, colormap]
+    end
+
+    subgraph "Rust Desktop App (egui/eframe)"
+        RSAPP[app.rs<br/>MoireApp state]
+        RSUI[ui/<br/>sidebar, viewport,<br/>info_panel, isotope_panel]
+        RSRENDER[render/<br/>DensityMap, ColorImage,<br/>TextureHandle, Surface3D]
+
+        RSAPP --> RSUI
+        RSUI --> RSRENDER
+    end
+
+    PAGES --> PYCOMP
+    COMP --> PYMAT
+    PYCOMP --> PYMAT
+    RSAPP --> RSCORE
+
+    style PYCOMP fill:#fef,stroke:#939
+    style RSCORE fill:#fef,stroke:#939
+```
+
+Both implementations share identical physics. The Python version computes patterns via NumPy vectorized operations; the Rust version uses equivalent scalar loops with native performance. Key computation modules:
+
+| Module | Python | Rust | Purpose |
+|--------|--------|------|---------|
+| Moire pattern | `computation/moire.py` | `moire-core/src/moire.rs` | Plane-wave superposition V(r) = product of lattice potentials |
+| Gap modulation | `computation/superconducting.py` | `moire-core/src/density.rs` | Spatial gap field Delta(r) and CPDM amplitude |
+| Fourier analysis | `computation/fourier.py` | `moire-core/src/fft.rs` | 2D FFT power spectrum and peak detection |
+| Isotope effects | `computation/isotope_effects.py` | `moire-core/src/isotope_effects.rs` | Lattice shift, BCS gap, DW factor, spin fraction |
+| Material data | `materials/database.py` | `moire-core/src/materials.rs` | Lattice constants, space groups, roles |
+| Isotope data | `materials/isotopes.py` | `moire-core/src/isotopes.rs` | Masses, abundances, Debye temps, Gruneisen params |
 
 ---
 
@@ -196,6 +489,16 @@ python -m waytogocoop.app
 
 The web UI will be available at `http://localhost:8050`.
 
+**Pages:**
+
+| Page | Path | Description |
+|------|------|-------------|
+| Home | `/` | Project overview and material database table |
+| Moire Viewer | `/viewer` | Interactive pattern and gap visualization with isotope controls |
+| Parameter Sweep | `/sweep` | Sweep lattice constant or twist angle vs. periodicity and CPDM amplitude |
+| Fourier Analysis | `/fourier` | 2D FFT power spectrum with peak detection |
+| Substrate Comparison | `/comparison` | Side-by-side all overlayers on FeTe |
+
 ### Rust Native App (egui/eframe)
 
 **Requirements:** Rust toolchain ([rustup](https://rustup.rs/))
@@ -208,6 +511,18 @@ cargo run --release -p moire-desktop
 ```
 
 Supported platforms: Linux (X11/Wayland), macOS, Windows.
+
+### Running Tests
+
+```bash
+# Python
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest tests/ -v
+
+# Rust
+cargo test
+```
 
 ---
 
@@ -222,29 +537,97 @@ waytogocoop/
 
   src/waytogocoop/                  # Python Web UI
     app.py                          # Dash entry point
-    materials/                      # Material database + lattice generation
-    computation/                    # Moire, superconducting, FFT modules
-    pages/                          # Dash pages (viewer, sweep, fourier)
-    components/                     # Reusable UI components
+    config.py                       # Physical constants and defaults
+    materials/
+      database.py                   # Material registry (FeTe, Sb2Te3, Bi2Te3, Sb2Te)
+      lattice.py                    # Lattice vector generation (square/hexagonal)
+      isotopes.py                   # Isotope masses, abundances, spin fractions
+    computation/
+      moire.py                      # Plane-wave moire pattern generation
+      superconducting.py            # Gap modulation and CPDM amplitude
+      fourier.py                    # 2D FFT and peak detection
+      isotope_effects.py            # Speculative isotope calculations
+    pages/
+      home.py                       # Landing page with material table
+      moire_viewer.py               # Interactive moire + gap viewer
+      parameter_sweep.py            # Lattice/twist parameter sweeps
+      fourier_analysis.py           # Reciprocal-space analysis
+      substrate_comparison.py       # Side-by-side overlayer comparison
+    components/
+      material_selector.py          # Dropdown material picker
+      parameter_panel.py            # Slider controls
+      isotope_panel.py              # Isotope enrichment controls
+      figure_factory.py             # Plotly figure builders
 
   crates/
-    moire-core/                     # Rust computation library
-      src/                          # lattice, materials, moire, density, fft
+    moire-core/                     # Rust computation library (no UI deps)
+      src/
+        materials.rs                # Material database
+        lattice.rs                  # Lattice2D type and generation
+        moire.rs                    # MoireConfig -> MoireResult
+        density.rs                  # Cooper-pair density modulation
+        fft.rs                      # 2D FFT via rustfft
+        isotopes.rs                 # Isotope data and spin fractions
+        isotope_effects.rs          # Speculative isotope calculations
+        colormap.rs                 # viridis/inferno/coolwarm
     moire-desktop/                  # Rust egui desktop app
-      src/                          # app, ui/, render/
+      src/
+        app.rs                      # MoireApp state, recompute-on-change
+        ui/
+          sidebar.rs                # Parameter controls
+          viewport.rs               # Pattern/density/FFT rendering
+          info_panel.rs             # Computed results display
+          isotope_panel.rs          # Isotope enrichment controls
+        render/                     # DensityMap -> ColorImage -> TextureHandle
 
   tests/                            # Python tests
+    test_materials.py
+    test_moire.py
+    test_superconducting.py
+    test_isotopes.py
 ```
 
 ---
 
 ## References
 
+### Primary
+
 1. Z. Wang, B. Xia, S. Paolini, Z.-J. Yan, P. Xiao, J. Song, V. Gowda, H. Rong, D. Xiao, X. Xu, W. Wu, Z. Wang, and C.-Z. Chang, "Moire Engineering of Cooper-Pair Density Modulation States," [arXiv:2602.22637](https://arxiv.org/abs/2602.22637) (2026).
 
 2. J. Bardeen, L. N. Cooper, and J. R. Schrieffer, "Theory of Superconductivity," Phys. Rev. 108, 1175 (1957).
 
 3. M. Z. Hasan and C. L. Kane, "Colloquium: Topological insulators," Rev. Mod. Phys. 82, 3045 (2010).
+
+### Isotope Effects in Iron-Based Superconductors
+
+4. R. Khasanov et al., "Iron isotope effect on the superconducting transition temperature and the crystal structure of FeSe1-x," [arXiv:1002.2510](https://arxiv.org/abs/1002.2510) (2010).
+
+5. R. H. Liu et al., "A large iron isotope effect in SmFeAsO1-xFx and Ba1-xKxFe2As2," Nature 459, 64 (2009).
+
+6. P. M. Shirage et al., "Inverse Iron Isotope Effect on the Transition Temperature of the (Ba,K)Fe2As2 Superconductor," Phys. Rev. Lett. 103, 257003 (2009).
+
+7. A. Bussmann-Holder et al., "The isotope effect as a probe of superconductivity in SrTiO3 and iron-pnictide/chalcogenide-based superconductors," PMC6447578 (2019).
+
+8. S. Zhang et al., "Role of SrTiO3 phonon penetrating into thin FeSe films in the enhancement of superconductivity," PMC6377624 (2019).
+
+### Stoichiometric FeTe Superconductivity
+
+9. C. C. Homes et al., "Stoichiometric FeTe is a superconductor," Nature (2026).
+
+### Tellurium NMR and Nuclear Spin
+
+10. S.-H. Park et al., "125Te and 77Se NMR of FeSe0.47Te0.53 under pressure," [arXiv:2505.11732](https://arxiv.org/abs/2505.11732) (2025).
+
+11. M. Y. Seyidov et al., "125Te NMR in Bi2Te3 and Sb2Te3," Z. Anorg. Allg. Chem. (2022).
+
+### Isotope Phonon Engineering
+
+12. D. Bessas et al., "Lattice dynamics in Bi2Te3 and Sb2Te3: Te and Sb density of phonon states," Phys. Rev. B 86, 224301 (2012).
+
+13. S. Koga et al., "Isotope superlattice phonon engineering in diamond," Phys. Rev. B 104, 054112 (2021).
+
+14. L. Lindsay and D. A. Broido, "Three-phonon phase space and lattice thermal conductivity in semiconductors," J. Phys.: Condens. Matter (2008); Phys. Rev. B 88, 144306 (2013).
 
 ---
 

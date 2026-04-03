@@ -142,6 +142,27 @@ pub fn natural_average_mass(elem: &ElementData) -> f64 {
         .sum()
 }
 
+/// Estimate the ¹²⁵Te nuclear spin fraction for a given Te mass setting.
+///
+/// ¹²⁵Te (I=1/2) is the only spin-bearing stable Te isotope. Returns 1.0 if
+/// the selected mass is within 0.5 amu of ¹²⁵Te (124.904), 0.071 for natural
+/// abundance, or 0.0 for other enrichments.
+pub fn te_125_spin_fraction(te_mass_override: Option<f64>) -> f64 {
+    const TE_125_MASS: f64 = 124.904;
+    const NATURAL_ABUNDANCE: f64 = 0.071;
+
+    match te_mass_override {
+        None => NATURAL_ABUNDANCE,
+        Some(target) => {
+            if (target - TE_125_MASS).abs() < 0.5 {
+                1.0
+            } else {
+                0.0
+            }
+        }
+    }
+}
+
 /// Material composition: element symbol and stoichiometric count.
 pub fn material_composition(formula: &str) -> Option<&'static [(&'static str, u32)]> {
     match formula {

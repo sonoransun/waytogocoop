@@ -147,7 +147,7 @@ def _update_viewer(
             "Te": float(te_mass or 0),
             "Sb": float(sb_mass or 0),
         }
-        alpha = float(isotope_alpha or 0.25)
+        alpha = float(isotope_alpha or 0.4)
 
         effects = compute_isotope_effects(
             substrate_formula=substrate.formula,
@@ -187,6 +187,9 @@ def _update_viewer(
                     f"DW sub: {effects.dw_factor_substrate:.6f}",
                     html.Br(),
                     f"DW over: {effects.dw_factor_overlayer:.6f}",
+                    html.Br(),
+                    f"125Te spin fraction: {effects.te_125_spin_fraction:.3f}"
+                    f" (nat: 0.071)",
                 ]
             )
         ]

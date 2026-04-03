@@ -4,9 +4,17 @@
 //! lattice expansion, BCS isotope effect, Debye-Waller factor) to estimate
 //! how isotopic substitution might affect moire patterns and superconducting
 //! gap modulation.  Results are qualitative.
+//!
+//! Literature basis for the BCS isotope exponent (α):
+//!   - FeSe: α_Fe = 0.81 ± 0.15 (Khasanov et al., arXiv:1002.2510)
+//!   - SmFeAsO: α_Fe ≈ 0.35 (Liu et al., Nature 459, 64, 2009)
+//!   - (Ba,K)Fe₂As₂: α_Fe = −0.18 — inverse effect (Shirage, PRL 103, 257003)
+//!   - Corrected consensus: α ≈ 0.35–0.4 (PRB 82, 212505)
+//!   - No Te isotope data for FeTe; key experimental gap.
 
 use crate::isotopes::{
-    element_by_symbol, formula_unit_avg_mass, material_composition, IsotopeConfig,
+    element_by_symbol, formula_unit_avg_mass, material_composition, te_125_spin_fraction,
+    IsotopeConfig,
 };
 use crate::materials::LatticeType;
 use std::f64::consts::PI;
@@ -22,7 +30,10 @@ const DELTA_1_DEFAULT: f64 = 2.58; // meV
 const DELTA_2_DEFAULT: f64 = 3.60; // meV
 const DELTA_AVG_DEFAULT: f64 = (DELTA_1_DEFAULT + DELTA_2_DEFAULT) / 2.0;
 const COHERENCE_LENGTH_DEFAULT: f64 = 20.0; // Angstrom
-const ISOTOPE_EXPONENT_DEFAULT: f64 = 0.25;
+// Literature range: α = 0.35–0.8 for iron chalcogenides (Khasanov 2010, Liu 2009);
+// α = −0.18 inverse effect in (Ba,K)Fe₂As₂ (Shirage 2009).
+// 0.4 is the corrected consensus value (PRB 82, 212505).
+const ISOTOPE_EXPONENT_DEFAULT: f64 = 0.4;
 
 /// Configuration for isotope-effect computation.
 #[derive(Debug, Clone)]
@@ -70,6 +81,8 @@ pub struct IsotopeEffects {
     pub coherence_length_modified: f64,
     pub dw_factor_substrate: f64,
     pub dw_factor_overlayer: f64,
+    /// Fraction of Te that is ¹²⁵Te (I=1/2, the only spin-bearing Te isotope).
+    pub te_125_spin_fraction: f64,
 }
 
 /// Compute stoichiometry-weighted bulk property for a material formula.
@@ -236,6 +249,8 @@ pub fn compute_isotope_effects(cfg: &IsotopeEffectsConfig) -> IsotopeEffects {
         &cfg.isotope_config,
     );
 
+    let spin_frac = te_125_spin_fraction(cfg.isotope_config.te_mass);
+
     IsotopeEffects {
         substrate_a_modified: sub_a_mod,
         substrate_delta_a: sub_da,
@@ -246,6 +261,7 @@ pub fn compute_isotope_effects(cfg: &IsotopeEffectsConfig) -> IsotopeEffects {
         coherence_length_modified: xi_mod,
         dw_factor_substrate: dw_sub,
         dw_factor_overlayer: dw_over,
+        te_125_spin_fraction: spin_frac,
     }
 }
 

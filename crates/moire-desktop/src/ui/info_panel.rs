@@ -84,6 +84,10 @@ pub fn show_info_panel(ui: &mut Ui, app: &MoireApp) {
             ));
             ui.label(format!("  DW sub: {:.6}", effects.dw_factor_substrate));
             ui.label(format!("  DW over: {:.6}", effects.dw_factor_overlayer));
+            ui.label(format!(
+                "  125Te spin frac: {:.3} (nat: 0.071)",
+                effects.te_125_spin_fraction
+            ));
         }
     }
 }
