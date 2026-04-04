@@ -19,15 +19,18 @@ where electronic pairing dominates but phonons dress the interaction (PMC6447578
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
 
 from waytogocoop.config import (
     AMU_TO_KG,
+    ANGSTROM_TO_M,
     DEFAULT_COHERENCE_LENGTH,
     DEFAULT_ISOTOPE_EXPONENT,
     DELTA_1,
     DELTA_2,
     DELTA_AVG,
+    EXPONENT_CLAMP,
     HBAR_J_S,
     KB_EV_K,
 )
@@ -77,6 +80,8 @@ def _lattice_shift(
 
     Returns (modified_a, delta_a).
     """
+    if base_a <= 0:
+        raise ValueError("base_a must be positive")
     comp = MATERIAL_COMPOSITION[formula]
     overrides = mass_overrides or {}
 
@@ -122,6 +127,11 @@ def _gap_modification(
     Returns (modified_delta_1, modified_delta_2).
     """
     if substrate_formula not in MATERIAL_COMPOSITION:
+        warnings.warn(
+            f"Formula '{substrate_formula}' not in MATERIAL_COMPOSITION; "
+            "returning unmodified gaps",
+            stacklevel=2,
+        )
         return delta_1, delta_2
 
     m_natural = formula_unit_avg_mass(substrate_formula, mass_overrides=None)
@@ -191,19 +201,18 @@ def _debye_waller_ratio(
     c_val = 3.0 * HBAR_J_S**2 / (4.0 * k_b_j * t_debye)
 
     # G magnitude in SI (1/m)
-    ang_to_m = 1e-10
     if lattice_type == "hexagonal":
         g_mag = 4.0 * math.pi / (a * math.sqrt(3.0))
     else:
         g_mag = 2.0 * math.pi / a
-    g_si = g_mag / ang_to_m
+    g_si = g_mag / ANGSTROM_TO_M
 
     # Mass difference in SI (1/kg)
     inv_mass_diff = 1.0 / (m_natural * AMU_TO_KG) - 1.0 / (m_enriched * AMU_TO_KG)
 
     exponent = -g_si**2 * c_val * inv_mass_diff
-    # Clamp to avoid overflow for extreme mass differences
-    exponent = max(-100.0, min(100.0, exponent))
+    # Clamp to prevent math.exp overflow for extreme mass differences
+    exponent = max(-EXPONENT_CLAMP, min(EXPONENT_CLAMP, exponent))
     return math.exp(exponent)
 
 
@@ -249,6 +258,22 @@ def compute_isotope_effects(
         All computed modifications.  When *mass_overrides* is ``None`` or
         matches natural abundances, all deltas are zero / factors are 1.0.
     """
+    if substrate_a <= 0:
+        raise ValueError("substrate_a must be positive")
+    if overlayer_a <= 0:
+        raise ValueError("overlayer_a must be positive")
+    if delta_1 < 0:
+        raise ValueError("delta_1 must be >= 0")
+    if delta_2 < 0:
+        raise ValueError("delta_2 must be >= 0")
+    if coherence_length <= 0:
+        raise ValueError("coherence_length must be positive")
+    if overlayer_lattice_type not in ("hexagonal", "square"):
+        raise ValueError(
+            f"overlayer_lattice_type must be 'hexagonal' or 'square', "
+            f"got '{overlayer_lattice_type}'"
+        )
+
     sub_a_mod, sub_da = _lattice_shift(substrate_formula, substrate_a, mass_overrides)
     over_a_mod, over_da = _lattice_shift(overlayer_formula, overlayer_a, mass_overrides)
 

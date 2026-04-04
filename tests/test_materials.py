@@ -6,19 +6,18 @@ import numpy as np
 import pytest
 
 from waytogocoop.materials.database import (
-    Material,
     MATERIALS,
+    Material,
     get_material,
     list_materials,
 )
 from waytogocoop.materials.lattice import (
-    square_lattice,
-    hexagonal_lattice,
     apply_rotation,
+    hexagonal_lattice,
     lattice_vectors,
     reciprocal_vectors,
+    square_lattice,
 )
-
 
 # -----------------------------------------------------------------------
 # Material registry
@@ -144,3 +143,84 @@ class TestReciprocalLattice:
     def test_unknown_lattice_type_raises(self):
         with pytest.raises(ValueError, match="Unknown lattice_type"):
             lattice_vectors("triangular", 1.0)
+
+
+class TestMaterialValidation:
+    """Edge case and input validation tests for materials module."""
+
+    def test_material_negative_a_raises(self):
+        with pytest.raises(ValueError):
+            Material(
+                name="Test",
+                formula="Xx",
+                lattice_type="square",
+                a=-1.0,
+                c=1.0,
+                space_group="P1",
+                description="test",
+                role="substrate",
+            )
+
+    def test_material_zero_a_raises(self):
+        with pytest.raises(ValueError):
+            Material(
+                name="Test",
+                formula="Xx",
+                lattice_type="square",
+                a=0.0,
+                c=1.0,
+                space_group="P1",
+                description="test",
+                role="substrate",
+            )
+
+    def test_material_negative_c_raises(self):
+        with pytest.raises(ValueError):
+            Material(
+                name="Test",
+                formula="Xx",
+                lattice_type="square",
+                a=1.0,
+                c=-1.0,
+                space_group="P1",
+                description="test",
+                role="substrate",
+            )
+
+    def test_material_invalid_lattice_type_raises(self):
+        with pytest.raises(ValueError):
+            Material(
+                name="Test",
+                formula="Xx",
+                lattice_type="cubic",
+                a=1.0,
+                c=1.0,
+                space_group="P1",
+                description="test",
+                role="substrate",
+            )
+
+    def test_material_invalid_role_raises(self):
+        with pytest.raises(ValueError):
+            Material(
+                name="Test",
+                formula="Xx",
+                lattice_type="square",
+                a=1.0,
+                c=1.0,
+                space_group="P1",
+                description="test",
+                role="insulator",
+            )
+
+    def test_square_lattice_zero_a_raises(self):
+        with pytest.raises(ValueError):
+            square_lattice(0.0, 5, 5)
+
+    def test_hexagonal_lattice_zero_a_raises(self):
+        with pytest.raises(ValueError):
+            hexagonal_lattice(0.0, 5, 5)
+
+    def test_reciprocal_parallel_vectors_raises(self):
+        with pytest.raises(ValueError):
+            reciprocal_vectors(np.array([1.0, 0.0]), np.array([2.0, 0.0]))

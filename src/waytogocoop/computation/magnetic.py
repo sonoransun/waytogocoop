@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from waytogocoop.computation.superconducting import cpdm_amplitude
 from waytogocoop.config import (
     ANGSTROM_TO_M,
     BC2_FETE,
@@ -22,8 +23,8 @@ from waytogocoop.config import (
     LAMBDA_L_FETE,
     MU_B_MEV_T,
     PHI_0,
+    ZERO_THRESHOLD,
 )
-
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -149,6 +150,8 @@ def vortex_suppression_field(
     Ginzburg-Landau vortex profile.  Returns 2D array in [0, 1].
     Vortices farther than 5*xi are approximated as tanh→1.
     """
+    if coherence_length <= 0:
+        raise ValueError("coherence_length must be positive")
     X, Y = np.meshgrid(x, y)
     suppression = np.ones_like(X)
 
@@ -159,7 +162,7 @@ def vortex_suppression_field(
     for vx, vy in vortex_positions:
         dx = X - vx
         dy = Y - vy
-        dist = np.sqrt(dx**2 + dy**2)
+        dist = np.hypot(dx, dy)
         mask = dist < cutoff
         if np.any(mask):
             factor = np.ones_like(dist)
@@ -208,7 +211,7 @@ def zeeman_energy(
 
     Returns meV.
     """
-    B_parallel = np.sqrt(Bx**2 + By**2)
+    B_parallel = np.hypot(Bx, By)
     return g_factor * MU_B_MEV_T * B_parallel
 
 
@@ -228,7 +231,7 @@ def compute_zeeman(config: MagneticFieldConfig, delta_avg_meV: float) -> ZeemanR
     """Compute full Zeeman result from field config."""
     E_Z = zeeman_energy(config.Bx, config.By)
     B_P = pauli_limiting_field(delta_avg_meV)
-    B_par = np.sqrt(config.Bx**2 + config.By**2)
+    B_par = np.hypot(config.Bx, config.By)
     ratio = B_par / B_P if np.isfinite(B_P) and B_P > 0 else 0.0
     return ZeemanResult(
         zeeman_energy=E_Z,
@@ -256,6 +259,8 @@ def screening_currents(
 
     Returns (Jx, Jy) 2D arrays in arbitrary units, normalised to peak = 1.
     """
+    if lambda_L <= 0:
+        raise ValueError("lambda_L must be positive")
     X, Y = np.meshgrid(x, y)
     Jx = np.zeros_like(X)
     Jy = np.zeros_like(Y)
@@ -266,10 +271,10 @@ def screening_currents(
     for vx, vy in vortex_positions:
         dx = X - vx
         dy = Y - vy
-        r = np.sqrt(dx**2 + dy**2)
-        r_safe = np.where(r < 1.0e-10, 1.0, r)
+        r = np.hypot(dx, dy)
+        r_safe = np.maximum(r, ZERO_THRESHOLD)
 
-        magnitude = np.exp(-r / lambda_L) / r_safe
+        magnitude = np.where(r < ZERO_THRESHOLD, 0.0, np.exp(-r / lambda_L) / r_safe)
         # Azimuthal direction: (-dy, dx) / r
         Jx += -dy / r_safe * magnitude
         Jy += dx / r_safe * magnitude
@@ -277,7 +282,7 @@ def screening_currents(
     # Normalise to peak = 1
     J_mag = np.sqrt(Jx**2 + Jy**2)
     peak = J_mag.max()
-    if peak > 1.0e-30:
+    if peak > ZERO_THRESHOLD:
         Jx /= peak
         Jy /= peak
 
@@ -302,7 +307,7 @@ def local_susceptibility(
     Returns 2D array normalised to [−1, 0].
     """
     gap_max = np.max(np.abs(gap_field))
-    if gap_max < 1.0e-30:
+    if gap_max < ZERO_THRESHOLD:
         return np.zeros_like(gap_field)
     normalised = gap_field / gap_max
     chi = -(1.0 - normalised**2)
@@ -328,7 +333,11 @@ def moire_vortex_beating(
 
     Returns 2D intensity pattern normalised to [0, 1].
     """
-    if abs(moire_period - vortex_period) < 1.0e-10:
+    if moire_period <= 0 or not np.isfinite(moire_period):
+        raise ValueError("moire_period must be positive and finite")
+    if vortex_period <= 0:
+        raise ValueError("vortex_period must be positive")
+    if abs(moire_period - vortex_period) < ZERO_THRESHOLD:
         return np.ones((len(y), len(x)), dtype=np.float64)
 
     L_beat = moire_period * vortex_period / abs(moire_period - vortex_period)
@@ -368,10 +377,13 @@ def field_tunable_cpdm(
     The vortex cores suppress the gap, effectively reducing the modulation
     contrast.  Returns dimensionless amplitude ∈ [0, 1].
     """
-    from waytogocoop.computation.superconducting import cpdm_amplitude
-
+    if coherence_length <= 0:
+        raise ValueError("coherence_length must be positive")
+    if Bc2 <= 0:
+        raise ValueError("Bc2 must be positive")
     A0 = cpdm_amplitude(moire_period, coherence_length)
-    field_ratio = min(abs(Bz) / Bc2, 1.0) if Bc2 > 0 else 0.0
+    field_ratio = min(abs(Bz) / Bc2, 1.0)
+
     return A0 * (1.0 - field_ratio)
 
 
@@ -388,6 +400,6 @@ def commensuration_pinning_energy(
 
     Returns dimensionless energy in [−1, 1].
     """
-    if vortex_period < 1.0e-10 or not np.isfinite(vortex_period):
+    if vortex_period < ZERO_THRESHOLD or not np.isfinite(vortex_period):
         return 0.0
     return float(np.cos(2.0 * np.pi * moire_period / vortex_period))

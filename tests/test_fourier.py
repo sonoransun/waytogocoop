@@ -189,3 +189,39 @@ class TestIdentifyPeaks:
         )
 
         assert len(peaks_high) <= len(peaks_low)
+
+
+class TestFourierValidation:
+    """Edge case and input validation tests for fourier module."""
+
+    def test_fft_2d_1d_input_raises(self):
+        with pytest.raises(ValueError):
+            fft_2d(np.ones(10), dx=1.0)
+
+    def test_fft_2d_zero_dx_raises(self):
+        with pytest.raises(ValueError):
+            fft_2d(np.ones((10, 10)), dx=0.0)
+
+    def test_fft_2d_negative_dx_raises(self):
+        with pytest.raises(ValueError):
+            fft_2d(np.ones((10, 10)), dx=-1.0)
+
+    def test_fft_2d_too_small_raises(self):
+        with pytest.raises(ValueError):
+            fft_2d(np.ones((1, 1)), dx=1.0)
+
+    def test_identify_peaks_zero_spectrum_returns_empty(self):
+        """All-zero spectrum should return empty list."""
+        spectrum = np.zeros((64, 64))
+        kx = np.linspace(-1, 1, 64)
+        ky = np.linspace(-1, 1, 64)
+        peaks = identify_peaks(spectrum, kx, ky)
+        assert peaks == []
+
+    def test_identify_peaks_invalid_threshold_zero_raises(self):
+        with pytest.raises(ValueError):
+            identify_peaks(np.ones((10, 10)), np.ones(10), np.ones(10), threshold_fraction=0.0)
+
+    def test_identify_peaks_invalid_threshold_above_one_raises(self):
+        with pytest.raises(ValueError):
+            identify_peaks(np.ones((10, 10)), np.ones(10), np.ones(10), threshold_fraction=1.5)

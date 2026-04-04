@@ -42,13 +42,18 @@ impl Lattice2D {
     /// b1 = 2*pi * (a2_perp) / (a1 . a2_perp)
     /// b2 = 2*pi * (a1_perp) / (a2 . a1_perp)
     /// where v_perp = (-v.y, v.x) for 90-degree CCW rotation in 2D.
-    pub fn reciprocal(&self) -> Self {
+    pub fn reciprocal(&self) -> Result<Self, String> {
         let a2_perp = Vector2::new(-self.a2.y, self.a2.x);
         let a1_perp = Vector2::new(-self.a1.y, self.a1.x);
-        Self {
-            a1: 2.0 * PI * a2_perp / self.a1.dot(&a2_perp),
-            a2: 2.0 * PI * a1_perp / self.a2.dot(&a1_perp),
+        let denom1 = self.a1.dot(&a2_perp);
+        let denom2 = self.a2.dot(&a1_perp);
+        if denom1.abs() < 1e-15 || denom2.abs() < 1e-15 {
+            return Err("Degenerate lattice: basis vectors are collinear".to_string());
         }
+        Ok(Self {
+            a1: 2.0 * PI * a2_perp / denom1,
+            a2: 2.0 * PI * a1_perp / denom2,
+        })
     }
 
     /// Generate lattice points for indices in -nx..=nx, -ny..=ny.
@@ -105,7 +110,7 @@ mod tests {
     #[test]
     fn test_reciprocal_square() {
         let lat = Lattice2D::square(1.0);
-        let rec = lat.reciprocal();
+        let rec = lat.reciprocal().unwrap();
         // For a square lattice with a=1: b1 = (2pi, 0), b2 = (0, 2pi)
         assert!((rec.a1.x - 2.0 * PI).abs() < 1e-10);
         assert!(rec.a1.y.abs() < 1e-10);
@@ -116,7 +121,7 @@ mod tests {
     #[test]
     fn test_reciprocal_orthogonality() {
         let lat = Lattice2D::hexagonal(4.264);
-        let rec = lat.reciprocal();
+        let rec = lat.reciprocal().unwrap();
         // a1 . b2 = 0, a2 . b1 = 0
         assert!((lat.a1.dot(&rec.a2)).abs() < 1e-10);
         assert!((lat.a2.dot(&rec.a1)).abs() < 1e-10);
@@ -138,5 +143,23 @@ mod tests {
         let pts = lat.generate_points(1, 1);
         // The origin (0,0) should be among the points
         assert!(pts.iter().any(|p| p.norm() < 1e-10));
+    }
+
+    #[test]
+    fn test_reciprocal_degenerate_err() {
+        let lat = Lattice2D {
+            a1: Vector2::new(1.0, 0.0),
+            a2: Vector2::new(2.0, 0.0), // collinear with a1
+        };
+        assert!(lat.reciprocal().is_err());
+    }
+
+    #[test]
+    fn test_reciprocal_zero_vectors_err() {
+        let lat = Lattice2D {
+            a1: Vector2::new(0.0, 0.0),
+            a2: Vector2::new(0.0, 0.0),
+        };
+        assert!(lat.reciprocal().is_err());
     }
 }

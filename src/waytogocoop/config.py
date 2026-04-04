@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
-
 # ---------------------------------------------------------------------------
 # Physical constants
 # ---------------------------------------------------------------------------
@@ -70,5 +68,12 @@ ANGSTROM_TO_M: float = 1.0e-10         # Angstrom → metre conversion
 # Conversion helpers
 # ---------------------------------------------------------------------------
 ANGSTROM_TO_NM: float = 0.1
-NM_TO_ANGSTROM: float = 10.0
-MEV_TO_EV: float = 1.0e-3
+
+# ---------------------------------------------------------------------------
+# Numerical thresholds
+# ---------------------------------------------------------------------------
+ZERO_THRESHOLD: float = 1e-12          # Float-equality-to-zero checks
+SMALL_ANGLE_THRESHOLD: float = 1e-6   # Degrees; below this, twist is treated as zero
+NORM_FLOOR: float = 1e-15             # Minimum denominator for normalization
+EXPONENT_CLAMP: float = 100.0         # Max |exponent| for exp() overflow protection
+PEAK_POWER_FLOOR: float = 1e-30       # Below this, power spectrum is treated as zero

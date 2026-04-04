@@ -43,7 +43,23 @@ pub struct DensityResult {
 pub fn compute_density_modulation(
     moire: &MoireResult,
     config: &DensityConfig,
-) -> DensityResult {
+) -> Result<DensityResult, String> {
+    if config.delta_1 < 0.0 || config.delta_2 < 0.0 {
+        return Err(format!(
+            "gap values must be non-negative, got delta_1={}, delta_2={}",
+            config.delta_1, config.delta_2
+        ));
+    }
+    if config.modulation_amplitude < 0.0 || config.modulation_amplitude > 1.0 {
+        return Err(format!(
+            "modulation_amplitude must be in [0, 1], got {}",
+            config.modulation_amplitude
+        ));
+    }
+    if moire.pattern.is_empty() {
+        return Err("moire pattern is empty".to_string());
+    }
+
     let delta_avg = (config.delta_1 + config.delta_2) / 2.0;
     let delta_amplitude = config.modulation_amplitude * delta_avg;
 
@@ -53,10 +69,10 @@ pub fn compute_density_modulation(
         .map(|&p| delta_avg + delta_amplitude * (config.phase_shift + PI * p).cos())
         .collect();
 
-    DensityResult {
+    Ok(DensityResult {
         gap_field,
         resolution: moire.resolution,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -92,7 +108,7 @@ mod tests {
     fn test_density_result_size() {
         let moire = make_test_moire();
         let cfg = DensityConfig::default();
-        let result = compute_density_modulation(&moire, &cfg);
+        let result = compute_density_modulation(&moire, &cfg).unwrap();
         assert_eq!(result.gap_field.len(), 16);
         assert_eq!(result.resolution, 4);
     }
@@ -102,7 +118,7 @@ mod tests {
         // When moire pattern = 0.5, gap should equal delta_avg
         let moire = make_test_moire();
         let cfg = DensityConfig::default();
-        let result = compute_density_modulation(&moire, &cfg);
+        let result = compute_density_modulation(&moire, &cfg).unwrap();
         let delta_avg = (cfg.delta_1 + cfg.delta_2) / 2.0;
         // pattern[2] = 0.5 (index 2 in the first row)
         assert!((result.gap_field[2] - delta_avg).abs() < 1e-10);
@@ -112,7 +128,7 @@ mod tests {
     fn test_density_range() {
         let moire = make_test_moire();
         let cfg = DensityConfig::default();
-        let result = compute_density_modulation(&moire, &cfg);
+        let result = compute_density_modulation(&moire, &cfg).unwrap();
         let delta_avg = (cfg.delta_1 + cfg.delta_2) / 2.0;
         let delta_amplitude = cfg.modulation_amplitude * delta_avg;
 
@@ -131,7 +147,7 @@ mod tests {
         // pattern=0 and pattern=1 should be equidistant from delta_avg
         let moire = make_test_moire();
         let cfg = DensityConfig::default();
-        let result = compute_density_modulation(&moire, &cfg);
+        let result = compute_density_modulation(&moire, &cfg).unwrap();
         let delta_avg = (cfg.delta_1 + cfg.delta_2) / 2.0;
 
         // pattern[0] = 0.0, pattern[7] = 1.0
@@ -150,7 +166,7 @@ mod tests {
             delta_2: 3.0,
             ..DensityConfig::default()
         };
-        let result = compute_density_modulation(&moire, &cfg);
+        let result = compute_density_modulation(&moire, &cfg).unwrap();
         let delta_avg = 3.0;
         // Midpoint (p=0.5) should still give delta_avg
         assert!((result.gap_field[2] - delta_avg).abs() < 1e-10);
@@ -168,11 +184,11 @@ mod tests {
             phase_shift: 0.0,
             ..DensityConfig::default()
         };
-        let result_zero = compute_density_modulation(&moire, &cfg_zero);
+        let result_zero = compute_density_modulation(&moire, &cfg_zero).unwrap();
         assert!((result_zero.gap_field[0] - (delta_avg + delta_amplitude)).abs() < 1e-10);
 
         let cfg_pi = DensityConfig::default(); // phase_shift = PI
-        let result_pi = compute_density_modulation(&moire, &cfg_pi);
+        let result_pi = compute_density_modulation(&moire, &cfg_pi).unwrap();
         assert!((result_pi.gap_field[0] - (delta_avg - delta_amplitude)).abs() < 1e-10);
     }
 
@@ -182,11 +198,64 @@ mod tests {
         // cos(PI + PI*0.25) = cos(1.25*PI) = -cos(0.25*PI) = -sqrt(2)/2
         let moire = make_test_moire();
         let cfg = DensityConfig::default();
-        let result = compute_density_modulation(&moire, &cfg);
+        let result = compute_density_modulation(&moire, &cfg).unwrap();
         let delta_avg = (cfg.delta_1 + cfg.delta_2) / 2.0;
         let delta_amplitude = cfg.modulation_amplitude * delta_avg;
         let expected = delta_avg + delta_amplitude * (PI + PI * 0.25).cos();
         // pattern[1] = 0.25
         assert!((result.gap_field[1] - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_density_negative_delta_err() {
+        let moire = make_test_moire();
+        let cfg = DensityConfig {
+            delta_1: -1.0,
+            delta_2: 3.60,
+            modulation_amplitude: 0.15,
+            phase_shift: PI,
+        };
+        assert!(compute_density_modulation(&moire, &cfg).is_err());
+    }
+
+    #[test]
+    fn test_density_amplitude_out_of_range_err() {
+        let moire = make_test_moire();
+        let cfg = DensityConfig {
+            delta_1: 2.58,
+            delta_2: 3.60,
+            modulation_amplitude: 1.5,
+            phase_shift: PI,
+        };
+        assert!(compute_density_modulation(&moire, &cfg).is_err());
+    }
+
+    #[test]
+    fn test_density_zero_modulation_uniform() {
+        let moire = make_test_moire();
+        let cfg = DensityConfig {
+            delta_1: 2.58,
+            delta_2: 3.60,
+            modulation_amplitude: 0.0,
+            phase_shift: PI,
+        };
+        let result = compute_density_modulation(&moire, &cfg).unwrap();
+        let delta_avg = (cfg.delta_1 + cfg.delta_2) / 2.0;
+        for &v in &result.gap_field {
+            assert!((v - delta_avg).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_density_empty_pattern_err() {
+        let moire = MoireResult {
+            pattern: vec![],
+            resolution: 0,
+            physical_extent: 40.0,
+            moire_period: 20.0,
+            mismatch_percent: 11.6,
+        };
+        let cfg = DensityConfig::default();
+        assert!(compute_density_modulation(&moire, &cfg).is_err());
     }
 }

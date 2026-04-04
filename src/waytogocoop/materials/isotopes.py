@@ -111,6 +111,8 @@ def get_element(symbol: str) -> ElementData:
 
     Raises ``KeyError`` if the element is not in the database.
     """
+    if symbol not in ELEMENTS:
+        raise KeyError(f"Unknown element '{symbol}'. Known: {list(ELEMENTS.keys())}")
     return ELEMENTS[symbol]
 
 
@@ -180,6 +182,11 @@ def formula_unit_avg_mass(
     float
         Weighted average mass per atom (amu).
     """
+    if formula not in MATERIAL_COMPOSITION:
+        raise ValueError(
+            f"Unknown material formula '{formula}'. "
+            f"Known: {list(MATERIAL_COMPOSITION.keys())}"
+        )
     comp = MATERIAL_COMPOSITION[formula]
     overrides = mass_overrides or {}
     total_mass = 0.0

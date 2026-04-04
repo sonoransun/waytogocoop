@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from waytogocoop.config import SMALL_ANGLE_THRESHOLD, ZERO_THRESHOLD
 from waytogocoop.materials.lattice import apply_rotation
 
 
@@ -24,11 +25,13 @@ def moire_periodicity_1d(a1, a2):
     float or np.ndarray
         Moire period in Angstrom.
     """
+    if np.any(np.asarray(a1) <= 0) or np.any(np.asarray(a2) <= 0):
+        raise ValueError("Lattice constants a1 and a2 must be positive")
     a2 = np.asarray(a2, dtype=float)
     diff = np.abs(a1 - a2)
-    safe_diff = np.where(diff < 1e-12, 1.0, diff)
+    safe_diff = np.where(diff < ZERO_THRESHOLD, 1.0, diff)
     with np.errstate(divide="ignore", invalid="ignore"):
-        result = np.where(diff < 1e-12, np.inf, a1 * a2 / safe_diff)
+        result = np.where(diff < ZERO_THRESHOLD, np.inf, a1 * a2 / safe_diff)
     return float(result) if result.ndim == 0 else result
 
 
@@ -51,12 +54,14 @@ def moire_periodicity_with_twist(a, theta_deg):
     float or np.ndarray
         Moire period in Angstrom.
     """
+    if a <= 0:
+        raise ValueError("Lattice constant a must be positive")
     theta_deg = np.asarray(theta_deg, dtype=float)
     theta = np.radians(theta_deg)
     sin_half = np.sin(theta / 2.0)
     abs_sin = np.abs(sin_half)
     with np.errstate(divide="ignore", invalid="ignore"):
-        result = np.where(abs_sin < 1e-12, np.inf, a / (2.0 * abs_sin))
+        result = np.where(abs_sin < ZERO_THRESHOLD, np.inf, a / (2.0 * abs_sin))
     return float(result) if result.ndim == 0 else result
 
 
@@ -149,6 +154,20 @@ def generate_moire_pattern(
         ``x`` (1D ndarray), ``y`` (1D ndarray), ``pattern`` (2D ndarray
         shape ``(grid_size, grid_size)``), ``moire_period`` (float).
     """
+    if substrate_a <= 0:
+        raise ValueError("substrate_a must be positive")
+    if overlayer_a <= 0:
+        raise ValueError("overlayer_a must be positive")
+    if grid_size < 2:
+        raise ValueError("grid_size must be >= 2")
+    if physical_extent <= 0:
+        raise ValueError("physical_extent must be positive")
+    if overlayer_lattice_type not in ("hexagonal", "square"):
+        raise ValueError(
+            f"overlayer_lattice_type must be 'hexagonal' or 'square', "
+            f"got '{overlayer_lattice_type}'"
+        )
+
     x = np.linspace(-physical_extent, physical_extent, grid_size)
     y = np.linspace(-physical_extent, physical_extent, grid_size)
 
@@ -162,7 +181,7 @@ def generate_moire_pattern(
         g_over = _reciprocal_g_vectors_square(overlayer_a)
 
     # Apply twist to overlayer G vectors
-    if abs(twist_angle_deg) > 1e-12:
+    if abs(twist_angle_deg) > ZERO_THRESHOLD:
         g_over = apply_rotation(g_over, twist_angle_deg)
 
     # Compute potentials
@@ -171,20 +190,21 @@ def generate_moire_pattern(
 
     # Moire pattern = product, normalized to [0, 1]
     pattern = (dw_factor_substrate * v_sub) * (dw_factor_overlayer * v_over)
+    pattern = np.nan_to_num(pattern, nan=0.0, posinf=0.0, neginf=0.0)
     p_min = pattern.min()
     p_max = pattern.max()
-    if p_max - p_min > 1e-12:
+    if p_max - p_min > ZERO_THRESHOLD:
         pattern = (pattern - p_min) / (p_max - p_min)
     else:
         pattern = np.zeros_like(pattern)
 
     # Estimate moire period
-    if abs(twist_angle_deg) > 1e-6:
+    if abs(twist_angle_deg) > SMALL_ANGLE_THRESHOLD:
         # Use twist formula with effective average lattice constant
         a_eff = (substrate_a + overlayer_a) / 2.0
         moire_period = moire_periodicity_with_twist(a_eff, twist_angle_deg)
     else:
-        if abs(substrate_a - overlayer_a) < 1e-12:
+        if abs(substrate_a - overlayer_a) < ZERO_THRESHOLD:
             moire_period = np.inf
         else:
             moire_period = moire_periodicity_1d(substrate_a, overlayer_a)

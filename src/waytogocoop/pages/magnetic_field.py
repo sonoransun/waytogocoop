@@ -2,38 +2,38 @@
 
 from __future__ import annotations
 
-import numpy as np
-
 import dash
-from dash import html, dcc, callback, Input, Output, State
 import dash_bootstrap_components as dbc
+import numpy as np
+import plotly.graph_objects as go
+from dash import Input, Output, State, callback, dcc, html
 
-from waytogocoop.components.material_selector import create_material_selector
-from waytogocoop.components.parameter_panel import create_parameter_panel
-from waytogocoop.components.magnetic_panel import create_magnetic_panel
 from waytogocoop.components.figure_factory import (
-    create_vortex_overlay_heatmap,
     create_gap_heatmap,
+    create_majorana_density_map,
     create_quiver_field,
     create_susceptibility_heatmap,
-    create_majorana_density_map,
+    create_vortex_overlay_heatmap,
+)
+from waytogocoop.components.magnetic_panel import create_magnetic_panel
+from waytogocoop.components.material_selector import create_material_selector
+from waytogocoop.components.parameter_panel import create_parameter_panel
+from waytogocoop.computation.magnetic import (
+    MagneticFieldConfig,
+    combined_gap_with_vortices,
+    commensuration_field,
+    compute_zeeman,
+    flux_per_moire_cell,
+    generate_vortex_positions,
+    local_susceptibility,
+    screening_currents,
+    vortex_lattice_period,
+    vortex_suppression_field,
 )
 from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.computation.superconducting import gap_modulation
-from waytogocoop.computation.magnetic import (
-    MagneticFieldConfig,
-    generate_vortex_positions,
-    vortex_lattice_period,
-    vortex_suppression_field,
-    combined_gap_with_vortices,
-    flux_per_moire_cell,
-    commensuration_field,
-    compute_zeeman,
-    screening_currents,
-    local_susceptibility,
-)
 from waytogocoop.computation.topological import majorana_probability_density
-from waytogocoop.config import DELTA_AVG, DELTA_AMPLITUDE, DEFAULT_COHERENCE_LENGTH
+from waytogocoop.config import DEFAULT_COHERENCE_LENGTH, DELTA_AMPLITUDE, DELTA_AVG
 from waytogocoop.materials.database import get_material
 
 dash.register_page(
@@ -122,82 +122,98 @@ def update_magnetic(
     substrate_key, overlayer_key, twist, grid_size, extent,
     Bz, Bx, By, viz_mode, xi_prox, g_factor, theme,
 ):
-    dark = theme == "dark"
-    substrate = get_material(substrate_key)
-    overlayer = get_material(overlayer_key)
+    try:
+        dark = theme == "dark"
+        substrate = get_material(substrate_key)
+        overlayer = get_material(overlayer_key)
 
-    # Default safety for slider values
-    Bz = Bz or 0.0
-    Bx = Bx or 0.0
-    By = By or 0.0
-    xi_prox = xi_prox or 100.0
-    g_factor = g_factor or 30.0
+        # Default safety for slider values
+        Bz = float(Bz) if Bz is not None else 0.0
+        Bx = float(Bx) if Bx is not None else 0.0
+        By = float(By) if By is not None else 0.0
+        xi_prox = float(xi_prox) if xi_prox is not None else 100.0
+        g_factor = float(g_factor) if g_factor is not None else 30.0
 
-    # Generate moire pattern
-    result = generate_moire_pattern(
-        substrate_a=substrate.a,
-        overlayer_a=overlayer.a,
-        overlayer_lattice_type=overlayer.lattice_type,
-        twist_angle_deg=twist,
-        grid_size=grid_size,
-        physical_extent=extent,
-    )
-    x, y, pattern = result["x"], result["y"], result["pattern"]
-    moire_period = result["moire_period"]
+        # Generate moire pattern
+        result = generate_moire_pattern(
+            substrate_a=substrate.a,
+            overlayer_a=overlayer.a,
+            overlayer_lattice_type=overlayer.lattice_type,
+            twist_angle_deg=twist,
+            grid_size=grid_size,
+            physical_extent=extent,
+        )
+        x, y, pattern = result["x"], result["y"], result["pattern"]
+        moire_period = result["moire_period"]
 
-    # Gap modulation
-    gap_field = gap_modulation(pattern, DELTA_AVG, DELTA_AMPLITUDE)
+        # Gap modulation
+        gap_field = gap_modulation(pattern, DELTA_AVG, DELTA_AMPLITUDE)
 
-    # Magnetic field computation
-    config = MagneticFieldConfig(Bx=Bx, By=By, Bz=Bz)
-    vortex_pos = generate_vortex_positions(Bz, extent, grid_size)
-    a_v = vortex_lattice_period(Bz)
-    suppression = vortex_suppression_field(x, y, vortex_pos, DEFAULT_COHERENCE_LENGTH)
-    combined_gap = combined_gap_with_vortices(gap_field, suppression)
-    flux = flux_per_moire_cell(Bz, moire_period)
-    comm_B = commensuration_field(moire_period)
-    zeeman = compute_zeeman(config, DELTA_AVG)
+        # Magnetic field computation
+        config = MagneticFieldConfig(Bx=Bx, By=By, Bz=Bz)
+        vortex_pos = generate_vortex_positions(Bz, extent, grid_size)
+        a_v = vortex_lattice_period(Bz)
+        suppression = vortex_suppression_field(x, y, vortex_pos, DEFAULT_COHERENCE_LENGTH)
+        combined_gap = combined_gap_with_vortices(gap_field, suppression)
+        flux = flux_per_moire_cell(Bz, moire_period)
+        comm_B = commensuration_field(moire_period)
+        zeeman = compute_zeeman(config, DELTA_AVG)
 
-    # Build figure based on viz_mode
-    if viz_mode == "vortex":
-        fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos, dark=dark)
-    elif viz_mode == "combined":
-        fig = create_gap_heatmap(x, y, combined_gap, title="Combined Gap (Moire + Vortex)", dark=dark)
-    elif viz_mode == "currents":
-        Jx, Jy = screening_currents(x, y, vortex_pos)
-        fig = create_quiver_field(x, y, Jx, Jy, combined_gap, dark=dark)
-    elif viz_mode == "chi":
-        chi = local_susceptibility(combined_gap)
-        fig = create_susceptibility_heatmap(x, y, chi, dark=dark)
-    elif viz_mode == "majorana":
-        mzm = majorana_probability_density(x, y, vortex_pos)
-        fig = create_majorana_density_map(x, y, mzm.probability_density, vortex_pos, dark=dark)
-    else:
-        fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos, dark=dark)
+        # Build figure based on viz_mode
+        if viz_mode == "vortex":
+            fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos, dark=dark)
+        elif viz_mode == "combined":
+            fig = create_gap_heatmap(
+                x, y, combined_gap, title="Combined Gap (Moire + Vortex)", dark=dark
+            )
+        elif viz_mode == "currents":
+            Jx, Jy = screening_currents(x, y, vortex_pos)
+            fig = create_quiver_field(x, y, Jx, Jy, combined_gap, dark=dark)
+        elif viz_mode == "chi":
+            chi = local_susceptibility(combined_gap)
+            fig = create_susceptibility_heatmap(x, y, chi, dark=dark)
+        elif viz_mode == "majorana":
+            mzm = majorana_probability_density(x, y, vortex_pos)
+            fig = create_majorana_density_map(x, y, mzm.probability_density, vortex_pos, dark=dark)
+        else:
+            fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos, dark=dark)
 
-    # Info panel
-    comm_ratio = a_v / moire_period if np.isfinite(a_v) and moire_period > 0 else float("inf")
-    info = dbc.Card(
-        dbc.CardBody(
-            [
-                html.H5("Magnetic Field Results"),
-                html.P(f"Vortex period: {a_v:.1f} A" if np.isfinite(a_v) else "No vortices (Bz=0)"),
-                html.P(f"Flux per moire cell: {flux:.3f} Phi_0"),
-                html.P(f"Commensuration field: {comm_B:.1f} T" if np.isfinite(comm_B) else "N/A"),
-                html.P(f"a_v / L_m: {comm_ratio:.3f}" if np.isfinite(comm_ratio) else "N/A"),
-                html.Hr(),
-                html.P(f"Zeeman energy: {zeeman.zeeman_energy:.4f} meV"),
-                html.P(f"Pauli limit: {zeeman.pauli_limit_field:.1f} T"),
-                html.P(f"Depairing ratio: {zeeman.depairing_ratio:.4f}"),
-            ]
-        ),
-        className="mb-3",
-    )
+        # Info panel
+        comm_ratio = a_v / moire_period if np.isfinite(a_v) and moire_period > 0 else float("inf")
+        info = dbc.Card(
+            dbc.CardBody(
+                [
+                    html.H5("Magnetic Field Results"),
+                    html.P(
+                        f"Vortex period: {a_v:.1f} A"
+                        if np.isfinite(a_v) else "No vortices (Bz=0)"
+                    ),
+                    html.P(f"Flux per moire cell: {flux:.3f} Phi_0"),
+                    html.P(
+                        f"Commensuration field: {comm_B:.1f} T"
+                        if np.isfinite(comm_B) else "N/A"
+                    ),
+                    html.P(f"a_v / L_m: {comm_ratio:.3f}" if np.isfinite(comm_ratio) else "N/A"),
+                    html.Hr(),
+                    html.P(f"Zeeman energy: {zeeman.zeeman_energy:.4f} meV"),
+                    html.P(f"Pauli limit: {zeeman.pauli_limit_field:.1f} T"),
+                    html.P(f"Depairing ratio: {zeeman.depairing_ratio:.4f}"),
+                ]
+            ),
+            className="mb-3",
+        )
 
-    # Short sidebar readout
-    sidebar_info = html.Small(
-        f"a_v={a_v:.0f} A | Phi/cell={flux:.2f}"
-        if np.isfinite(a_v) else "No vortices"
-    )
+        # Short sidebar readout
+        sidebar_info = html.Small(
+            f"a_v={a_v:.0f} A | Phi/cell={flux:.2f}"
+            if np.isfinite(a_v) else "No vortices"
+        )
 
-    return fig, info, sidebar_info
+        return fig, info, sidebar_info
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        error_fig = go.Figure()
+        error_fig.update_layout(title=f"Computation error: {e}")
+        err_msg = html.P(str(e), style={"color": "red"})
+        return error_fig, err_msg, err_msg

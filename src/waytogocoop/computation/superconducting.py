@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from waytogocoop.config import EXPONENT_CLAMP
+
 
 def gap_modulation(
     moire_pattern_2d: np.ndarray,
@@ -38,6 +40,12 @@ def gap_modulation(
     np.ndarray
         2D array of gap values (meV), same shape as input.
     """
+    if not isinstance(moire_pattern_2d, np.ndarray) or moire_pattern_2d.ndim != 2:
+        raise ValueError("moire_pattern_2d must be a 2D numpy array")
+    if delta_avg < 0:
+        raise ValueError("delta_avg must be >= 0")
+    if delta_amplitude < 0:
+        raise ValueError("delta_amplitude must be >= 0")
     return delta_avg + delta_amplitude * np.cos(
         phase_shift + np.pi * moire_pattern_2d
     )
@@ -68,10 +76,14 @@ def cpdm_amplitude(moire_period, coherence_length=20.0):
     float or np.ndarray
         Dimensionless CPDM amplitude in (0, 1].
     """
+    if coherence_length <= 0:
+        raise ValueError("coherence_length must be positive")
     moire_period = np.asarray(moire_period, dtype=float)
+    safe_period = np.where(moire_period > 0, moire_period, 1.0)
+    exponent = np.clip(-coherence_length / safe_period, -EXPONENT_CLAMP, 0)
     result = np.where(
         np.isinf(moire_period) | (moire_period <= 0),
         0.0,
-        np.exp(-coherence_length / np.where(moire_period > 0, moire_period, 1.0)),
+        np.exp(exponent),
     )
     return float(result) if result.ndim == 0 else result

@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import dash
-from dash import html, dcc, callback, Input, Output
 import dash_bootstrap_components as dbc
+import plotly.graph_objects as go
+from dash import Input, Output, callback, dcc, html
 
-from waytogocoop.materials.database import get_material
-from waytogocoop.computation.moire import generate_moire_pattern
-from waytogocoop.computation.superconducting import gap_modulation, cpdm_amplitude
-from waytogocoop.config import DELTA_AVG, DELTA_AMPLITUDE
 from waytogocoop.components.figure_factory import (
-    create_moire_heatmap,
-    create_gap_heatmap,
-    create_3d_surface,
     create_2d_contour,
+    create_3d_surface,
+    create_gap_heatmap,
+    create_moire_heatmap,
 )
+from waytogocoop.computation.moire import generate_moire_pattern
+from waytogocoop.computation.superconducting import cpdm_amplitude, gap_modulation
+from waytogocoop.config import DELTA_AMPLITUDE, DELTA_AVG
+from waytogocoop.materials.database import get_material
 
 dash.register_page(
     __name__,
@@ -174,91 +175,103 @@ def _update_comparison(
     view_mode: str,
     theme: str,
 ):
-    dark = theme == "dark"
-    grid_size = int(grid_size or 100)
-    physical_extent = float(physical_extent or 100.0)
-    twist_angle = float(twist_angle or 0.0)
-    view_mode = view_mode or "heatmap"
+    try:
+        dark = theme == "dark"
+        grid_size = int(grid_size) if grid_size is not None else 100
+        physical_extent = float(physical_extent) if physical_extent is not None else 100.0
+        twist_angle = float(twist_angle) if twist_angle is not None else 0.0
+        view_mode = view_mode or "heatmap"
 
-    substrate = get_material("FeTe")
+        substrate = get_material("FeTe")
 
-    moire_figs = []
-    gap_figs = []
-    info_divs = []
+        moire_figs = []
+        gap_figs = []
+        info_divs = []
 
-    for formula in _OVERLAYER_FORMULAS:
-        overlayer = get_material(formula)
+        for formula in _OVERLAYER_FORMULAS:
+            overlayer = get_material(formula)
 
-        result = generate_moire_pattern(
-            substrate_a=substrate.a,
-            overlayer_a=overlayer.a,
-            overlayer_lattice_type=overlayer.lattice_type,
-            twist_angle_deg=twist_angle,
-            grid_size=grid_size,
-            physical_extent=physical_extent,
-        )
-
-        gap = gap_modulation(result["pattern"], DELTA_AVG, DELTA_AMPLITUDE)
-
-        x, y = result["x"], result["y"]
-        pattern = result["pattern"]
-        moire_title = f"Moire: FeTe / {overlayer.formula}"
-        gap_title = f"Gap: FeTe / {overlayer.formula}"
-
-        if view_mode == "contour":
-            moire_fig = create_2d_contour(
-                x, y, pattern, title=moire_title,
-                colorscale="Viridis", z_label="Intensity",
-                dark=dark,
+            result = generate_moire_pattern(
+                substrate_a=substrate.a,
+                overlayer_a=overlayer.a,
+                overlayer_lattice_type=overlayer.lattice_type,
+                twist_angle_deg=twist_angle,
+                grid_size=grid_size,
+                physical_extent=physical_extent,
             )
-            gap_fig = create_2d_contour(
-                x, y, gap, title=gap_title,
-                colorscale="RdBu_r", z_label="Delta (meV)",
-                dark=dark,
-            )
-        elif view_mode == "3d":
-            # Subsample for performance when grid is large
-            if grid_size > 150:
-                x_s, y_s = x[::2], y[::2]
-                pattern_s = pattern[::2, ::2]
-                gap_s = gap[::2, ::2]
+
+            gap = gap_modulation(result["pattern"], DELTA_AVG, DELTA_AMPLITUDE)
+
+            x, y = result["x"], result["y"]
+            pattern = result["pattern"]
+            moire_title = f"Moire: FeTe / {overlayer.formula}"
+            gap_title = f"Gap: FeTe / {overlayer.formula}"
+
+            if view_mode == "contour":
+                moire_fig = create_2d_contour(
+                    x, y, pattern, title=moire_title,
+                    colorscale="Viridis", z_label="Intensity",
+                    dark=dark,
+                )
+                gap_fig = create_2d_contour(
+                    x, y, gap, title=gap_title,
+                    colorscale="RdBu_r", z_label="Delta (meV)",
+                    dark=dark,
+                )
+            elif view_mode == "3d":
+                # Subsample for performance when grid is large
+                if grid_size > 150:
+                    x_s, y_s = x[::2], y[::2]
+                    pattern_s = pattern[::2, ::2]
+                    gap_s = gap[::2, ::2]
+                else:
+                    x_s, y_s, pattern_s, gap_s = x, y, pattern, gap
+                moire_fig = create_3d_surface(
+                    x_s, y_s, pattern_s, title=moire_title,
+                    colorscale="Viridis", z_label="Intensity",
+                    dark=dark,
+                )
+                gap_fig = create_3d_surface(
+                    x_s, y_s, gap_s, title=gap_title,
+                    colorscale="RdBu_r", z_label="Delta (meV)",
+                    dark=dark,
+                )
             else:
-                x_s, y_s, pattern_s, gap_s = x, y, pattern, gap
-            moire_fig = create_3d_surface(
-                x_s, y_s, pattern_s, title=moire_title,
-                colorscale="Viridis", z_label="Intensity",
-                dark=dark,
-            )
-            gap_fig = create_3d_surface(
-                x_s, y_s, gap_s, title=gap_title,
-                colorscale="RdBu_r", z_label="Delta (meV)",
-                dark=dark,
-            )
-        else:
-            moire_fig = create_moire_heatmap(
-                x, y, pattern, title=moire_title,
-                dark=dark,
-            )
-            gap_fig = create_gap_heatmap(
-                x, y, gap, title=gap_title,
-                dark=dark,
-            )
+                moire_fig = create_moire_heatmap(
+                    x, y, pattern, title=moire_title,
+                    dark=dark,
+                )
+                gap_fig = create_gap_heatmap(
+                    x, y, gap, title=gap_title,
+                    dark=dark,
+                )
 
-        moire_figs.append(moire_fig)
-        gap_figs.append(gap_fig)
+            moire_figs.append(moire_fig)
+            gap_figs.append(gap_fig)
 
-        mismatch = abs(substrate.a - overlayer.a) / substrate.a * 100.0
-        cpdm_amp = cpdm_amplitude(result["moire_period"])
+            mismatch = abs(substrate.a - overlayer.a) / substrate.a * 100.0
+            cpdm_amp = cpdm_amplitude(result["moire_period"])
 
-        info = [
-            html.P(f"Lattice mismatch: {mismatch:.2f}%"),
-            html.P(f"Moire period: {result['moire_period']:.2f} A"),
-            html.P(f"CPDM amplitude: {cpdm_amp:.4f}"),
-        ]
-        info_divs.append(info)
+            info = [
+                html.P(f"Lattice mismatch: {mismatch:.2f}%"),
+                html.P(f"Moire period: {result['moire_period']:.2f} A"),
+                html.P(f"CPDM amplitude: {cpdm_amp:.4f}"),
+            ]
+            info_divs.append(info)
 
-    return (
-        moire_figs[0], moire_figs[1], moire_figs[2],
-        gap_figs[0], gap_figs[1], gap_figs[2],
-        info_divs[0], info_divs[1], info_divs[2],
-    )
+        return (
+            moire_figs[0], moire_figs[1], moire_figs[2],
+            gap_figs[0], gap_figs[1], gap_figs[2],
+            info_divs[0], info_divs[1], info_divs[2],
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        error_fig = go.Figure()
+        error_fig.update_layout(title=f"Computation error: {e}")
+        error_info = html.P(str(e), style={"color": "red"})
+        return (
+            error_fig, error_fig, error_fig,
+            error_fig, error_fig, error_fig,
+            error_info, error_info, error_info,
+        )

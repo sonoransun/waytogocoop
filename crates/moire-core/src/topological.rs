@@ -122,6 +122,14 @@ pub fn proximity_decay_profile(
     xi_prox: f64,
     interface_transparency: f64,
 ) -> Vec<f64> {
+    if xi_prox <= 0.0 {
+        // Step function: 1.0 for z < 0 (inside SC), 0.0 for z >= 0
+        return z_coords
+            .iter()
+            .map(|&z| if z < 0.0 { 1.0 } else { 0.0 })
+            .collect();
+    }
+
     z_coords
         .iter()
         .map(|&z| {
@@ -145,8 +153,15 @@ pub fn compute_gap_3d(
     let n_z = config.n_z_layers;
     let n_xy = resolution * resolution;
 
+    // Auto-swap if z_min > z_max
+    let (z_lo, z_hi) = if config.z_min > config.z_max {
+        (config.z_max, config.z_min)
+    } else {
+        (config.z_min, config.z_max)
+    };
+
     let z_coords: Vec<f64> = (0..n_z)
-        .map(|i| config.z_min + (config.z_max - config.z_min) * i as f64 / (n_z - 1).max(1) as f64)
+        .map(|i| z_lo + (z_hi - z_lo) * i as f64 / (n_z - 1).max(1) as f64)
         .collect();
 
     let profile = proximity_decay_profile(&z_coords, config.xi_prox, config.interface_transparency);
@@ -228,6 +243,9 @@ pub fn compute_cooper_surface_3d(
 ///
 /// Accurate to ~1e-6 for |x| < 100.
 fn bessel_j0(x: f64) -> f64 {
+    if x.is_nan() {
+        return f64::NAN;
+    }
     let ax = x.abs();
     if ax < 8.0 {
         let y = x * x;
@@ -472,5 +490,29 @@ mod tests {
     fn test_magnetoelectric_positive() {
         let p = topological_magnetoelectric_polarization(1.0, PI);
         assert!(p > 0.0);
+    }
+
+    #[test]
+    fn test_proximity_zero_xi_step_function() {
+        let z = vec![-10.0, -1.0, 0.0, 1.0, 10.0];
+        let result = proximity_decay_profile(&z, 0.0, 1.0);
+        assert!((result[0] - 1.0).abs() < 1e-10); // z < 0 => 1.0
+        assert!((result[1] - 1.0).abs() < 1e-10);
+        assert!(result[2].abs() < 1e-10); // z >= 0 => 0.0
+        assert!(result[3].abs() < 1e-10);
+        assert!(result[4].abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_bessel_j0_nan_input() {
+        let result = bessel_j0(f64::NAN);
+        assert!(result.is_nan());
+    }
+
+    #[test]
+    fn test_bessel_j0_large_x() {
+        let result = bessel_j0(1000.0);
+        assert!(result.is_finite());
+        assert!(result.abs() < 1.0); // J0 oscillates with decreasing amplitude
     }
 }

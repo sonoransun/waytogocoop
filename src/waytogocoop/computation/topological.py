@@ -15,6 +15,7 @@ import numpy as np
 from scipy.special import j0 as bessel_j0
 
 from waytogocoop.config import (
+    ANGSTROM_TO_M,
     G_FACTOR_TSS,
     HBAR_EV_S,
     K_F_TSS,
@@ -22,8 +23,8 @@ from waytogocoop.config import (
     V_F_TI,
     XI_MAJORANA_DEFAULT,
     XI_PROXIMITY_DEFAULT,
+    ZERO_THRESHOLD,
 )
-
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -89,6 +90,10 @@ def proximity_decay_profile(
 
     Established physics: proximity effect with BTK interface model.
     """
+    if xi_prox <= 0:
+        raise ValueError("xi_prox must be positive")
+    if not (0 < interface_transparency <= 1):
+        raise ValueError("interface_transparency must be in (0, 1]")
     z = np.asarray(z, dtype=np.float64)
     profile = np.ones_like(z)
     ti_mask = z >= 0
@@ -138,9 +143,11 @@ def dirac_dispersion(
 
     k in 1/Angstrom, returns energy in meV.
     """
+    if v_F <= 0:
+        raise ValueError("v_F must be positive")
     k = np.asarray(k, dtype=np.float64)
-    # hbar in eV·s, v_F in m/s, k in 1/Angstrom = 1e10 /m
-    E_eV = HBAR_EV_S * v_F * np.abs(k) * 1.0e10
+    # hbar in eV·s, v_F in m/s, k in 1/Angstrom = 1/ANGSTROM_TO_M /m
+    E_eV = HBAR_EV_S * v_F * np.abs(k) * (1.0 / ANGSTROM_TO_M)
     return E_eV * 1.0e3  # eV → meV
 
 
@@ -210,6 +217,10 @@ def majorana_probability_density(
 
     Returns MajoranaResult with 2D probability density.
     """
+    if xi_M <= 0:
+        raise ValueError("xi_M must be positive")
+    if k_F <= 0:
+        raise ValueError("k_F must be positive")
     X, Y = np.meshgrid(x, y)
     density = np.zeros_like(X)
 
@@ -223,7 +234,7 @@ def majorana_probability_density(
     for vx, vy in vortex_positions:
         dx = X - vx
         dy = Y - vy
-        r = np.sqrt(dx**2 + dy**2)
+        r = np.hypot(dx, dy)
         envelope = np.exp(-2.0 * r / xi_M)
         oscillation = bessel_j0(k_F * r) ** 2
         density += envelope * oscillation
@@ -257,7 +268,9 @@ def topological_phase_index(
 
     mu is the chemical potential offset from the Dirac point.
     """
-    threshold = np.sqrt(delta_meV**2 + mu_meV**2)
+    if delta_meV < 0:
+        raise ValueError("delta_meV must be >= 0")
+    threshold = np.hypot(delta_meV, mu_meV)
     return 1 if zeeman_meV > threshold else 0
 
 
@@ -271,6 +284,8 @@ def phase_diagram_sweep(
 
     Returns 2D array of phase indices:  shape (len(delta_values), len(B_values)).
     """
+    if g_factor <= 0:
+        raise ValueError("g_factor must be positive")
     phase = np.zeros((len(delta_values), len(B_values)), dtype=np.int32)
     for i, delta in enumerate(delta_values):
         for j, B in enumerate(B_values):
@@ -314,6 +329,6 @@ def chern_number_estimate(
     Returns ±0.5 or 0.  Observable as quantized Hall plateau.
     """
     discriminant = zeeman_meV**2 - delta_meV**2 - mu_meV**2
-    if abs(discriminant) < 1.0e-10:
+    if abs(discriminant) < ZERO_THRESHOLD:
         return 0.0
     return 0.5 * np.sign(discriminant)

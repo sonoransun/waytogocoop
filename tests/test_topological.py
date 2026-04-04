@@ -7,15 +7,15 @@ import pytest
 
 from waytogocoop.computation.topological import (
     ProximityConfig,
-    proximity_decay_profile,
-    gap_3d,
-    dirac_dispersion,
-    cooper_surface_3d,
-    majorana_probability_density,
-    topological_phase_index,
-    phase_diagram_sweep,
-    topological_magnetoelectric_polarization,
     chern_number_estimate,
+    cooper_surface_3d,
+    dirac_dispersion,
+    gap_3d,
+    majorana_probability_density,
+    phase_diagram_sweep,
+    proximity_decay_profile,
+    topological_magnetoelectric_polarization,
+    topological_phase_index,
 )
 
 
@@ -113,6 +113,7 @@ class TestCooperSurface3D:
         np.testing.assert_allclose(result.field_3d, 1.5, atol=1e-10)
 
 
+@pytest.mark.speculative
 class TestMajorana:
     """SPECULATIVE — tests verify internal consistency, not physical accuracy."""
 
@@ -145,6 +146,7 @@ class TestMajorana:
         assert result.localization_length == 75.0
 
 
+@pytest.mark.speculative
 class TestTopologicalPhase:
     """SPECULATIVE — simplified Fu-Kane criterion."""
 
@@ -179,6 +181,7 @@ class TestTopologicalPhase:
         assert 1 in phase
 
 
+@pytest.mark.speculative
 class TestMagnetoelectric:
     """SPECULATIVE — topological magnetoelectric effect."""
 
@@ -191,15 +194,79 @@ class TestMagnetoelectric:
         assert P == 0.0
 
 
+@pytest.mark.speculative
 class TestChernNumber:
     def test_topological_half(self):
         C = chern_number_estimate(3.0, 5.0)  # E_Z > Delta
-        assert C == pytest.approx(0.5)
+        assert pytest.approx(0.5) == C
 
     def test_trivial_negative_half(self):
         C = chern_number_estimate(3.0, 1.0)  # E_Z < Delta
-        assert C == pytest.approx(-0.5)
+        assert pytest.approx(-0.5) == C
 
     def test_at_boundary(self):
         C = chern_number_estimate(3.0, 3.0)  # E_Z = Delta
         assert C == 0.0
+
+
+class TestTopologicalValidation:
+    """Edge case and input validation tests for topological module."""
+
+    def test_proximity_decay_zero_xi_raises(self):
+        with pytest.raises(ValueError):
+            proximity_decay_profile(np.array([1.0]), xi_prox=0.0)
+
+    def test_proximity_decay_negative_xi_raises(self):
+        with pytest.raises(ValueError):
+            proximity_decay_profile(np.array([1.0]), xi_prox=-10.0)
+
+    def test_proximity_decay_zero_transparency_raises(self):
+        with pytest.raises(ValueError):
+            proximity_decay_profile(np.array([1.0]), interface_transparency=0.0)
+
+    def test_proximity_decay_transparency_above_one_raises(self):
+        with pytest.raises(ValueError):
+            proximity_decay_profile(np.array([1.0]), interface_transparency=1.5)
+
+    def test_dirac_dispersion_negative_vf_raises(self):
+        with pytest.raises(ValueError):
+            dirac_dispersion(np.array([0.1]), v_F=-1.0)
+
+    def test_majorana_negative_xi_m_raises(self):
+        with pytest.raises(ValueError):
+            majorana_probability_density(
+                np.linspace(-10, 10, 5),
+                np.linspace(-10, 10, 5),
+                np.array([[0.0, 0.0]]),
+                xi_M=-1.0,
+            )
+
+    def test_majorana_negative_k_f_raises(self):
+        with pytest.raises(ValueError):
+            majorana_probability_density(
+                np.linspace(-10, 10, 5),
+                np.linspace(-10, 10, 5),
+                np.array([[0.0, 0.0]]),
+                k_F=-1.0,
+            )
+
+    def test_phase_index_negative_delta_raises(self):
+        with pytest.raises(ValueError):
+            topological_phase_index(1.0, -1.0)
+
+    def test_phase_diagram_sweep_zero_gfactor_raises(self):
+        with pytest.raises(ValueError):
+            phase_diagram_sweep(
+                np.linspace(0, 10, 5),
+                np.linspace(0.1, 5, 5),
+                g_factor=0.0,
+            )
+
+    def test_phase_index_at_boundary(self):
+        """At exact threshold E_Z = sqrt(Delta^2 + mu^2), result should be trivial (0)."""
+        delta = 3.0
+        mu = 2.0
+        threshold = np.hypot(delta, mu)
+        result = topological_phase_index(threshold, delta, mu)
+        assert result == 0  # not strictly greater, so trivial
+        assert not np.isnan(result)

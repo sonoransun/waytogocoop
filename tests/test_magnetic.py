@@ -7,22 +7,22 @@ import pytest
 
 from waytogocoop.computation.magnetic import (
     MagneticFieldConfig,
-    vortex_lattice_period,
-    commensuration_field,
-    generate_vortex_positions,
-    vortex_suppression_field,
     combined_gap_with_vortices,
-    flux_per_moire_cell,
-    zeeman_energy,
-    pauli_limiting_field,
+    commensuration_field,
+    commensuration_pinning_energy,
     compute_zeeman,
-    screening_currents,
+    field_tunable_cpdm,
+    flux_per_moire_cell,
+    generate_vortex_positions,
     local_susceptibility,
     moire_vortex_beating,
-    field_tunable_cpdm,
-    commensuration_pinning_energy,
+    pauli_limiting_field,
+    screening_currents,
+    vortex_lattice_period,
+    vortex_suppression_field,
+    zeeman_energy,
 )
-from waytogocoop.config import PHI_0, ANGSTROM_TO_M
+from waytogocoop.config import ANGSTROM_TO_M, PHI_0
 
 
 class TestVortexLattice:
@@ -178,6 +178,7 @@ class TestLocalSusceptibility:
         assert chi[0, 0] == pytest.approx(-1.0, abs=1e-10)
 
 
+@pytest.mark.speculative
 class TestSpeculativePhysics:
     def test_beating_commensurate(self):
         """Equal periods → uniform pattern."""
@@ -197,18 +198,85 @@ class TestSpeculativePhysics:
         from waytogocoop.computation.superconducting import cpdm_amplitude
 
         A0 = cpdm_amplitude(100.0, 20.0)
-        assert A == pytest.approx(A0, rel=1e-10)
+        assert pytest.approx(A0, rel=1e-10) == A
 
     def test_field_tunable_cpdm_at_bc2(self):
         A = field_tunable_cpdm(100.0, 20.0, 47.0, Bc2=47.0)
-        assert A == pytest.approx(0.0, abs=1e-10)
+        assert pytest.approx(0.0, abs=1e-10) == A
 
     def test_pinning_commensurate(self):
         """L_m = L_v → cos(2pi) = 1."""
         E = commensuration_pinning_energy(100.0, 100.0)
-        assert E == pytest.approx(1.0, abs=1e-10)
+        assert pytest.approx(1.0, abs=1e-10) == E
 
     def test_pinning_anticommensurate(self):
         """L_m = L_v/2 → cos(4pi) = 1."""
         E = commensuration_pinning_energy(100.0, 50.0)
-        assert E == pytest.approx(1.0, abs=1e-10)
+        assert pytest.approx(1.0, abs=1e-10) == E
+
+
+class TestMagneticValidation:
+    """Edge case and input validation tests for magnetic module."""
+
+    def test_vortex_suppression_zero_coherence_raises(self):
+        x = np.linspace(-50, 50, 10)
+        pos = np.array([[0.0, 0.0]])
+        with pytest.raises(ValueError):
+            vortex_suppression_field(x, x, pos, coherence_length=0.0)
+
+    def test_vortex_suppression_negative_coherence_raises(self):
+        x = np.linspace(-50, 50, 10)
+        pos = np.array([[0.0, 0.0]])
+        with pytest.raises(ValueError):
+            vortex_suppression_field(x, x, pos, coherence_length=-5.0)
+
+    def test_screening_currents_zero_lambda_raises(self):
+        x = np.linspace(-50, 50, 10)
+        pos = np.array([[0.0, 0.0]])
+        with pytest.raises(ValueError):
+            screening_currents(x, x, pos, lambda_L=0.0)
+
+    def test_moire_vortex_beating_negative_period_raises(self):
+        x = np.linspace(-50, 50, 10)
+        with pytest.raises(ValueError):
+            moire_vortex_beating(-100.0, 80.0, x, x)
+
+    def test_moire_vortex_beating_zero_vortex_period_raises(self):
+        x = np.linspace(-50, 50, 10)
+        with pytest.raises(ValueError):
+            moire_vortex_beating(100.0, 0.0, x, x)
+
+    def test_field_tunable_cpdm_zero_coherence_raises(self):
+        with pytest.raises(ValueError):
+            field_tunable_cpdm(100.0, 0.0, 1.0)
+
+    def test_field_tunable_cpdm_zero_bc2_raises(self):
+        with pytest.raises(ValueError):
+            field_tunable_cpdm(100.0, 20.0, 1.0, Bc2=0.0)
+
+    def test_screening_currents_vortex_core_magnitude_zero(self):
+        """At exact vortex position, current magnitude should be 0."""
+        # Use a grid that includes the exact vortex position
+        x = np.linspace(-100, 100, 201)  # includes 0.0
+        pos = np.array([[0.0, 0.0]])
+        Jx, Jy = screening_currents(x, x, pos)
+        # The center point (index 100, 100) is at the vortex core
+        J_mag_center = np.sqrt(Jx[100, 100] ** 2 + Jy[100, 100] ** 2)
+        assert J_mag_center == pytest.approx(0.0, abs=1e-10)
+
+    def test_beating_near_commensurate(self):
+        """Periods differ by < ZERO_THRESHOLD, should return uniform pattern."""
+        x = np.linspace(-50, 50, 20)
+        pattern = moire_vortex_beating(100.0, 100.0 + 1e-13, x, x)
+        # All values should be identical (uniform)
+        assert np.allclose(pattern, pattern[0, 0])
+
+    def test_field_tunable_above_bc2(self):
+        """|Bz| > Bc2 gives amplitude ~ 0."""
+        A = field_tunable_cpdm(100.0, 20.0, 60.0, Bc2=47.0)
+        assert pytest.approx(0.0, abs=1e-10) == A
+
+    def test_vortex_very_small_field(self):
+        """Bz=1e-16 gives infinite period (below internal threshold)."""
+        period = vortex_lattice_period(1e-16)
+        assert period == float("inf")

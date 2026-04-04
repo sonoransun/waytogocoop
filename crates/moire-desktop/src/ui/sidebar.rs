@@ -33,6 +33,10 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
     // --- Overlayer selection ---
     ui.label("Overlayer:");
     let overlayers = materials::overlayers();
+    if overlayers.is_empty() {
+        ui.label("  (no overlayers available)");
+        return;
+    }
     let current_name = overlayers[app.overlayer_idx.min(overlayers.len() - 1)]
         .name
         .to_string();

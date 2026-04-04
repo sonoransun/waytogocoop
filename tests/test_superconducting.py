@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from waytogocoop.computation.superconducting import gap_modulation, cpdm_amplitude
-from waytogocoop.config import DELTA_AVG, DELTA_AMPLITUDE
+from waytogocoop.computation.superconducting import cpdm_amplitude, gap_modulation
+from waytogocoop.config import DELTA_AMPLITUDE, DELTA_AVG
 
 
 class TestGapModulation:
@@ -61,3 +61,45 @@ class TestCPDMAmplitude:
         """Sb2Te3/FeTe moire period ~36.7 A should give reasonable CPDM."""
         amp = cpdm_amplitude(36.7, coherence_length=20.0)
         assert 0.5 < amp < 0.7
+
+
+class TestSuperconductingValidation:
+    """Edge case and input validation tests for superconducting module."""
+
+    def test_gap_modulation_1d_input_raises(self):
+        with pytest.raises(ValueError):
+            gap_modulation(np.ones(10), DELTA_AVG, DELTA_AMPLITUDE)
+
+    def test_gap_modulation_negative_delta_avg_raises(self):
+        with pytest.raises(ValueError):
+            gap_modulation(np.ones((10, 10)), -1.0, DELTA_AMPLITUDE)
+
+    def test_gap_modulation_negative_amplitude_raises(self):
+        with pytest.raises(ValueError):
+            gap_modulation(np.ones((10, 10)), DELTA_AVG, -0.5)
+
+    def test_cpdm_amplitude_zero_coherence_raises(self):
+        with pytest.raises(ValueError):
+            cpdm_amplitude(36.7, coherence_length=0.0)
+
+    def test_cpdm_amplitude_negative_coherence_raises(self):
+        with pytest.raises(ValueError):
+            cpdm_amplitude(36.7, coherence_length=-5.0)
+
+    def test_gap_modulation_nondefault_phase(self):
+        """phase_shift=0 gives different result than pi."""
+        pattern = np.random.default_rng(42).random((20, 20))
+        gap_0 = gap_modulation(pattern, DELTA_AVG, DELTA_AMPLITUDE, phase_shift=0.0)
+        gap_pi = gap_modulation(pattern, DELTA_AVG, DELTA_AMPLITUDE, phase_shift=np.pi)
+        assert not np.allclose(gap_0, gap_pi)
+
+    def test_cpdm_amplitude_very_large_coherence(self):
+        """Very large coherence length should not overflow, result near 0."""
+        amp = cpdm_amplitude(36.7, coherence_length=1e6)
+        assert np.isfinite(amp)
+        assert amp < 1e-10
+
+    def test_cpdm_amplitude_inf_period(self):
+        """Infinite moire period should give 0.0."""
+        amp = cpdm_amplitude(np.inf, coherence_length=20.0)
+        assert amp == 0.0

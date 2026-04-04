@@ -5,6 +5,11 @@ from __future__ import annotations
 import numpy as np
 from scipy.ndimage import maximum_filter
 
+from waytogocoop.config import PEAK_POWER_FLOOR
+
+_MIN_NEIGHBOURHOOD_SIZE = 5
+_NEIGHBOURHOOD_DIVISOR = 20
+
 
 def fft_2d(pattern_2d: np.ndarray, dx: float) -> dict:
     """Compute the 2D FFT power spectrum of a real-valued pattern.
@@ -22,6 +27,12 @@ def fft_2d(pattern_2d: np.ndarray, dx: float) -> dict:
         ``kx`` (1D, inverse Angstrom), ``ky`` (1D), ``power_spectrum``
         (2D, log10-scaled, fftshift-ed).
     """
+    if not isinstance(pattern_2d, np.ndarray) or pattern_2d.ndim != 2:
+        raise ValueError("pattern_2d must be a 2D numpy array")
+    if dx <= 0:
+        raise ValueError("dx must be positive")
+    if pattern_2d.shape[0] < 2 or pattern_2d.shape[1] < 2:
+        raise ValueError("pattern_2d must have shape >= (2, 2)")
     ny, nx = pattern_2d.shape
     ft = np.fft.fft2(pattern_2d)
     ft_shifted = np.fft.fftshift(ft)
@@ -62,10 +73,19 @@ def identify_peaks(
     list[dict]
         Each entry has keys ``kx``, ``ky``, ``amplitude``.
     """
+    if not isinstance(power_spectrum, np.ndarray) or power_spectrum.ndim != 2:
+        raise ValueError("power_spectrum must be a 2D numpy array")
+    if not (0 < threshold_fraction <= 1):
+        raise ValueError("threshold_fraction must be in (0, 1]")
+    if power_spectrum.max() < PEAK_POWER_FLOOR:
+        return []
+
     threshold = threshold_fraction * power_spectrum.max()
 
     # Local maximum detection with a small neighbourhood
-    neighbourhood_size = max(5, min(power_spectrum.shape) // 20)
+    neighbourhood_size = max(
+        _MIN_NEIGHBOURHOOD_SIZE, min(power_spectrum.shape) // _NEIGHBOURHOOD_DIVISOR
+    )
     local_max = maximum_filter(power_spectrum, size=neighbourhood_size)
     is_peak = (power_spectrum == local_max) & (power_spectrum > threshold)
 

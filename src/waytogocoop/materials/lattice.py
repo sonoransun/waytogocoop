@@ -20,6 +20,12 @@ def square_lattice(a: float, nx: int, ny: int) -> np.ndarray:
     np.ndarray
         Shape ``(nx*ny, 2)`` array of (x, y) positions.
     """
+    if a <= 0:
+        raise ValueError(f"Lattice constant 'a' must be positive, got {a}")
+    if nx < 1:
+        raise ValueError(f"nx must be >= 1, got {nx}")
+    if ny < 1:
+        raise ValueError(f"ny must be >= 1, got {ny}")
     ix = np.arange(nx)
     iy = np.arange(ny)
     gx, gy = np.meshgrid(ix, iy)
@@ -45,6 +51,12 @@ def hexagonal_lattice(a: float, nx: int, ny: int) -> np.ndarray:
     np.ndarray
         Shape ``(nx*ny, 2)`` array of (x, y) positions.
     """
+    if a <= 0:
+        raise ValueError(f"Lattice constant 'a' must be positive, got {a}")
+    if nx < 1:
+        raise ValueError(f"nx must be >= 1, got {nx}")
+    if ny < 1:
+        raise ValueError(f"ny must be >= 1, got {ny}")
     a1 = np.array([a, 0.0])
     a2 = np.array([a * 0.5, a * np.sqrt(3) / 2.0])
     in1 = np.arange(nx)
@@ -93,6 +105,8 @@ def lattice_vectors(lattice_type: str, a: float) -> tuple[np.ndarray, np.ndarray
     tuple[np.ndarray, np.ndarray]
         Primitive vectors ``(a1, a2)``, each shape ``(2,)``.
     """
+    if a <= 0:
+        raise ValueError(f"Lattice constant 'a' must be positive, got {a}")
     if lattice_type == "square":
         a1 = np.array([a, 0.0])
         a2 = np.array([0.0, a])
@@ -121,6 +135,8 @@ def reciprocal_vectors(a1: np.ndarray, a2: np.ndarray) -> tuple[np.ndarray, np.n
     """
     # Cross product in 2D: a1 x a2 = a1[0]*a2[1] - a1[1]*a2[0]
     cross = a1[0] * a2[1] - a1[1] * a2[0]
+    if abs(cross) < 1e-30:
+        raise ValueError("Lattice vectors are parallel; cannot compute reciprocal vectors")
     # b1 = 2*pi * (a2_perp) / cross  where a2_perp = (a2[1], -a2[0])
     b1 = 2.0 * np.pi * np.array([a2[1], -a2[0]]) / cross
     b2 = 2.0 * np.pi * np.array([-a1[1], a1[0]]) / cross

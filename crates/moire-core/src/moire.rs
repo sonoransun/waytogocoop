@@ -91,15 +91,28 @@ fn rotate_g_vectors(gs: &[Vector2<f64>], angle_rad: f64) -> Vec<Vector2<f64>> {
 }
 
 /// Compute the moire superlattice pattern via plane-wave superposition.
-pub fn compute_moire(config: &MoireConfig) -> MoireResult {
+pub fn compute_moire(config: &MoireConfig) -> Result<MoireResult, String> {
+    if config.substrate_a <= 0.0 {
+        return Err(format!("substrate_a must be positive, got {}", config.substrate_a));
+    }
+    if config.overlayer_a <= 0.0 {
+        return Err(format!("overlayer_a must be positive, got {}", config.overlayer_a));
+    }
+    if config.resolution < 2 {
+        return Err(format!("resolution must be >= 2, got {}", config.resolution));
+    }
+    if config.physical_extent <= 0.0 {
+        return Err(format!("physical_extent must be positive, got {}", config.physical_extent));
+    }
+
     let n = config.resolution;
     let extent = config.physical_extent;
     let mismatch_percent = ((config.overlayer_a - config.substrate_a) / config.substrate_a).abs() * 100.0;
 
     // Estimate moire period
-    let moire_period = if config.twist_angle_deg.abs() < 0.01 {
+    let moire_period = if config.twist_angle_deg.abs() < 1e-6 {
         moire_periodicity_1d(config.substrate_a, config.overlayer_a)
-    } else if (config.substrate_a - config.overlayer_a).abs() < 0.01 {
+    } else if (config.substrate_a - config.overlayer_a).abs() < 1e-12 {
         moire_periodicity_twist(config.substrate_a, config.twist_angle_deg)
     } else {
         // Combined effect: approximate using the smaller period
@@ -173,13 +186,13 @@ pub fn compute_moire(config: &MoireConfig) -> MoireResult {
         }
     }
 
-    MoireResult {
+    Ok(MoireResult {
         pattern,
         resolution: n,
         physical_extent: extent,
         moire_period,
         mismatch_percent,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -226,7 +239,7 @@ mod tests {
             dw_factor_substrate: 1.0,
             dw_factor_overlayer: 1.0,
         };
-        let result = compute_moire(&config);
+        let result = compute_moire(&config).unwrap();
         assert_eq!(result.pattern.len(), 64 * 64);
         assert_eq!(result.resolution, 64);
     }
@@ -244,7 +257,7 @@ mod tests {
             dw_factor_substrate: 1.0,
             dw_factor_overlayer: 1.0,
         };
-        let result = compute_moire(&config);
+        let result = compute_moire(&config).unwrap();
         let min_val = result.pattern.iter().cloned().fold(f64::MAX, f64::min);
         let max_val = result.pattern.iter().cloned().fold(f64::MIN, f64::max);
         assert!(min_val >= -1e-10);
@@ -264,7 +277,7 @@ mod tests {
             dw_factor_substrate: 1.0,
             dw_factor_overlayer: 1.0,
         };
-        let result = compute_moire(&config);
+        let result = compute_moire(&config).unwrap();
         let expected = ((4.264 - 3.82) / 3.82) * 100.0;
         assert!((result.mismatch_percent - expected).abs() < 1e-10);
     }
@@ -279,5 +292,107 @@ mod tests {
     fn test_reciprocal_g_hex_count() {
         let gs = reciprocal_g_vectors(LatticeType::Hexagonal, 4.264);
         assert_eq!(gs.len(), 6);
+    }
+
+    #[test]
+    fn test_compute_moire_zero_substrate_a() {
+        let config = MoireConfig {
+            substrate_a: 0.0,
+            substrate_lattice_type: LatticeType::Square,
+            overlayer_a: 4.264,
+            overlayer_lattice_type: LatticeType::Hexagonal,
+            twist_angle_deg: 0.0,
+            resolution: 16,
+            physical_extent: 50.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
+        };
+        assert!(compute_moire(&config).is_err());
+    }
+
+    #[test]
+    fn test_compute_moire_negative_overlayer_a() {
+        let config = MoireConfig {
+            substrate_a: 3.82,
+            substrate_lattice_type: LatticeType::Square,
+            overlayer_a: -1.0,
+            overlayer_lattice_type: LatticeType::Hexagonal,
+            twist_angle_deg: 0.0,
+            resolution: 16,
+            physical_extent: 50.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
+        };
+        assert!(compute_moire(&config).is_err());
+    }
+
+    #[test]
+    fn test_compute_moire_resolution_one() {
+        let config = MoireConfig {
+            substrate_a: 3.82,
+            substrate_lattice_type: LatticeType::Square,
+            overlayer_a: 4.264,
+            overlayer_lattice_type: LatticeType::Hexagonal,
+            twist_angle_deg: 0.0,
+            resolution: 1,
+            physical_extent: 50.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
+        };
+        assert!(compute_moire(&config).is_err());
+    }
+
+    #[test]
+    fn test_compute_moire_zero_extent() {
+        let config = MoireConfig {
+            substrate_a: 3.82,
+            substrate_lattice_type: LatticeType::Square,
+            overlayer_a: 4.264,
+            overlayer_lattice_type: LatticeType::Hexagonal,
+            twist_angle_deg: 0.0,
+            resolution: 16,
+            physical_extent: 0.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
+        };
+        assert!(compute_moire(&config).is_err());
+    }
+
+    #[test]
+    fn test_sb2te3_fete_period() {
+        let p = moire_periodicity_1d(3.82, 4.264);
+        assert!((p - 36.67).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_bi2te3_fete_period() {
+        let p = moire_periodicity_1d(3.82, 4.386);
+        assert!((p - 29.6).abs() < 0.2);
+    }
+
+    #[test]
+    fn test_periodicity_symmetric() {
+        let p1 = moire_periodicity_1d(3.82, 4.264);
+        let p2 = moire_periodicity_1d(4.264, 3.82);
+        assert!((p1 - p2).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_small_twist_uses_twist_branch() {
+        // Twist of 0.001 degrees should NOT be treated as zero (above 1e-6 threshold)
+        let config = MoireConfig {
+            substrate_a: 4.0,
+            substrate_lattice_type: LatticeType::Square,
+            overlayer_a: 4.0, // same lattice constant
+            overlayer_lattice_type: LatticeType::Square,
+            twist_angle_deg: 0.001,
+            resolution: 16,
+            physical_extent: 50.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
+        };
+        let result = compute_moire(&config).unwrap();
+        // With same lattice constant but nonzero twist, period should be finite (not inf)
+        assert!(result.moire_period.is_finite());
     }
 }

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
+from waytogocoop.computation.isotope_effects import compute_isotope_effects
+from waytogocoop.config import DELTA_1, DELTA_2
 from waytogocoop.materials.isotopes import (
     ELEMENTS,
     formula_unit_avg_mass,
@@ -11,9 +14,6 @@ from waytogocoop.materials.isotopes import (
     get_element,
     natural_average_mass,
 )
-from waytogocoop.computation.isotope_effects import compute_isotope_effects
-from waytogocoop.config import DELTA_1, DELTA_2
-
 
 # ---------------------------------------------------------------------------
 # Isotope data integrity
@@ -68,6 +68,7 @@ class TestIsotopeData:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.speculative
 class TestIsotopeEffectsIdentity:
     """With no mass overrides, all modifications should be zero/identity."""
 
@@ -103,6 +104,7 @@ class TestIsotopeEffectsIdentity:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.speculative
 class TestIsotopeEffectsPhysics:
     def test_heavier_isotope_contracts_lattice(self):
         effects = compute_isotope_effects(
@@ -211,3 +213,82 @@ class TestIsotopeEffectsPhysics:
         # Both should produce measurable shifts
         assert abs(eff_54.substrate_delta_a) > 1e-6
         assert abs(eff_58.substrate_delta_a) > 1e-6
+
+
+class TestIsotopeValidation:
+    """Edge case and input validation tests for isotope effects."""
+
+    def test_compute_isotope_effects_negative_substrate_a_raises(self):
+        with pytest.raises(ValueError):
+            compute_isotope_effects(
+                substrate_formula="FeTe",
+                overlayer_formula="Sb2Te3",
+                substrate_a=-1.0,
+                overlayer_a=4.264,
+                overlayer_lattice_type="hexagonal",
+            )
+
+    def test_compute_isotope_effects_negative_delta_raises(self):
+        with pytest.raises(ValueError):
+            compute_isotope_effects(
+                substrate_formula="FeTe",
+                overlayer_formula="Sb2Te3",
+                substrate_a=3.82,
+                overlayer_a=4.264,
+                overlayer_lattice_type="hexagonal",
+                delta_1=-1.0,
+            )
+
+    def test_compute_isotope_effects_zero_coherence_raises(self):
+        with pytest.raises(ValueError):
+            compute_isotope_effects(
+                substrate_formula="FeTe",
+                overlayer_formula="Sb2Te3",
+                substrate_a=3.82,
+                overlayer_a=4.264,
+                overlayer_lattice_type="hexagonal",
+                coherence_length=0.0,
+            )
+
+    def test_formula_unit_avg_mass_unknown_formula_raises(self):
+        with pytest.raises(ValueError):
+            formula_unit_avg_mass("XYZ")
+
+    def test_extreme_mass_ratio_light(self):
+        """Very light Fe mass override should not crash."""
+        effects = compute_isotope_effects(
+            substrate_formula="FeTe",
+            overlayer_formula="Sb2Te3",
+            substrate_a=3.82,
+            overlayer_a=4.264,
+            overlayer_lattice_type="hexagonal",
+            mass_overrides={"Fe": 1.0},
+        )
+        assert np.isfinite(effects.substrate_delta_a)
+        assert np.isfinite(effects.dw_factor_substrate)
+
+    def test_extreme_mass_ratio_heavy(self):
+        """Very heavy Fe mass override should not crash."""
+        effects = compute_isotope_effects(
+            substrate_formula="FeTe",
+            overlayer_formula="Sb2Te3",
+            substrate_a=3.82,
+            overlayer_a=4.264,
+            overlayer_lattice_type="hexagonal",
+            mass_overrides={"Fe": 10000.0},
+        )
+        assert np.isfinite(effects.substrate_delta_a)
+        assert np.isfinite(effects.dw_factor_substrate)
+
+    def test_dw_exponent_clamping(self):
+        """Extreme mass difference should still produce finite DW factor."""
+        effects = compute_isotope_effects(
+            substrate_formula="FeTe",
+            overlayer_formula="Sb2Te3",
+            substrate_a=3.82,
+            overlayer_a=4.264,
+            overlayer_lattice_type="hexagonal",
+            mass_overrides={"Fe": 0.1},
+        )
+        assert np.isfinite(effects.dw_factor_substrate)
+        assert effects.dw_factor_substrate > 0

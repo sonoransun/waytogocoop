@@ -166,6 +166,10 @@ pub fn vortex_suppression_field(
 ) -> Vec<f64> {
     let n = resolution;
 
+    if coherence_length <= 0.0 {
+        return vec![1.0; n * n];
+    }
+
     if vortex_positions.is_empty() {
         return vec![1.0_f64; n * n];
     }
@@ -265,6 +269,11 @@ pub fn screening_currents(
     lambda_l: f64,
 ) -> (Vec<f64>, Vec<f64>) {
     let n = resolution;
+
+    if lambda_l <= 0.0 {
+        return (vec![0.0; n * n], vec![0.0; n * n]);
+    }
+
     let mut jx = vec![0.0_f64; n * n];
     let mut jy = vec![0.0_f64; n * n];
 
@@ -604,5 +613,29 @@ mod tests {
         // depending on implementation. Check it doesn't panic.
         let flux = flux_per_moire_cell(1.0, f64::INFINITY);
         assert!(flux.is_finite() || flux.is_infinite());
+    }
+
+    #[test]
+    fn test_suppression_zero_coherence_all_ones() {
+        let n = 16;
+        let vortices = vec![[0.0, 0.0]];
+        let result = vortex_suppression_field(n, 50.0, &vortices, 0.0);
+        assert!(result.iter().all(|&v| (v - 1.0).abs() < 1e-10));
+    }
+
+    #[test]
+    fn test_screening_zero_lambda_all_zeros() {
+        let n = 16;
+        let vortices = vec![[0.0, 0.0]];
+        let (jx, jy) = screening_currents(n, 50.0, &vortices, 0.0);
+        assert!(jx.iter().all(|&v| v.abs() < 1e-10));
+        assert!(jy.iter().all(|&v| v.abs() < 1e-10));
+    }
+
+    #[test]
+    fn test_very_large_field_no_nan() {
+        let period = vortex_lattice_period(100.0); // 100 Tesla
+        assert!(period.is_finite());
+        assert!(period > 0.0);
     }
 }

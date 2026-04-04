@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import dash
-from dash import html, dcc, callback, Input, Output, dash_table
 import dash_bootstrap_components as dbc
+import plotly.graph_objects as go
+from dash import Input, Output, callback, dash_table, dcc, html
 
+from waytogocoop.components.figure_factory import create_fft_heatmap
 from waytogocoop.components.material_selector import create_material_selector
 from waytogocoop.components.parameter_panel import create_parameter_panel
-from waytogocoop.components.figure_factory import create_fft_heatmap
-from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.computation.fourier import fft_2d, identify_peaks
+from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.materials.database import get_material
 
 dash.register_page(
@@ -88,47 +89,54 @@ def _update_fourier(
     physical_extent: float,
     theme: str,
 ):
-    dark = theme == "dark"
-    substrate = get_material(substrate_formula)
-    overlayer = get_material(overlayer_formula)
+    try:
+        dark = theme == "dark"
+        substrate = get_material(substrate_formula)
+        overlayer = get_material(overlayer_formula)
 
-    grid_size = int(grid_size or 200)
-    physical_extent = float(physical_extent or 100.0)
-    twist_angle = float(twist_angle or 0.0)
+        grid_size = int(grid_size) if grid_size is not None else 200
+        physical_extent = float(physical_extent) if physical_extent is not None else 100.0
+        twist_angle = float(twist_angle) if twist_angle is not None else 0.0
 
-    result = generate_moire_pattern(
-        substrate_a=substrate.a,
-        overlayer_a=overlayer.a,
-        overlayer_lattice_type=overlayer.lattice_type,
-        twist_angle_deg=twist_angle,
-        grid_size=grid_size,
-        physical_extent=physical_extent,
-    )
+        result = generate_moire_pattern(
+            substrate_a=substrate.a,
+            overlayer_a=overlayer.a,
+            overlayer_lattice_type=overlayer.lattice_type,
+            twist_angle_deg=twist_angle,
+            grid_size=grid_size,
+            physical_extent=physical_extent,
+        )
 
-    dx = (result["x"][-1] - result["x"][0]) / (len(result["x"]) - 1)
-    fft_result = fft_2d(result["pattern"], dx)
+        dx = (result["x"][-1] - result["x"][0]) / (len(result["x"]) - 1)
+        fft_result = fft_2d(result["pattern"], dx)
 
-    fft_fig = create_fft_heatmap(
-        fft_result["kx"],
-        fft_result["ky"],
-        fft_result["power_spectrum"],
-        title=f"FFT: {substrate.formula} / {overlayer.formula}",
-        dark=dark,
-    )
+        fft_fig = create_fft_heatmap(
+            fft_result["kx"],
+            fft_result["ky"],
+            fft_result["power_spectrum"],
+            title=f"FFT: {substrate.formula} / {overlayer.formula}",
+            dark=dark,
+        )
 
-    peaks = identify_peaks(
-        fft_result["power_spectrum"],
-        fft_result["kx"],
-        fft_result["ky"],
-    )
+        peaks = identify_peaks(
+            fft_result["power_spectrum"],
+            fft_result["kx"],
+            fft_result["ky"],
+        )
 
-    peaks_data = [
-        {
-            "kx": f"{p['kx']:.4f}",
-            "ky": f"{p['ky']:.4f}",
-            "amplitude": f"{p['amplitude']:.2f}",
-        }
-        for p in peaks[:20]  # show at most 20 peaks
-    ]
+        peaks_data = [
+            {
+                "kx": f"{p['kx']:.4f}",
+                "ky": f"{p['ky']:.4f}",
+                "amplitude": f"{p['amplitude']:.2f}",
+            }
+            for p in peaks[:20]  # show at most 20 peaks
+        ]
 
-    return fft_fig, peaks_data
+        return fft_fig, peaks_data
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        error_fig = go.Figure()
+        error_fig.update_layout(title=f"Computation error: {e}")
+        return error_fig, []

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import dash
-from dash import Dash, dcc, Input, Output, clientside_callback
 import dash_bootstrap_components as dbc
+from dash import Dash, Input, Output, clientside_callback, dcc
 
 
 def create_app() -> Dash:

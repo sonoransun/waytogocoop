@@ -32,5 +32,32 @@ where = ["src"]
 target-version = "py310"
 line-length = 100
 
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "SIM108",  # ternary operator — if/else is clearer for numpy array operations
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--tb=short"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "speculative: marks tests for speculative physics modules",
+]
+
+[tool.coverage.run]
+source = ["src/waytogocoop"]
+omit = ["src/waytogocoop/pages/*", "src/waytogocoop/components/*", "src/waytogocoop/app.py"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80

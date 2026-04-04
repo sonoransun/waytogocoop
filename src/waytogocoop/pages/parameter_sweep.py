@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import numpy as np
 import dash
-from dash import html, dcc, callback, Input, Output, State
 import dash_bootstrap_components as dbc
+import numpy as np
+import plotly.graph_objects as go
+from dash import Input, Output, State, callback, dcc, html
 
 from waytogocoop.components.figure_factory import create_sweep_plot
 from waytogocoop.computation.moire import moire_periodicity_1d, moire_periodicity_with_twist
@@ -118,66 +119,73 @@ layout = dbc.Container(
     prevent_initial_call=False,
 )
 def _run_sweep(n_clicks, sweep_param, substrate_a, range_start, range_end, num_points, theme):
-    dark = theme == "dark"
-    substrate_a = float(substrate_a or 3.82)
-    range_start = float(range_start or 3.9)
-    range_end = float(range_end or 5.0)
-    num_points = int(num_points or 100)
+    try:
+        dark = theme == "dark"
+        substrate_a = float(substrate_a) if substrate_a is not None else 3.82
+        range_start = float(range_start) if range_start is not None else 3.9
+        range_end = float(range_end) if range_end is not None else 5.0
+        num_points = int(num_points) if num_points is not None else 100
 
-    param_values = np.linspace(range_start, range_end, num_points)
+        param_values = np.linspace(range_start, range_end, num_points)
 
-    if sweep_param == "twist_angle":
-        # Sweep twist angle in degrees — vectorized
-        periods = moire_periodicity_with_twist(substrate_a, param_values)
-        amplitudes = cpdm_amplitude(periods)
-        param_name = "Twist angle (deg)"
-    else:
-        # Sweep overlayer lattice constant — vectorized
-        periods = moire_periodicity_1d(substrate_a, param_values)
-        amplitudes = cpdm_amplitude(periods)
-        param_name = "Overlayer lattice constant (A)"
+        if sweep_param == "twist_angle":
+            # Sweep twist angle in degrees — vectorized
+            periods = moire_periodicity_with_twist(substrate_a, param_values)
+            amplitudes = cpdm_amplitude(periods)
+            param_name = "Twist angle (deg)"
+        else:
+            # Sweep overlayer lattice constant — vectorized
+            periods = moire_periodicity_1d(substrate_a, param_values)
+            amplitudes = cpdm_amplitude(periods)
+            param_name = "Overlayer lattice constant (A)"
 
-    # Cap infinite periods for plotting
-    finite_mask = np.isfinite(periods)
-    if finite_mask.any():
-        max_period = np.max(periods[finite_mask]) * 1.1
-    else:
-        max_period = 1000.0
-    periods = np.where(finite_mask, periods, max_period)
+        # Cap infinite periods for plotting
+        finite_mask = np.isfinite(periods)
+        if finite_mask.any():
+            max_period = np.max(periods[finite_mask]) * 1.1
+        else:
+            max_period = 1000.0
+        periods = np.where(finite_mask, periods, max_period)
 
-    fig = create_sweep_plot(param_values, periods, amplitudes, param_name, dark=dark)
+        fig = create_sweep_plot(param_values, periods, amplitudes, param_name, dark=dark)
 
-    # Mark actual material lattice constants
-    markers_info = []
-    if sweep_param == "lattice_constant":
-        for formula in ("Sb2Te3", "Bi2Te3", "Sb2Te"):
-            mat = get_material(formula)
-            if range_start <= mat.a <= range_end:
-                period_val = moire_periodicity_1d(substrate_a, mat.a)
-                amp_val = cpdm_amplitude(period_val)
-                fig.add_vline(
-                    x=mat.a,
-                    line_dash="dash",
-                    line_color="green",
-                    annotation_text=mat.formula,
-                )
-                markers_info.append(
-                    html.Li(
-                        f"{mat.formula}: a = {mat.a} A, "
-                        f"moire period = {period_val:.2f} A, "
-                        f"CPDM = {amp_val:.4f}"
+        # Mark actual material lattice constants
+        markers_info = []
+        if sweep_param == "lattice_constant":
+            for formula in ("Sb2Te3", "Bi2Te3", "Sb2Te"):
+                mat = get_material(formula)
+                if range_start <= mat.a <= range_end:
+                    period_val = moire_periodicity_1d(substrate_a, mat.a)
+                    amp_val = cpdm_amplitude(period_val)
+                    fig.add_vline(
+                        x=mat.a,
+                        line_dash="dash",
+                        line_color="green",
+                        annotation_text=mat.formula,
                     )
-                )
+                    markers_info.append(
+                        html.Li(
+                            f"{mat.formula}: a = {mat.a} A, "
+                            f"moire period = {period_val:.2f} A, "
+                            f"CPDM = {amp_val:.4f}"
+                        )
+                    )
 
-    marker_div = (
-        dbc.Card(
-            dbc.CardBody(
-                [html.H5("Material Reference Points"), html.Ul(markers_info)]
-            ),
-            className="mt-3",
+        marker_div = (
+            dbc.Card(
+                dbc.CardBody(
+                    [html.H5("Material Reference Points"), html.Ul(markers_info)]
+                ),
+                className="mt-3",
+            )
+            if markers_info
+            else html.Div()
         )
-        if markers_info
-        else html.Div()
-    )
 
-    return fig, marker_div
+        return fig, marker_div
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        error_fig = go.Figure()
+        error_fig.update_layout(title=f"Computation error: {e}")
+        return error_fig, html.P(str(e), style={"color": "red"})

@@ -1,3 +1,12 @@
 [workspace]
 resolver = "2"
 members = ["crates/moire-core", "crates/moire-desktop"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+strip = "symbols"
+
+[profile.dev]
+opt-level = 1

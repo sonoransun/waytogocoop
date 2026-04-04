@@ -294,6 +294,10 @@ impl MoireApp {
     /// Get the overlayer material based on current selection.
     pub fn overlayer_material(&self) -> &'static moire_core::materials::Material {
         let overlayers = materials::overlayers();
+        if overlayers.is_empty() {
+            // Fallback to substrate if no overlayers are defined
+            return materials::substrate();
+        }
         &overlayers[self.overlayer_idx.min(overlayers.len() - 1)]
     }
 
@@ -351,10 +355,27 @@ impl MoireApp {
             dw_factor_overlayer: dw_over,
         };
 
-        let moire = moire_core::moire::compute_moire(&config);
-        let density =
-            moire_core::density::compute_density_modulation(&moire, &self.density_config);
-        let fft_data = moire_core::fft::compute_fft_2d(&moire.pattern, moire.resolution);
+        let moire = match moire_core::moire::compute_moire(&config) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Moire computation error: {e}");
+                return;
+            }
+        };
+        let density = match moire_core::density::compute_density_modulation(&moire, &self.density_config) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("Density computation error: {e}");
+                return;
+            }
+        };
+        let fft_data = match moire_core::fft::compute_fft_2d(&moire.pattern, moire.resolution) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("FFT computation error: {e}");
+                return;
+            }
+        };
 
         // Create 2D textures
         self.pattern_texture = Some(render::pattern::create_texture(
@@ -597,7 +618,13 @@ impl MoireApp {
                 dw_factor_substrate: 1.0,
                 dw_factor_overlayer: 1.0,
             };
-            let moire = moire_core::moire::compute_moire(&config);
+            let moire = match moire_core::moire::compute_moire(&config) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("Comparison moire computation error: {e}");
+                    continue;
+                }
+            };
 
             if self.view_mode == ViewMode::Surface3D {
                 let img = render::surface3d::render_surface_3d_with_bg(
@@ -621,8 +648,13 @@ impl MoireApp {
                 ));
             }
 
-            let density =
-                moire_core::density::compute_density_modulation(&moire, &self.density_config);
+            let density = match moire_core::density::compute_density_modulation(&moire, &self.density_config) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Comparison density computation error: {e}");
+                    continue;
+                }
+            };
             let d_norm: Vec<f64> = normalize_to_unit_range(&density.gap_field)
                 .unwrap_or_else(|| vec![0.5; density.gap_field.len()]);
 

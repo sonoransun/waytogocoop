@@ -13,6 +13,9 @@ pub fn overlay_scatter_points(
     color: [u8; 4],
     radius_px: usize,
 ) {
+    if physical_extent <= 0.0 {
+        return;
+    }
     let w = image.width();
     let h = image.height();
     let half = physical_extent / 2.0;
@@ -50,6 +53,9 @@ pub fn overlay_cross_markers(
     color: [u8; 4],
     half_size: usize,
 ) {
+    if physical_extent <= 0.0 {
+        return;
+    }
     let w = image.width();
     let h = image.height();
     let half = physical_extent / 2.0;

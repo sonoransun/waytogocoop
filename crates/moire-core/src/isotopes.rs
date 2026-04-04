@@ -187,6 +187,9 @@ pub fn formula_unit_avg_mass(formula: &str, config: &IsotopeConfig) -> Option<f6
         total_mass += count as f64 * m;
         total_atoms += count;
     }
+    if total_atoms == 0 {
+        return None;
+    }
     Some(total_mass / total_atoms as f64)
 }
 

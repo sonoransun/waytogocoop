@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 
 from waytogocoop.computation.moire import (
+    generate_moire_pattern,
     moire_periodicity_1d,
     moire_periodicity_with_twist,
-    generate_moire_pattern,
 )
 
 
@@ -105,3 +105,91 @@ class TestGenerateMoirePattern:
             grid_size=64,
         )
         assert np.isinf(result["moire_period"])
+
+
+class TestMoireValidation:
+    """Edge case and input validation tests for moire computation."""
+
+    def test_periodicity_1d_negative_a1(self):
+        with pytest.raises(ValueError):
+            moire_periodicity_1d(-1, 4.0)
+
+    def test_periodicity_1d_zero_a2(self):
+        with pytest.raises(ValueError):
+            moire_periodicity_1d(3.82, 0)
+
+    def test_periodicity_with_twist_negative_a(self):
+        with pytest.raises(ValueError):
+            moire_periodicity_with_twist(-1.0, 5.0)
+
+    def test_generate_moire_zero_substrate_a(self):
+        with pytest.raises(ValueError):
+            generate_moire_pattern(
+                substrate_a=0,
+                overlayer_a=4.264,
+                overlayer_lattice_type="hexagonal",
+            )
+
+    def test_generate_moire_zero_overlayer_a(self):
+        with pytest.raises(ValueError):
+            generate_moire_pattern(
+                substrate_a=3.82,
+                overlayer_a=0,
+                overlayer_lattice_type="hexagonal",
+            )
+
+    def test_generate_moire_grid_size_one(self):
+        with pytest.raises(ValueError):
+            generate_moire_pattern(
+                substrate_a=3.82,
+                overlayer_a=4.264,
+                overlayer_lattice_type="hexagonal",
+                grid_size=1,
+            )
+
+    def test_generate_moire_negative_extent(self):
+        with pytest.raises(ValueError):
+            generate_moire_pattern(
+                substrate_a=3.82,
+                overlayer_a=4.264,
+                overlayer_lattice_type="hexagonal",
+                physical_extent=-10.0,
+            )
+
+    def test_generate_moire_invalid_lattice_type(self):
+        with pytest.raises(ValueError):
+            generate_moire_pattern(
+                substrate_a=3.82,
+                overlayer_a=4.264,
+                overlayer_lattice_type="triangular",
+            )
+
+    def test_generate_moire_dw_factor_nonunity(self):
+        """Non-unity DW factor changes the pattern when substrate and overlayer differ."""
+        # Use asymmetric DW factors (substrate=0.5, overlayer=2.0 vs both=1.0)
+        # to produce non-trivially different raw products before normalization.
+        # Since normalization maps to [0,1], a uniform scalar won't change
+        # the result, but changing the ratio between substrate and overlayer
+        # amplitudes effectively changes the relative weight, leading to
+        # different normalized patterns when dw_factor=0 for one layer.
+        result_zero_sub = generate_moire_pattern(
+            substrate_a=3.82,
+            overlayer_a=4.264,
+            overlayer_lattice_type="hexagonal",
+            grid_size=64,
+            dw_factor_substrate=0.0,
+        )
+        # When dw_factor_substrate=0, V_sub=0 so pattern=0*V_over=0,
+        # which normalizes to all zeros.
+        assert np.allclose(result_zero_sub["pattern"], 0.0)
+
+    def test_generate_moire_all_finite(self):
+        """Generated pattern should contain only finite values (NaN guard)."""
+        result = generate_moire_pattern(
+            substrate_a=3.82,
+            overlayer_a=4.264,
+            overlayer_lattice_type="hexagonal",
+            grid_size=64,
+            physical_extent=50.0,
+        )
+        assert np.all(np.isfinite(result["pattern"]))

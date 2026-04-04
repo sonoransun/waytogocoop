@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -38,6 +37,20 @@ class Material:
     space_group: str
     description: str
     role: str
+
+    def __post_init__(self) -> None:
+        if self.a <= 0:
+            raise ValueError(f"Lattice constant 'a' must be positive, got {self.a}")
+        if self.c < 0:
+            raise ValueError(f"Out-of-plane constant 'c' must be non-negative, got {self.c}")
+        if self.lattice_type not in ("hexagonal", "square"):
+            raise ValueError(
+                f"lattice_type must be 'hexagonal' or 'square', got {self.lattice_type!r}"
+            )
+        if self.role not in ("substrate", "overlayer"):
+            raise ValueError(
+                f"role must be 'substrate' or 'overlayer', got {self.role!r}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +112,7 @@ def get_material(name: str) -> Material:
     return MATERIALS[name]
 
 
-def list_materials(role: Optional[str] = None) -> list[Material]:
+def list_materials(role: str | None = None) -> list[Material]:
     """Return a list of materials, optionally filtered by *role*.
 
     Parameters

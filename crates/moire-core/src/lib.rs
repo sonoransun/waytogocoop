@@ -13,6 +13,7 @@ pub use materials::{LatticeType, Material};
 pub use lattice::Lattice2D;
 pub use moire::{MoireConfig, MoireResult};
 pub use density::{DensityConfig, DensityResult};
+pub use fft::{FftPeak, fft_frequencies, identify_peaks};
 pub use isotopes::IsotopeConfig;
 pub use isotope_effects::{IsotopeEffects, IsotopeEffectsConfig};
 pub use magnetic::{MagneticFieldConfig, VortexLatticeResult, ZeemanResult};

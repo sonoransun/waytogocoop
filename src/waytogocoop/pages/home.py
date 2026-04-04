@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import dash
-from dash import html, dash_table
 import dash_bootstrap_components as dbc
+from dash import dash_table, html
 
 from waytogocoop.materials.database import list_materials
 
