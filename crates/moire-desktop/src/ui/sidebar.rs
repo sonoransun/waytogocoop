@@ -24,11 +24,34 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
     ui.heading("Parameters");
     ui.add_space(8.0);
 
+    let mut changed = false;
+
     // --- Substrate selection ---
     ui.label("Substrate:");
-    let substrate = materials::substrate();
-    ui.label(format!("  {} (a = {:.3} A)", substrate.formula, substrate.a));
-    ui.add_space(4.0);
+    let substrates = materials::substrates();
+    if substrates.is_empty() {
+        ui.label("  (no substrates available)");
+        return;
+    }
+    let current_sub_name = substrates[app.substrate_idx.min(substrates.len() - 1)]
+        .name
+        .to_string();
+
+    egui::ComboBox::from_id_salt("substrate_combo")
+        .selected_text(&current_sub_name)
+        .show_ui(ui, |ui| {
+            for (idx, mat) in substrates.iter().enumerate() {
+                let label = format!("{} (a = {:.3} A)", mat.formula, mat.a);
+                if ui
+                    .selectable_value(&mut app.substrate_idx, idx, label)
+                    .changed()
+                {
+                    changed = true;
+                }
+            }
+        });
+
+    ui.add_space(8.0);
 
     // --- Overlayer selection ---
     ui.label("Overlayer:");
@@ -40,8 +63,6 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
     let current_name = overlayers[app.overlayer_idx.min(overlayers.len() - 1)]
         .name
         .to_string();
-
-    let mut changed = false;
 
     egui::ComboBox::from_id_salt("overlayer_combo")
         .selected_text(&current_name)

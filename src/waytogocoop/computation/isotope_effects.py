@@ -227,6 +227,7 @@ def compute_isotope_effects(
     substrate_a: float,
     overlayer_a: float,
     overlayer_lattice_type: str,
+    substrate_lattice_type: str = "square",
     delta_1: float = DELTA_1,
     delta_2: float = DELTA_2,
     coherence_length: float = DEFAULT_COHERENCE_LENGTH,
@@ -273,6 +274,11 @@ def compute_isotope_effects(
             f"overlayer_lattice_type must be 'hexagonal' or 'square', "
             f"got '{overlayer_lattice_type}'"
         )
+    if substrate_lattice_type not in ("hexagonal", "square"):
+        raise ValueError(
+            f"substrate_lattice_type must be 'hexagonal' or 'square', "
+            f"got '{substrate_lattice_type}'"
+        )
 
     sub_a_mod, sub_da = _lattice_shift(substrate_formula, substrate_a, mass_overrides)
     over_a_mod, over_da = _lattice_shift(overlayer_formula, overlayer_a, mass_overrides)
@@ -286,7 +292,7 @@ def compute_isotope_effects(
     )
 
     dw_sub = _debye_waller_ratio(
-        substrate_formula, "square", substrate_a, mass_overrides
+        substrate_formula, substrate_lattice_type, substrate_a, mass_overrides
     )
     dw_over = _debye_waller_ratio(
         overlayer_formula, overlayer_lattice_type, overlayer_a, mass_overrides

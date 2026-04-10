@@ -57,6 +57,19 @@ static MATERIALS: &[Material] = &[
         space_group: "R-3m",
         role: "overlayer",
     },
+    Material {
+        name: "Graphene",
+        formula: "Graphene",
+        lattice_type: LatticeType::Hexagonal,
+        a: 2.46,
+        c: 3.35,
+        space_group: "P6/mmm",
+        // Role "both": graphene can act as substrate or overlayer for
+        // twisted-bilayer homo-bilayer moire systems.
+        // Honeycomb basis is approximated as first-order hexagonal Bravais;
+        // AA/AB stacking and flat-band physics are NOT resolved.
+        role: "both",
+    },
 ];
 
 /// Returns all materials in the database.
@@ -64,14 +77,30 @@ pub fn all_materials() -> &'static [Material] {
     MATERIALS
 }
 
-/// Returns the substrate material (FeTe).
-pub fn substrate() -> &'static Material {
-    &MATERIALS[0]
+/// Returns all materials usable as a substrate (role "substrate" or "both").
+pub fn substrates() -> Vec<&'static Material> {
+    MATERIALS
+        .iter()
+        .filter(|m| m.role == "substrate" || m.role == "both")
+        .collect()
 }
 
-/// Returns all overlayer materials.
-pub fn overlayers() -> &'static [Material] {
-    &MATERIALS[1..]
+/// Returns the default substrate material (first entry with substrate role).
+///
+/// Retained for backwards compatibility; prefer `substrates()` for selection.
+pub fn substrate() -> &'static Material {
+    substrates()
+        .into_iter()
+        .next()
+        .expect("at least one substrate must be defined")
+}
+
+/// Returns all materials usable as an overlayer (role "overlayer" or "both").
+pub fn overlayers() -> Vec<&'static Material> {
+    MATERIALS
+        .iter()
+        .filter(|m| m.role == "overlayer" || m.role == "both")
+        .collect()
 }
 
 /// Look up a material by name (case-sensitive).
@@ -85,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_all_materials_count() {
-        assert_eq!(all_materials().len(), 4);
+        assert_eq!(all_materials().len(), 5);
     }
 
     #[test]
@@ -97,11 +126,33 @@ mod tests {
     }
 
     #[test]
+    fn test_substrates_includes_graphene() {
+        let subs = substrates();
+        // FeTe (substrate) + Graphene (both) = 2
+        assert_eq!(subs.len(), 2);
+        assert!(subs.iter().any(|m| m.name == "FeTe"));
+        assert!(subs.iter().any(|m| m.name == "Graphene"));
+    }
+
+    #[test]
     fn test_overlayers_count() {
-        assert_eq!(overlayers().len(), 3);
-        for m in overlayers() {
-            assert_eq!(m.role, "overlayer");
+        // 3 TI overlayers + Graphene (both) = 4
+        let overs = overlayers();
+        assert_eq!(overs.len(), 4);
+        for m in &overs {
+            assert!(m.role == "overlayer" || m.role == "both");
         }
+    }
+
+    #[test]
+    fn test_graphene_role_both() {
+        let g = by_name("Graphene").unwrap();
+        assert_eq!(g.role, "both");
+        assert_eq!(g.lattice_type, LatticeType::Hexagonal);
+        assert!((g.a - 2.46).abs() < 1e-10);
+        // Should appear in both filtered lists.
+        assert!(substrates().iter().any(|m| m.name == "Graphene"));
+        assert!(overlayers().iter().any(|m| m.name == "Graphene"));
     }
 
     #[test]
@@ -109,6 +160,13 @@ mod tests {
         let m = by_name("Bi2Te3").unwrap();
         assert_eq!(m.formula, "Bi₂Te₃");
         assert_eq!(m.lattice_type, LatticeType::Hexagonal);
+    }
+
+    #[test]
+    fn test_by_name_graphene() {
+        let m = by_name("Graphene").unwrap();
+        assert_eq!(m.formula, "Graphene");
+        assert_eq!(m.space_group, "P6/mmm");
     }
 
     #[test]

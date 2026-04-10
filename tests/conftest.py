@@ -29,3 +29,9 @@ def bi2te3() -> Material:
 def sb2te() -> Material:
     """Return the Sb2Te overlayer material."""
     return get_material("Sb2Te")
+
+
+@pytest.fixture
+def graphene() -> Material:
+    """Return the Graphene material (role="both"), used for TBG moire tests."""
+    return get_material("Graphene")

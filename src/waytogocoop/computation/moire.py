@@ -118,6 +118,7 @@ def generate_moire_pattern(
     substrate_a: float,
     overlayer_a: float,
     overlayer_lattice_type: str,
+    substrate_lattice_type: str = "square",
     twist_angle_deg: float = 0.0,
     grid_size: int = 200,
     physical_extent: float = 100.0,
@@ -132,11 +133,14 @@ def generate_moire_pattern(
     Parameters
     ----------
     substrate_a : float
-        Substrate lattice constant (Angstrom).  Assumed square.
+        Substrate lattice constant (Angstrom).
     overlayer_a : float
         Overlayer lattice constant (Angstrom).
     overlayer_lattice_type : str
         ``"hexagonal"`` or ``"square"``.
+    substrate_lattice_type : str
+        ``"hexagonal"`` or ``"square"``.  Defaults to ``"square"`` for
+        backwards compatibility with FeTe-substrate callers.
     twist_angle_deg : float
         In-plane twist angle applied to the overlayer (degrees).
     grid_size : int
@@ -153,6 +157,13 @@ def generate_moire_pattern(
     dict
         ``x`` (1D ndarray), ``y`` (1D ndarray), ``pattern`` (2D ndarray
         shape ``(grid_size, grid_size)``), ``moire_period`` (float).
+
+    Notes
+    -----
+    The moire period reported when both ``substrate_a != overlayer_a`` *and*
+    ``twist_angle_deg != 0`` uses ``a_eff = (substrate_a + overlayer_a) / 2``
+    as the twist-formula input; this is only physically meaningful when the
+    two lattice constants are close (e.g. a homo-bilayer).
     """
     if substrate_a <= 0:
         raise ValueError("substrate_a must be positive")
@@ -167,12 +178,20 @@ def generate_moire_pattern(
             f"overlayer_lattice_type must be 'hexagonal' or 'square', "
             f"got '{overlayer_lattice_type}'"
         )
+    if substrate_lattice_type not in ("hexagonal", "square"):
+        raise ValueError(
+            f"substrate_lattice_type must be 'hexagonal' or 'square', "
+            f"got '{substrate_lattice_type}'"
+        )
 
     x = np.linspace(-physical_extent, physical_extent, grid_size)
     y = np.linspace(-physical_extent, physical_extent, grid_size)
 
-    # Substrate G vectors (square)
-    g_sub = _reciprocal_g_vectors_square(substrate_a)
+    # Substrate G vectors
+    if substrate_lattice_type == "hexagonal":
+        g_sub = _reciprocal_g_vectors_hexagonal(substrate_a)
+    else:
+        g_sub = _reciprocal_g_vectors_square(substrate_a)
 
     # Overlayer G vectors
     if overlayer_lattice_type == "hexagonal":

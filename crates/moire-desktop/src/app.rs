@@ -86,6 +86,9 @@ pub struct MoireApp {
     /// Sb effective mass override (amu).
     #[serde(default)]
     pub sb_mass_override: Option<f64>,
+    /// C effective mass override (amu) — used when graphene is selected.
+    #[serde(default)]
+    pub c_mass_override: Option<f64>,
     /// BCS isotope exponent.
     #[serde(default = "default_isotope_alpha")]
     pub isotope_alpha: f64,
@@ -234,6 +237,7 @@ impl Default for MoireApp {
             fe_mass_override: None,
             te_mass_override: None,
             sb_mass_override: None,
+            c_mass_override: None,
             isotope_alpha: 0.4,
             magnetic_config: MagneticFieldConfig::default(),
             proximity_config: ProximityConfig::default(),
@@ -288,7 +292,12 @@ impl MoireApp {
 
     /// Get the substrate material based on current selection.
     pub fn substrate_material(&self) -> &'static moire_core::materials::Material {
-        materials::substrate()
+        let substrates = materials::substrates();
+        if substrates.is_empty() {
+            // Should never happen — at least one substrate is always defined.
+            return materials::substrate();
+        }
+        substrates[self.substrate_idx.min(substrates.len() - 1)]
     }
 
     /// Get the overlayer material based on current selection.
@@ -298,7 +307,7 @@ impl MoireApp {
             // Fallback to substrate if no overlayers are defined
             return materials::substrate();
         }
-        &overlayers[self.overlayer_idx.min(overlayers.len() - 1)]
+        overlayers[self.overlayer_idx.min(overlayers.len() - 1)]
     }
 
     /// Build an IsotopeConfig from the current app state.
@@ -307,6 +316,7 @@ impl MoireApp {
             fe_mass: self.fe_mass_override,
             te_mass: self.te_mass_override,
             sb_mass: self.sb_mass_override,
+            c_mass: self.c_mass_override,
         }
     }
 
@@ -736,7 +746,7 @@ impl eframe::App for MoireApp {
                 .default_height(500.0)
                 .show(ctx, |ui| {
                     let overlayers = materials::overlayers();
-                    let substrate = materials::substrate();
+                    let substrate = self.substrate_material();
 
                     if let Some(ref textures) = self.comparison_textures {
                         ui.horizontal(|ui| {

@@ -106,6 +106,65 @@ class TestGenerateMoirePattern:
         )
         assert np.isinf(result["moire_period"])
 
+    def test_generate_moire_hexagonal_substrate(self):
+        """Hexagonal substrate branch must run and return finite pattern."""
+        result = generate_moire_pattern(
+            substrate_a=4.264,
+            overlayer_a=4.386,
+            overlayer_lattice_type="hexagonal",
+            substrate_lattice_type="hexagonal",
+            grid_size=64,
+            physical_extent=80.0,
+        )
+        assert result["pattern"].shape == (64, 64)
+        assert np.all(np.isfinite(result["pattern"]))
+
+    def test_twisted_bilayer_graphene_magic_angle(self):
+        """TBG at the magic angle: period ~130.4 A for a=2.46 A, theta=1.08°."""
+        a = 2.46
+        theta = 1.08
+        result = generate_moire_pattern(
+            substrate_a=a,
+            overlayer_a=a,
+            overlayer_lattice_type="hexagonal",
+            substrate_lattice_type="hexagonal",
+            twist_angle_deg=theta,
+            grid_size=64,
+            physical_extent=400.0,
+        )
+        expected = a / (2.0 * np.sin(np.radians(theta / 2.0)))
+        assert result["moire_period"] == pytest.approx(expected, rel=0.01)
+        assert result["pattern"].shape == (64, 64)
+        assert np.all(np.isfinite(result["pattern"]))
+
+    def test_backcompat_square_default(self):
+        """Callers that omit substrate_lattice_type keep FeTe (square) behavior."""
+        without = generate_moire_pattern(
+            substrate_a=3.82,
+            overlayer_a=4.264,
+            overlayer_lattice_type="hexagonal",
+            grid_size=48,
+            physical_extent=50.0,
+        )
+        with_square = generate_moire_pattern(
+            substrate_a=3.82,
+            overlayer_a=4.264,
+            overlayer_lattice_type="hexagonal",
+            substrate_lattice_type="square",
+            grid_size=48,
+            physical_extent=50.0,
+        )
+        np.testing.assert_allclose(without["pattern"], with_square["pattern"])
+
+    def test_generate_moire_invalid_substrate_lattice_type(self):
+        with pytest.raises(ValueError):
+            generate_moire_pattern(
+                substrate_a=3.82,
+                overlayer_a=4.264,
+                overlayer_lattice_type="hexagonal",
+                substrate_lattice_type="triangular",
+            )
+
 
 class TestMoireValidation:
     """Edge case and input validation tests for moire computation."""

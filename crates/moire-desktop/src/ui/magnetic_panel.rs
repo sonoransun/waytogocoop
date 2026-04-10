@@ -12,6 +12,23 @@ pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
         egui::Color32::from_rgb(220, 50, 50),
         "Includes SPECULATIVE features",
     );
+
+    // Warn when the selected substrate is graphene — the default g-factor,
+    // coherence length, and London length are FeTe/TI-calibrated and will
+    // give wrong magnitudes for graphene without retuning.
+    if app.substrate_material().name == "Graphene" {
+        ui.add_space(4.0);
+        let warn = ui.colored_label(
+            egui::Color32::from_rgb(230, 180, 60),
+            "⚠ Graphene selected — defaults are FeTe-tuned",
+        );
+        warn.on_hover_text(
+            "The default g-factor (≈30) and coherence length (20 Å) are \
+             calibrated for the FeTe/topological-insulator system. For \
+             graphene, set g ≈ 2 and use a larger coherence length via the \
+             Proximity / Topological sliders below.",
+        );
+    }
     ui.add_space(8.0);
 
     // --- Perpendicular field Bz ---

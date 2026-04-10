@@ -26,7 +26,8 @@ class Material:
     description : str
         Short description of the material's role.
     role : str
-        "substrate" or "overlayer".
+        "substrate", "overlayer", or "both" (for homo-bilayer systems like
+        twisted bilayer graphene where the same material plays both roles).
     """
 
     name: str
@@ -47,9 +48,9 @@ class Material:
             raise ValueError(
                 f"lattice_type must be 'hexagonal' or 'square', got {self.lattice_type!r}"
             )
-        if self.role not in ("substrate", "overlayer"):
+        if self.role not in ("substrate", "overlayer", "both"):
             raise ValueError(
-                f"role must be 'substrate' or 'overlayer', got {self.role!r}"
+                f"role must be 'substrate', 'overlayer', or 'both', got {self.role!r}"
             )
 
 
@@ -97,6 +98,20 @@ MATERIALS: dict[str, Material] = {
         description="Topological insulator overlayer variant",
         role="overlayer",
     ),
+    "Graphene": Material(
+        name="Graphene",
+        formula="Graphene",
+        lattice_type="hexagonal",
+        a=2.46,
+        c=3.35,
+        space_group="P6/mmm",
+        description=(
+            "Carbon monolayer for twisted-bilayer moire systems. "
+            "Honeycomb basis approximated as first-order hexagonal Bravais — "
+            "AA/AB stacking and flat-band physics are NOT resolved."
+        ),
+        role="both",
+    ),
 }
 
 
@@ -123,4 +138,4 @@ def list_materials(role: str | None = None) -> list[Material]:
     """
     if role is None:
         return list(MATERIALS.values())
-    return [m for m in MATERIALS.values() if m.role == role]
+    return [m for m in MATERIALS.values() if m.role == role or m.role == "both"]

@@ -195,6 +195,7 @@ def _update_comparison(
                 substrate_a=substrate.a,
                 overlayer_a=overlayer.a,
                 overlayer_lattice_type=overlayer.lattice_type,
+                substrate_lattice_type=substrate.lattice_type,
                 twist_angle_deg=twist_angle,
                 grid_size=grid_size,
                 physical_extent=physical_extent,

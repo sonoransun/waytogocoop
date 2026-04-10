@@ -1,5 +1,5 @@
 use egui::{Color32, Ui};
-use moire_core::isotopes::{natural_average_mass, FE, SB, TE};
+use moire_core::isotopes::{natural_average_mass, C, FE, SB, TE};
 
 use crate::app::MoireApp;
 
@@ -59,6 +59,7 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
 
     // --- Sb mass slider (only relevant for Sb-containing overlayers) ---
     let overlayer = app.overlayer_material();
+    let substrate = app.substrate_material();
     let overlayer_has_sb = overlayer.formula == "Sb2Te3" || overlayer.formula == "Sb2Te";
 
     if overlayer_has_sb {
@@ -73,6 +74,24 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
             .changed()
         {
             app.sb_mass_override = Some(sb_mass);
+            changed = true;
+        }
+    }
+
+    // --- C mass slider (only for graphene substrate or overlayer) ---
+    let has_graphene = substrate.name == "Graphene" || overlayer.name == "Graphene";
+    if has_graphene {
+        let c_nat = natural_average_mass(&C);
+        let c_min = C.isotopes.first().expect("C isotopes must not be empty").atomic_mass;
+        let c_max = C.isotopes.last().expect("C isotopes must not be empty").atomic_mass;
+        let mut c_mass = app.c_mass_override.unwrap_or(c_nat);
+
+        ui.label(format!("C mass (amu) — nat: {:.3}", c_nat));
+        if ui
+            .add(egui::Slider::new(&mut c_mass, c_min..=c_max).step_by(0.0001))
+            .changed()
+        {
+            app.c_mass_override = Some(c_mass);
             changed = true;
         }
     }
@@ -96,6 +115,7 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
         app.fe_mass_override = None;
         app.te_mass_override = None;
         app.sb_mass_override = None;
+        app.c_mass_override = None;
         app.isotope_alpha = 0.4;
         changed = true;
     }

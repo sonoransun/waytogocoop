@@ -21,7 +21,7 @@ from waytogocoop.materials.isotopes import (
 
 
 class TestIsotopeData:
-    @pytest.mark.parametrize("symbol", ["Fe", "Te", "Sb", "Bi"])
+    @pytest.mark.parametrize("symbol", ["Fe", "Te", "Sb", "Bi", "C"])
     def test_abundances_sum_to_one(self, symbol):
         elem = ELEMENTS[symbol]
         total = sum(iso.natural_abundance for iso in elem.isotopes)
@@ -43,14 +43,21 @@ class TestIsotopeData:
         # Monoisotopic: 208.980
         assert natural_average_mass("Bi") == pytest.approx(208.98, abs=0.01)
 
+    def test_natural_average_mass_c(self):
+        # IUPAC standard atomic weight: 12.011
+        assert natural_average_mass("C") == pytest.approx(12.011, abs=0.01)
+
     def test_get_element(self):
         assert get_element("Fe").symbol == "Fe"
+        assert get_element("C").symbol == "C"
         with pytest.raises(KeyError):
             get_element("Zz")
 
     def test_get_composition(self):
         assert get_composition("FeTe") == {"Fe": 1, "Te": 1}
         assert get_composition("Sb2Te3") == {"Sb": 2, "Te": 3}
+        # 2 carbon atoms per graphene hexagonal unit cell (A/B sublattices).
+        assert get_composition("Graphene") == {"C": 2}
 
     def test_formula_unit_avg_mass_fete(self):
         m = formula_unit_avg_mass("FeTe")

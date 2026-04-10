@@ -395,4 +395,55 @@ mod tests {
         // With same lattice constant but nonzero twist, period should be finite (not inf)
         assert!(result.moire_period.is_finite());
     }
+
+    #[test]
+    fn test_tbg_moire_period() {
+        // Twisted bilayer graphene at the magic angle: a=2.46 A, theta=1.08 deg.
+        // Expected period from L = a / (2 sin(theta/2)) ≈ 130.4 A.
+        let a = 2.46;
+        let theta = 1.08_f64;
+        let config = MoireConfig {
+            substrate_a: a,
+            substrate_lattice_type: LatticeType::Hexagonal,
+            overlayer_a: a,
+            overlayer_lattice_type: LatticeType::Hexagonal,
+            twist_angle_deg: theta,
+            resolution: 32,
+            physical_extent: 400.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
+        };
+        let result = compute_moire(&config).unwrap();
+        let expected = a / (2.0 * (theta.to_radians() / 2.0).sin());
+        let rel_err = (result.moire_period - expected).abs() / expected;
+        assert!(
+            rel_err < 0.01,
+            "TBG moire period {} != expected {} (rel_err {})",
+            result.moire_period,
+            expected,
+            rel_err
+        );
+        assert!(result.pattern.iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn test_hexagonal_substrate_branch() {
+        // Ensure the hexagonal substrate branch produces a normalized pattern.
+        let config = MoireConfig {
+            substrate_a: 4.264,
+            substrate_lattice_type: LatticeType::Hexagonal,
+            overlayer_a: 4.386,
+            overlayer_lattice_type: LatticeType::Hexagonal,
+            twist_angle_deg: 0.0,
+            resolution: 32,
+            physical_extent: 100.0,
+            dw_factor_substrate: 1.0,
+            dw_factor_overlayer: 1.0,
+        };
+        let result = compute_moire(&config).unwrap();
+        let min_val = result.pattern.iter().cloned().fold(f64::MAX, f64::min);
+        let max_val = result.pattern.iter().cloned().fold(f64::MIN, f64::max);
+        assert!(min_val >= -1e-10);
+        assert!(max_val <= 1.0 + 1e-10);
+    }
 }

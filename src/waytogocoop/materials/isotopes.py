@@ -87,6 +87,17 @@ ELEMENTS: dict[str, ElementData] = {
         gruneisen_parameter=1.2,
         cohesive_energy_ev=2.2,
     ),
+    "C": ElementData(
+        symbol="C",
+        name="Carbon",
+        isotopes=(
+            Isotope("C", 12, 12.000, 0.9893),
+            Isotope("C", 13, 13.00335, 0.0107),
+        ),
+        debye_temperature=2100.0,  # graphene in-plane Debye temperature
+        gruneisen_parameter=1.8,
+        cohesive_energy_ev=7.4,
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -98,6 +109,7 @@ MATERIAL_COMPOSITION: dict[str, dict[str, int]] = {
     "Sb2Te3": {"Sb": 2, "Te": 3},
     "Bi2Te3": {"Bi": 2, "Te": 3},
     "Sb2Te": {"Sb": 2, "Te": 1},
+    "Graphene": {"C": 2},  # 2 C atoms per hexagonal unit cell (A and B sublattices)
 }
 
 

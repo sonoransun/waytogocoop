@@ -34,6 +34,8 @@ pub struct IsotopeConfig {
     pub te_mass: Option<f64>,
     pub sb_mass: Option<f64>,
     // Bi is monoisotopic — no override needed.
+    #[serde(default)]
+    pub c_mass: Option<f64>,
 }
 
 impl IsotopeConfig {
@@ -44,6 +46,7 @@ impl IsotopeConfig {
             "Te" => self.te_mass.unwrap_or_else(|| natural_average_mass(&TE)),
             "Sb" => self.sb_mass.unwrap_or_else(|| natural_average_mass(&SB)),
             "Bi" => natural_average_mass(&BI),
+            "C" => self.c_mass.unwrap_or_else(|| natural_average_mass(&C)),
             _ => 0.0,
         }
     }
@@ -76,6 +79,11 @@ static SB_ISOTOPES: [Isotope; 2] = [
 
 static BI_ISOTOPES: [Isotope; 1] = [
     Isotope { element: "Bi", mass_number: 209, atomic_mass: 208.980, natural_abundance: 1.0 },
+];
+
+static C_ISOTOPES: [Isotope; 2] = [
+    Isotope { element: "C", mass_number: 12, atomic_mass: 12.000, natural_abundance: 0.9893 },
+    Isotope { element: "C", mass_number: 13, atomic_mass: 13.00335, natural_abundance: 0.0107 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -118,9 +126,18 @@ pub static BI: ElementData = ElementData {
     cohesive_energy_ev: 2.2,
 };
 
+pub static C: ElementData = ElementData {
+    symbol: "C",
+    name: "Carbon",
+    isotopes: &C_ISOTOPES,
+    debye_temperature: 2100.0, // graphene in-plane Debye temperature
+    gruneisen_parameter: 1.8,
+    cohesive_energy_ev: 7.4,
+};
+
 /// All elements in the database.
-pub fn all_elements() -> [&'static ElementData; 4] {
-    [&FE, &TE, &SB, &BI]
+pub fn all_elements() -> [&'static ElementData; 5] {
+    [&FE, &TE, &SB, &BI, &C]
 }
 
 /// Look up element data by symbol.
@@ -130,6 +147,7 @@ pub fn element_by_symbol(symbol: &str) -> Option<&'static ElementData> {
         "Te" => Some(&TE),
         "Sb" => Some(&SB),
         "Bi" => Some(&BI),
+        "C" => Some(&C),
         _ => None,
     }
 }
@@ -170,6 +188,8 @@ pub fn material_composition(formula: &str) -> Option<&'static [(&'static str, u3
         "Sb2Te3" => Some(&[("Sb", 2), ("Te", 3)]),
         "Bi2Te3" => Some(&[("Bi", 2), ("Te", 3)]),
         "Sb2Te" => Some(&[("Sb", 2), ("Te", 1)]),
+        // 2 carbon atoms per graphene hexagonal unit cell (A and B sublattices).
+        "Graphene" => Some(&[("C", 2)]),
         _ => None,
     }
 }
@@ -239,6 +259,7 @@ mod tests {
             fe_mass: Some(54.0),
             te_mass: None,
             sb_mass: None,
+            c_mass: None,
         };
         let m = formula_unit_avg_mass("FeTe", &config).unwrap();
         let expected = (54.0 + natural_average_mass(&TE)) / 2.0;
@@ -258,6 +279,39 @@ mod tests {
     fn test_element_by_symbol() {
         assert_eq!(element_by_symbol("Fe").unwrap().symbol, "Fe");
         assert_eq!(element_by_symbol("Te").unwrap().symbol, "Te");
+        assert_eq!(element_by_symbol("C").unwrap().symbol, "C");
         assert!(element_by_symbol("Zz").is_none());
+    }
+
+    #[test]
+    fn test_natural_average_mass_carbon() {
+        // IUPAC standard atomic weight: 12.011
+        let m = natural_average_mass(&C);
+        assert!((m - 12.011).abs() < 0.01, "C avg mass = {}, expected ~12.011", m);
+    }
+
+    #[test]
+    fn test_graphene_composition() {
+        // 2 carbon atoms per graphene hexagonal unit cell.
+        let comp = material_composition("Graphene").expect("Graphene must be registered");
+        assert_eq!(comp, &[("C", 2)]);
+    }
+
+    #[test]
+    fn test_formula_unit_avg_mass_graphene() {
+        let config = IsotopeConfig::default();
+        let m = formula_unit_avg_mass("Graphene", &config).unwrap();
+        // Average atomic mass per atom equals natural C mass (only one element).
+        assert!((m - natural_average_mass(&C)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_graphene_c_mass_override() {
+        let config = IsotopeConfig {
+            c_mass: Some(13.00335), // pure C-13
+            ..Default::default()
+        };
+        let m = formula_unit_avg_mass("Graphene", &config).unwrap();
+        assert!((m - 13.00335).abs() < 1e-10);
     }
 }

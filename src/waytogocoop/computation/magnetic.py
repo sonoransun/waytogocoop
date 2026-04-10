@@ -6,6 +6,23 @@ and speculative tertiary effects (field-tunable CPDM, moire-vortex beating,
 local susceptibility).
 
 Established physics unless marked SPECULATIVE.
+
+CAVEATS for non-FeTe/TI substrates
+----------------------------------
+Several default constants in this module are calibrated for the
+FeTe/topological-insulator heterostructure the project was originally built
+around:
+
+- ``G_FACTOR_TSS`` ≈ 30 (topological surface state g-factor)
+- ``LAMBDA_L_FETE`` = 150 Å  (London penetration depth of FeTe)
+- ``DEFAULT_COHERENCE_LENGTH`` = 20 Å  (FeTe BCS coherence length)
+
+For twisted bilayer graphene and other non-TI substrates these are not
+physically appropriate — use the UI sliders to override the g-factor
+(graphene is near the free-electron value g ≈ 2), the coherence length, and
+the proximity parameters. The vortex lattice geometry, flux quantization,
+and Zeeman energy formulas themselves are material-agnostic and remain
+valid once the constants are retuned.
 """
 
 from __future__ import annotations

@@ -25,7 +25,8 @@ from waytogocoop.materials.lattice import (
 
 class TestMaterialRegistry:
     def test_materials_count(self):
-        assert len(MATERIALS) == 4
+        # 4 TI/chalcogenide materials + Graphene
+        assert len(MATERIALS) == 5
 
     def test_fete_properties(self, fete):
         assert fete.formula == "FeTe"
@@ -46,22 +47,41 @@ class TestMaterialRegistry:
         assert bi2te3.a == pytest.approx(4.386)
         assert bi2te3.role == "overlayer"
 
+    def test_graphene_registered(self, graphene):
+        assert graphene.formula == "Graphene"
+        assert graphene.lattice_type == "hexagonal"
+        assert graphene.a == pytest.approx(2.46)
+        assert graphene.c == pytest.approx(3.35)
+        assert graphene.space_group == "P6/mmm"
+        assert graphene.role == "both"
+
     def test_get_material_unknown_raises(self):
         with pytest.raises(KeyError, match="not found"):
             get_material("UnknownMaterial")
 
     def test_list_materials_all(self):
         all_mats = list_materials()
-        assert len(all_mats) == 4
+        assert len(all_mats) == 5
 
     def test_list_materials_substrates(self):
+        # FeTe ("substrate") and Graphene ("both") both qualify.
         substrates = list_materials(role="substrate")
-        assert len(substrates) == 1
-        assert substrates[0].formula == "FeTe"
+        formulas = {m.formula for m in substrates}
+        assert "FeTe" in formulas
+        assert "Graphene" in formulas
+        assert len(substrates) == 2
 
     def test_list_materials_overlayers(self):
+        # 3 TI overlayers plus Graphene ("both") = 4.
         overlayers = list_materials(role="overlayer")
-        assert len(overlayers) == 3
+        formulas = {m.formula for m in overlayers}
+        assert "Graphene" in formulas
+        assert len(overlayers) == 4
+
+    def test_list_materials_both_role(self, graphene):
+        """Graphene (role='both') must appear in both filtered lists."""
+        assert graphene in list_materials(role="substrate")
+        assert graphene in list_materials(role="overlayer")
 
     def test_material_is_frozen(self, fete):
         with pytest.raises(AttributeError):
