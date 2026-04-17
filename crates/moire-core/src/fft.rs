@@ -1,3 +1,10 @@
+//! 2D FFT + peak detection for moire patterns.
+//!
+//! Uses rustfft for the forward transform, applies `log(1+|F|²)` scaling and
+//! fftshift so DC lands in the center, then normalizes to `[0, 1]` for
+//! colormap display. Peak detection extracts local maxima above a threshold.
+//! Mirrors `src/waytogocoop/computation/fourier.py`.
+
 use num_complex::Complex64;
 use rustfft::FftPlanner;
 

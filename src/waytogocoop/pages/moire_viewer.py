@@ -7,6 +7,11 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from dash import Input, Output, callback, dcc, html
 
+from waytogocoop.components.controls import (
+    loading_spinner,
+    preset_and_reset_card,
+    register_preset_reset_callback,
+)
 from waytogocoop.components.figure_factory import (
     create_2d_contour,
     create_3d_surface,
@@ -16,6 +21,7 @@ from waytogocoop.components.figure_factory import (
 from waytogocoop.components.isotope_panel import create_isotope_panel
 from waytogocoop.components.material_selector import create_material_selector
 from waytogocoop.components.parameter_panel import create_parameter_panel
+from waytogocoop.state import register_url_sync
 from waytogocoop.computation.isotope_effects import compute_isotope_effects
 from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.computation.superconducting import cpdm_amplitude, gap_modulation
@@ -27,9 +33,64 @@ dash.register_page(
 )
 
 _PREFIX = "viewer"
+_URL_ID = f"{_PREFIX}-url"
+
+_PRESETS = {
+    "Sb₂Te₃ / FeTe (paper default)": {
+        "substrate": "FeTe",
+        "overlayer": "Sb2Te3",
+        "twist": 0.0,
+        "grid_size": 200,
+        "extent": 100.0,
+        "view_mode": "heatmap",
+    },
+    "Bi₂Te₃ / FeTe aligned": {
+        "substrate": "FeTe",
+        "overlayer": "Bi2Te3",
+        "twist": 0.0,
+        "grid_size": 250,
+        "extent": 150.0,
+        "view_mode": "heatmap",
+    },
+    "Sb₂Te / FeTe (small moire)": {
+        "substrate": "FeTe",
+        "overlayer": "Sb2Te",
+        "twist": 0.0,
+        "grid_size": 250,
+        "extent": 80.0,
+        "view_mode": "heatmap",
+    },
+    "Twisted Sb₂Te₃ (θ=1.2°)": {
+        "substrate": "FeTe",
+        "overlayer": "Sb2Te3",
+        "twist": 1.2,
+        "grid_size": 300,
+        "extent": 200.0,
+        "view_mode": "contour",
+    },
+}
+
+_DEFAULTS = {
+    "substrate": "FeTe",
+    "overlayer": "Sb2Te3",
+    "twist": 0.0,
+    "grid_size": 200,
+    "extent": 100.0,
+    "view_mode": "heatmap",
+}
+
+_PRESET_BINDINGS = [
+    (f"{_PREFIX}-substrate-dropdown", "value", "substrate"),
+    (f"{_PREFIX}-overlayer-dropdown", "value", "overlayer"),
+    (f"{_PREFIX}-twist-slider", "value", "twist"),
+    (f"{_PREFIX}-grid-size", "value", "grid_size"),
+    (f"{_PREFIX}-physical-extent", "value", "extent"),
+    (f"{_PREFIX}-view-mode", "value", "view_mode"),
+]
 
 layout = dbc.Container(
     [
+        dcc.Location(id=_URL_ID, refresh=False),
         html.Br(),
         html.H2("Moire Pattern Viewer"),
         html.Hr(),
@@ -38,6 +99,7 @@ layout = dbc.Container(
                 # Left column — controls
                 dbc.Col(
                     [
+                        preset_and_reset_card(_PREFIX, _PRESETS),
                         create_material_selector(_PREFIX),
                         create_parameter_panel(_PREFIX),
                         create_isotope_panel(_PREFIX),
@@ -71,15 +133,22 @@ layout = dbc.Container(
                             className="mb-3",
                         ),
                     ],
-                    md=3,
+                    xs=12, md=4, lg=3,
+                    className="sidebar-col",
                 ),
                 # Right column — figures
                 dbc.Col(
                     [
-                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-moire-graph")),
-                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-gap-graph")),
+                        loading_spinner(
+                            dcc.Graph(id=f"{_PREFIX}-moire-graph"),
+                            "Computing moire pattern…",
+                        ),
+                        loading_spinner(
+                            dcc.Graph(id=f"{_PREFIX}-gap-graph"),
+                            "Computing superconducting gap…",
+                        ),
                     ],
-                    md=9,
+                    xs=12, md=8, lg=9,
                 ),
             ]
         ),
@@ -87,6 +156,10 @@ layout = dbc.Container(
     fluid=True,
     className="p-4",
 )
+
+
+register_preset_reset_callback(_PREFIX, _PRESETS, _DEFAULTS, _PRESET_BINDINGS)
+register_url_sync(_URL_ID, _PRESET_BINDINGS)
 
 
 @callback(

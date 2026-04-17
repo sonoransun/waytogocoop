@@ -136,7 +136,7 @@ layout = dbc.Container(
                             className="mb-3",
                         ),
                     ],
-                    md=3,
+                    xs=12, md=4, lg=3,
                 ),
                 dbc.Col(
                     [
@@ -144,7 +144,7 @@ layout = dbc.Container(
                         html.Hr(),
                         dcc.Loading(dcc.Graph(id=f"{_PREFIX}-comm-graph")),
                     ],
-                    md=9,
+                    xs=12, md=8, lg=9,
                 ),
             ]
         ),

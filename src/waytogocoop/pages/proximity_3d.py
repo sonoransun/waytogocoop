@@ -7,6 +7,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from dash import Input, Output, callback, dcc, html
 
+from waytogocoop.components.controls import loading_spinner
 from waytogocoop.components.figure_factory import (
     create_3d_isosurface,
     create_gap_heatmap,
@@ -96,17 +97,23 @@ layout = dbc.Container(
                             className="mb-3",
                         ),
                     ],
-                    md=3,
+                    xs=12, md=4, lg=3,
                 ),
                 dbc.Col(
                     [
-                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-main-graph")),
+                        loading_spinner(
+                            dcc.Graph(id=f"{_PREFIX}-main-graph"),
+                            "Computing 3D proximity volume…",
+                        ),
                         html.Hr(),
-                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-decay-graph")),
+                        loading_spinner(
+                            dcc.Graph(id=f"{_PREFIX}-decay-graph"),
+                            "Computing decay profile…",
+                        ),
                         html.Hr(),
                         html.Div(id=f"{_PREFIX}-info"),
                     ],
-                    md=9,
+                    xs=12, md=8, lg=9,
                 ),
             ]
         ),
@@ -182,11 +189,30 @@ def update_proximity(
         z_val = prox_result.z_coords[z_idx]
 
         if view_mode == "iso":
-            # Isosurface view
+            # Annotate the interface plane and the proximity decay length to
+            # orient the viewer inside the isosurface volume.
+            x_mid = float((x[0] + x[-1]) / 2.0)
+            y_mid = float((y[0] + y[-1]) / 2.0)
+            xi_z = min(xi_prox, float(prox_result.z_coords[-1]))
+            iso_annotations = [
+                dict(
+                    x=x_mid, y=y_mid, z=0.0,
+                    text="Interface (z=0)",
+                    showarrow=True, arrowhead=2, ax=30, ay=-30,
+                    font=dict(size=11, color="white" if dark else "black"),
+                ),
+                dict(
+                    x=x_mid, y=y_mid, z=xi_z,
+                    text=f"ξ_prox ≈ {xi_prox:.0f} Å",
+                    showarrow=True, arrowhead=2, ax=40, ay=-40,
+                    font=dict(size=11, color="white" if dark else "black"),
+                ),
+            ]
             main_fig = create_3d_isosurface(
                 x, y, prox_result.z_coords, prox_result.gap_3d,
                 title=f"3D Cooper Surface — {overlayer.formula}/{substrate.formula}",
                 dark=dark,
+                annotations=iso_annotations,
             )
         else:
             # Z-slice heatmap

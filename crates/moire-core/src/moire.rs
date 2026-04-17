@@ -1,3 +1,11 @@
+//! Moire superlattice pattern generation.
+//!
+//! Builds a real-space interference pattern from two crystal lattices with
+//! different periodicities (and optional twist). Patterns are constructed as
+//! `V(r) = Σ cos(G_i · r)` summed over each lattice's reciprocal vectors.
+//! Mirrors `src/waytogocoop/computation/moire.py` in the Python stack —
+//! changes here must land in both.
+
 use crate::materials::LatticeType;
 use nalgebra::Vector2;
 use rayon::prelude::*;

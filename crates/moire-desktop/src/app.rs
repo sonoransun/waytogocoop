@@ -1,3 +1,11 @@
+//! `MoireApp` — the egui/eframe application state machine.
+//!
+//! Recompute-on-change: user mutations set `needs_recompute` / `needs_*`
+//! flags, and the next `update()` tick runs the pipeline (isotope → moire →
+//! density → FFT → textures → 3D re-render). Menu bar and keyboard shortcuts
+//! route through `MenuAction` in `ui::menu`; the 2D viewport reads axis and
+//! colorbar metadata from `ui::viewport::view_meta`.
+
 use eframe::egui;
 use moire_core::density::{DensityConfig, DensityResult};
 use moire_core::isotope_effects::{IsotopeEffects, IsotopeEffectsConfig};
@@ -114,6 +122,13 @@ pub struct MoireApp {
     #[serde(default = "default_dark_mode")]
     pub dark_mode: bool,
 
+    /// Whether to render the 3D surface as wireframe instead of filled.
+    #[serde(default)]
+    pub show_wireframe: bool,
+    /// Whether to draw world axes and a scale bar on the 3D surface.
+    #[serde(default = "default_true")]
+    pub show_world_axes: bool,
+
     // --- Runtime state (not serialized) ---
     /// Currently selected tab.
     #[serde(skip)]
@@ -175,9 +190,19 @@ pub struct MoireApp {
     /// Z-slice index for proximity 3D view.
     #[serde(skip)]
     pub z_slice_index: usize,
+    /// Whether the About dialog is currently shown.
+    #[serde(skip)]
+    pub show_about: bool,
+    /// Last screenshot status message (shown transiently in the info panel).
+    #[serde(skip)]
+    pub last_screenshot_status: Option<String>,
 }
 
 fn default_dark_mode() -> bool {
+    true
+}
+
+fn default_true() -> bool {
     true
 }
 
@@ -245,6 +270,8 @@ impl Default for MoireApp {
             show_vortices: false,
             show_majorana: false,
             dark_mode: true,
+            show_wireframe: false,
+            show_world_axes: true,
             active_tab: Tab::Pattern,
             needs_recompute: true,
             needs_surface_rerender: true,
@@ -265,6 +292,8 @@ impl Default for MoireApp {
             needs_magnetic_recompute: true,
             magnetic_texture: None,
             z_slice_index: 0,
+            show_about: false,
+            last_screenshot_status: None,
         }
     }
 }
@@ -423,6 +452,170 @@ impl MoireApp {
         self.comparison_needs_refresh = true;
     }
 
+    /// Dispatch a `MenuAction` (from either the menu bar or a keyboard
+    /// shortcut) to the appropriate state mutation.
+    fn apply_menu_action(&mut self, action: ui::menu::MenuAction, ctx: &egui::Context) {
+        use ui::menu::MenuAction::*;
+        match action {
+            SaveScreenshot => self.save_screenshot(),
+            ResetParameters => self.reset_parameters(),
+            ResetCamera => {
+                self.camera = render::surface3d::Camera3D::default();
+                self.needs_surface_rerender = true;
+            }
+            ToggleWireframe => {
+                self.show_wireframe = !self.show_wireframe;
+                self.needs_surface_rerender = true;
+            }
+            ToggleAxes => {
+                self.show_world_axes = !self.show_world_axes;
+                self.needs_surface_rerender = true;
+            }
+            ToggleTheme => {
+                self.dark_mode = !self.dark_mode;
+                if self.dark_mode {
+                    ctx.set_visuals(egui::Visuals::dark());
+                } else {
+                    ctx.set_visuals(egui::Visuals::light());
+                }
+                self.needs_surface_rerender = true;
+            }
+            ShowAbout => {
+                self.show_about = !self.show_about;
+            }
+            Quit => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+    }
+
+    /// Restore user-editable parameters (twist, extent, resolution, gaps,
+    /// isotope and magnetic flags) to their defaults. Runtime caches and
+    /// textures are cleared so the next frame recomputes everything.
+    pub fn reset_parameters(&mut self) {
+        let dark = self.dark_mode;
+        let mut fresh = Self::default();
+        fresh.dark_mode = dark;
+        *self = fresh;
+    }
+
+    /// Build a high-resolution ColorImage of the currently-displayed view
+    /// without touching on-screen textures.
+    fn capture_current_view(&self) -> Option<egui::ColorImage> {
+        use moire_core::colormap;
+        use render::surface3d::render_surface_3d_opts;
+
+        let opts = self.surface_opts();
+        let bg = if self.dark_mode {
+            egui::Color32::from_rgb(30, 30, 35)
+        } else {
+            egui::Color32::from_rgb(240, 240, 245)
+        };
+        const CAPTURE_W: usize = 1024;
+        const CAPTURE_H: usize = 1024;
+
+        if self.view_mode == ViewMode::Surface3D {
+            let (data, n, colormap): (Vec<f64>, usize, fn(f64) -> [u8; 4]) = match self.active_tab {
+                Tab::Pattern => {
+                    let m = self.moire_result.as_ref()?;
+                    (m.pattern.clone(), m.resolution, colormap::viridis)
+                }
+                Tab::Density | Tab::CooperSurface3D => {
+                    let d = self.density_result.as_ref()?;
+                    let norm = normalize_to_unit_range(&d.gap_field)?;
+                    (norm, d.resolution, colormap::coolwarm)
+                }
+                Tab::Fourier => {
+                    let f = self.fft_data.as_ref()?;
+                    let m = self.moire_result.as_ref()?;
+                    (f.clone(), m.resolution, colormap::inferno)
+                }
+                Tab::MagneticField => {
+                    let d = self.density_result.as_ref()?;
+                    let vr = self.vortex_result.as_ref()?;
+                    let combined = moire_core::magnetic::combined_gap_with_vortices(
+                        &d.gap_field,
+                        &vr.suppression_field,
+                    );
+                    let norm = normalize_to_unit_range(&combined)?;
+                    (norm, d.resolution, colormap::coolwarm)
+                }
+            };
+            return Some(render_surface_3d_opts(
+                &data, n, CAPTURE_W, CAPTURE_H, &self.camera, colormap, bg, &opts,
+            ));
+        }
+
+        let (data_vec, n, colormap): (Vec<f64>, usize, fn(f64) -> [u8; 4]) = match self.active_tab {
+            Tab::Pattern => {
+                let m = self.moire_result.as_ref()?;
+                (m.pattern.clone(), m.resolution, colormap::viridis)
+            }
+            Tab::Density | Tab::CooperSurface3D => {
+                let d = self.density_result.as_ref()?;
+                let norm = normalize_to_unit_range(&d.gap_field)?;
+                (norm, d.resolution, colormap::coolwarm)
+            }
+            Tab::Fourier => {
+                let f = self.fft_data.as_ref()?;
+                let m = self.moire_result.as_ref()?;
+                (f.clone(), m.resolution, colormap::inferno)
+            }
+            Tab::MagneticField => {
+                let d = self.density_result.as_ref()?;
+                let vr = self.vortex_result.as_ref()?;
+                let combined = moire_core::magnetic::combined_gap_with_vortices(
+                    &d.gap_field,
+                    &vr.suppression_field,
+                );
+                let norm = normalize_to_unit_range(&combined)?;
+                (norm, d.resolution, colormap::coolwarm)
+            }
+        };
+
+        // 2D: colormap the grid directly at the source resolution, then let
+        // the PNG encoder upscale perceptually via viewer software. (We keep
+        // the raw grid resolution rather than interpolating to 1024² in CPU.)
+        let pixels: Vec<egui::Color32> = data_vec
+            .iter()
+            .map(|&v| {
+                let [r, g, b, a] = colormap(v);
+                egui::Color32::from_rgba_premultiplied(r, g, b, a)
+            })
+            .collect();
+        Some(egui::ColorImage { size: [n, n], pixels })
+    }
+
+    /// Save the current view to a timestamped PNG in the working directory.
+    /// Updates `last_screenshot_status` with the outcome.
+    pub fn save_screenshot(&mut self) {
+        let Some(image) = self.capture_current_view() else {
+            self.last_screenshot_status = Some(
+                "Screenshot skipped: nothing rendered yet".into(),
+            );
+            return;
+        };
+        let path = render::screenshot::default_screenshot_path();
+        match render::screenshot::save_color_image_to_png(&image, &path) {
+            Ok(()) => {
+                self.last_screenshot_status = Some(format!("Saved {}", path.display()));
+            }
+            Err(e) => {
+                self.last_screenshot_status = Some(format!("Screenshot failed: {e}"));
+            }
+        }
+    }
+
+    /// Options bundle that captures the current user toggles for 3D overlays.
+    fn surface_opts(&self) -> render::surface3d::SurfaceRenderOpts {
+        render::surface3d::SurfaceRenderOpts {
+            show_wireframe: self.show_wireframe,
+            show_axes: self.show_world_axes,
+            show_scale_bar: self.show_world_axes,
+            physical_extent: self.physical_extent as f32,
+        }
+    }
+
     /// Re-render the 3D surface texture from cached data.
     fn rerender_surface(&mut self, ctx: &egui::Context) {
         let surface_bg = if self.dark_mode {
@@ -430,6 +623,7 @@ impl MoireApp {
         } else {
             egui::Color32::from_rgb(240, 240, 245)
         };
+        let opts = self.surface_opts();
 
         let (data, n, colormap): (&[f64], usize, fn(f64) -> [u8; 4]) = match self.active_tab {
             Tab::Pattern => {
@@ -471,13 +665,14 @@ impl MoireApp {
                             &vr.suppression_field,
                         );
                         if let Some(norm) = normalize_to_unit_range(&combined) {
-                            let img = render::surface3d::render_surface_3d_with_bg(
+                            let img = render::surface3d::render_surface_3d_opts(
                                 &norm,
                                 d.resolution,
                                 512, 512,
                                 &self.camera,
                                 moire_core::colormap::coolwarm,
                                 surface_bg,
+                                &opts,
                             );
                             self.surface_texture =
                                 Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
@@ -493,7 +688,7 @@ impl MoireApp {
         if self.active_tab == Tab::Density || self.active_tab == Tab::CooperSurface3D {
             if let Some(ref d) = self.density_result {
                 if let Some(norm) = normalize_to_unit_range(&d.gap_field) {
-                    let img = render::surface3d::render_surface_3d_with_bg(
+                    let img = render::surface3d::render_surface_3d_opts(
                         &norm,
                         d.resolution,
                         512,
@@ -501,6 +696,7 @@ impl MoireApp {
                         &self.camera,
                         moire_core::colormap::coolwarm,
                         surface_bg,
+                        &opts,
                     );
                     self.surface_texture =
                         Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
@@ -513,8 +709,9 @@ impl MoireApp {
             return;
         }
 
-        let img =
-            render::surface3d::render_surface_3d_with_bg(data, n, 512, 512, &self.camera, colormap, surface_bg);
+        let img = render::surface3d::render_surface_3d_opts(
+            data, n, 512, 512, &self.camera, colormap, surface_bg, &opts,
+        );
         self.surface_texture =
             Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
     }
@@ -637,7 +834,8 @@ impl MoireApp {
             };
 
             if self.view_mode == ViewMode::Surface3D {
-                let img = render::surface3d::render_surface_3d_with_bg(
+                let comp_opts = self.surface_opts();
+                let img = render::surface3d::render_surface_3d_opts(
                     &moire.pattern,
                     comp_res,
                     256,
@@ -645,6 +843,7 @@ impl MoireApp {
                     &self.camera,
                     moire_core::colormap::viridis,
                     surface_bg,
+                    &comp_opts,
                 );
                 textures
                     .push(ctx.load_texture("comp_moire", img, egui::TextureOptions::LINEAR));
@@ -669,7 +868,8 @@ impl MoireApp {
                 .unwrap_or_else(|| vec![0.5; density.gap_field.len()]);
 
             if self.view_mode == ViewMode::Surface3D {
-                let img = render::surface3d::render_surface_3d_with_bg(
+                let comp_opts = self.surface_opts();
+                let img = render::surface3d::render_surface_3d_opts(
                     &d_norm,
                     comp_res,
                     256,
@@ -677,6 +877,7 @@ impl MoireApp {
                     &self.camera,
                     moire_core::colormap::coolwarm,
                     surface_bg,
+                    &comp_opts,
                 );
                 textures
                     .push(ctx.load_texture("comp_density", img, egui::TextureOptions::LINEAR));
@@ -701,6 +902,15 @@ impl eframe::App for MoireApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Keyboard shortcuts + menu bar. Both surface the same MenuAction
+        // enum so the routing below handles either equivalently. Done before
+        // the compute pass so Reset/Wireframe toggles take effect this frame.
+        let kbd_action = ui::menu::detect_shortcut(ctx);
+        let menu_action = ui::menu::show(ctx, self);
+        if let Some(act) = menu_action.or(kbd_action) {
+            self.apply_menu_action(act, ctx);
+        }
+
         if self.needs_recompute {
             self.recompute(ctx);
             self.needs_magnetic_recompute = true;
@@ -731,6 +941,12 @@ impl eframe::App for MoireApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui::viewport::show_viewport(ui, self);
         });
+
+        if self.show_about {
+            let mut open = self.show_about;
+            ui::about::show(ctx, &mut open);
+            self.show_about = open;
+        }
 
         // Comparison window
         if self.show_comparison {

@@ -8,6 +8,7 @@ import numpy as np
 import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dcc, html
 
+from waytogocoop.components.controls import loading_spinner
 from waytogocoop.components.figure_factory import create_sweep_plot
 from waytogocoop.computation.moire import moire_periodicity_1d, moire_periodicity_with_twist
 from waytogocoop.computation.superconducting import cpdm_amplitude
@@ -89,14 +90,17 @@ layout = dbc.Container(
                             ]
                         )
                     ),
-                    md=3,
+                    xs=12, md=4, lg=3,
                 ),
                 dbc.Col(
                     [
-                        dcc.Loading(dcc.Graph(id="sweep-graph")),
+                        loading_spinner(
+                            dcc.Graph(id="sweep-graph"),
+                            "Computing parameter sweep…",
+                        ),
                         html.Div(id="sweep-material-markers"),
                     ],
-                    md=9,
+                    xs=12, md=8, lg=9,
                 ),
             ]
         ),

@@ -150,6 +150,73 @@ layout = dbc.Container(
             ]
         ),
         html.Br(),
+        dbc.Row(
+            dbc.Col(
+                dbc.Accordion(
+                    [
+                        dbc.AccordionItem(
+                            [
+                                html.P(
+                                    [
+                                        "This application visualizes moire superlattice "
+                                        "patterns and the Cooper-pair density modulation "
+                                        "(CPDM) they induce in the proximity-coupled "
+                                        "superconducting gap. For the physics, see the "
+                                        "preprint: ",
+                                        html.A(
+                                            "arXiv:2602.22637",
+                                            href="https://arxiv.org/abs/2602.22637",
+                                            target="_blank",
+                                        ),
+                                        ".",
+                                    ]
+                                ),
+                                html.H6("Validated modules"),
+                                html.Ul(
+                                    [
+                                        html.Li("Moire patterns — plane-wave superposition."),
+                                        html.Li(
+                                            "Gap modulation — BCS proximity with moire "
+                                            "amplitude scaling."
+                                        ),
+                                        html.Li("FFT analysis — peak detection over power spectrum."),
+                                    ]
+                                ),
+                                html.H6("Speculative modules"),
+                                html.Ul(
+                                    [
+                                        html.Li(
+                                            "Isotope effects on the gap and coherence length "
+                                            "(no direct Te-isotope data for FeTe; α taken from "
+                                            "Ba(Fe,Co)₂As₂ consensus)."
+                                        ),
+                                        html.Li(
+                                            "Topological proximity / Majorana modes — 3D "
+                                            "extensions of the 2D model."
+                                        ),
+                                        html.Li(
+                                            "Abrikosov vortex lattice + Zeeman / Pauli limits — "
+                                            "simplified models not validated for these "
+                                            "heterostructures."
+                                        ),
+                                    ]
+                                ),
+                                html.P(
+                                    "Speculative module outputs carry a (SPECULATIVE) tag in "
+                                    "the title. Treat them as exploratory illustrations, not "
+                                    "quantitative predictions.",
+                                    className="text-muted small",
+                                ),
+                            ],
+                            title="About / Physics Reference",
+                        )
+                    ],
+                    start_collapsed=True,
+                ),
+                width=12,
+            )
+        ),
+        html.Br(),
     ],
     fluid=True,
     className="p-4",

@@ -120,6 +120,17 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
         changed = true;
     }
 
+    ui.add_space(12.0);
+
+    // --- 3D view options ---
+    ui.label("3D overlays:");
+    if ui.checkbox(&mut app.show_world_axes, "World axes + scale bar").changed() {
+        app.needs_surface_rerender = true;
+    }
+    if ui.checkbox(&mut app.show_wireframe, "Wireframe").changed() {
+        app.needs_surface_rerender = true;
+    }
+
     ui.add_space(16.0);
     ui.separator();
     ui.add_space(8.0);

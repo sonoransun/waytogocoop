@@ -1,3 +1,9 @@
+//! Cooper-pair density modulation from a moire pattern.
+//!
+//! Given a moire intensity field, produces a spatially varying
+//! superconducting gap `Δ(r) = Δ_avg + δΔ · pattern(r)` in meV. Mirrors
+//! `src/waytogocoop/computation/superconducting.py`.
+
 use crate::moire::MoireResult;
 use rayon::prelude::*;
 use std::f64::consts::PI;

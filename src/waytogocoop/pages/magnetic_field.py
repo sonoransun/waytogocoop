@@ -59,7 +59,7 @@ layout = dbc.Container(
                         create_parameter_panel(_PREFIX),
                         create_magnetic_panel(_PREFIX),
                     ],
-                    md=3,
+                    xs=12, md=4, lg=3,
                 ),
                 # Right — visualization
                 dbc.Col(
@@ -68,7 +68,7 @@ layout = dbc.Container(
                         html.Hr(),
                         html.Div(id=f"{_PREFIX}-info-panel"),
                     ],
-                    md=9,
+                    xs=12, md=8, lg=9,
                 ),
             ]
         ),

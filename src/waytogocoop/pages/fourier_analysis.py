@@ -7,6 +7,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from dash import Input, Output, callback, dash_table, dcc, html
 
+from waytogocoop.components.controls import loading_spinner, open_in_viewer_button
 from waytogocoop.components.figure_factory import create_fft_heatmap
 from waytogocoop.components.material_selector import create_material_selector
 from waytogocoop.components.parameter_panel import create_parameter_panel
@@ -23,6 +24,14 @@ dash.register_page(
 
 _PREFIX = "fourier"
 
+_VIEWER_BINDINGS = [
+    (f"{_PREFIX}-substrate-dropdown", "value", "substrate"),
+    (f"{_PREFIX}-overlayer-dropdown", "value", "overlayer"),
+    (f"{_PREFIX}-twist-slider", "value", "twist"),
+    (f"{_PREFIX}-grid-size", "value", "grid_size"),
+    (f"{_PREFIX}-physical-extent", "value", "extent"),
+]
+
 layout = dbc.Container(
     [
         html.Br(),
@@ -36,14 +45,25 @@ layout = dbc.Container(
                         create_material_selector(_PREFIX),
                         create_parameter_panel(_PREFIX),
                     ],
-                    md=3,
+                    xs=12, md=4, lg=3,
                 ),
                 # Right column — FFT figure and peaks table
                 dbc.Col(
                     [
-                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-fft-graph")),
+                        loading_spinner(
+                            dcc.Graph(id=f"{_PREFIX}-fft-graph"),
+                            "Computing FFT power spectrum…",
+                        ),
                         html.Br(),
-                        html.H5("Detected Peaks"),
+                        html.Div(
+                            [
+                                html.H5("Detected Peaks", style={"display": "inline-block"}),
+                                html.Span(
+                                    open_in_viewer_button(_PREFIX, _VIEWER_BINDINGS),
+                                    style={"marginLeft": "16px"},
+                                ),
+                            ]
+                        ),
                         dash_table.DataTable(
                             id=f"{_PREFIX}-peaks-table",
                             columns=[
@@ -61,7 +81,7 @@ layout = dbc.Container(
                             },
                         ),
                     ],
-                    md=9,
+                    xs=12, md=8, lg=9,
                 ),
             ]
         ),

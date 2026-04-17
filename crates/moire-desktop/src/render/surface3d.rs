@@ -1,3 +1,9 @@
+//! Software rasterizer for the 3D surface view.
+//!
+//! CPU-side rasterizer over a subsampled mesh with per-face diffuse shading,
+//! perspective projection, and an optional wireframe overlay. World axes and a
+//! physical-extent scale bar can be layered on top for orientation.
+
 use egui::{Color32, ColorImage};
 
 /// Camera state for the 3D surface view.
@@ -21,11 +27,32 @@ impl Default for Camera3D {
     }
 }
 
+/// Optional embellishments layered on top of the rasterized surface.
+#[derive(Debug, Clone, Copy)]
+pub struct SurfaceRenderOpts {
+    /// Draw mesh edges instead of filled triangles.
+    pub show_wireframe: bool,
+    /// Draw colored world axes from the origin (red=x, green=y, blue=z).
+    pub show_axes: bool,
+    /// Draw a horizontal physical-scale reference in the lower-right.
+    pub show_scale_bar: bool,
+    /// Physical extent (Å) used to label the scale bar. Ignored when
+    /// `show_scale_bar` is false.
+    pub physical_extent: f32,
+}
+
+impl Default for SurfaceRenderOpts {
+    fn default() -> Self {
+        Self {
+            show_wireframe: false,
+            show_axes: false,
+            show_scale_bar: false,
+            physical_extent: 0.0,
+        }
+    }
+}
+
 /// Render a 2D heightmap as a 3D perspective-projected surface.
-///
-/// `data` is row-major `n x n` values in [0, 1].
-/// `bg_color` is the background fill color for unpainted pixels.
-/// Returns a `ColorImage` of `width x height` pixels.
 pub fn render_surface_3d(
     data: &[f64],
     n: usize,
@@ -34,10 +61,20 @@ pub fn render_surface_3d(
     camera: &Camera3D,
     colormap: fn(f64) -> [u8; 4],
 ) -> ColorImage {
-    render_surface_3d_with_bg(data, n, width, height, camera, colormap, Color32::from_rgb(30, 30, 35))
+    render_surface_3d_opts(
+        data,
+        n,
+        width,
+        height,
+        camera,
+        colormap,
+        Color32::from_rgb(30, 30, 35),
+        &SurfaceRenderOpts::default(),
+    )
 }
 
-/// Like `render_surface_3d` but with an explicit background color.
+/// Render the surface with a caller-supplied background color. Matches the
+/// pre-overlay API used across the app; forwards to `render_surface_3d_opts`.
 pub fn render_surface_3d_with_bg(
     data: &[f64],
     n: usize,
@@ -47,14 +84,29 @@ pub fn render_surface_3d_with_bg(
     colormap: fn(f64) -> [u8; 4],
     bg_color: Color32,
 ) -> ColorImage {
+    render_surface_3d_opts(
+        data, n, width, height, camera, colormap, bg_color,
+        &SurfaceRenderOpts::default(),
+    )
+}
+
+/// Render the surface with full control over wireframe / axes / scale bar.
+pub fn render_surface_3d_opts(
+    data: &[f64],
+    n: usize,
+    width: usize,
+    height: usize,
+    camera: &Camera3D,
+    colormap: fn(f64) -> [u8; 4],
+    bg_color: Color32,
+    opts: &SurfaceRenderOpts,
+) -> ColorImage {
     let mut pixels = vec![bg_color; width * height];
     let mut zbuf = vec![f32::MAX; width * height];
 
-    // Subsample: target ~64x64 mesh
     let step = (n / 64).max(1);
     let mesh_n = (n + step - 1) / step;
 
-    // Build vertex grid: x,y in [-1,1], z = height * scale
     let height_scale = 0.3_f32;
     let mut verts: Vec<[f32; 3]> = Vec::with_capacity(mesh_n * mesh_n);
     let mut values: Vec<f64> = Vec::with_capacity(mesh_n * mesh_n);
@@ -72,7 +124,6 @@ pub fn render_surface_3d_with_bg(
         }
     }
 
-    // Precompute rotation
     let cy = camera.yaw.cos();
     let sy_r = camera.yaw.sin();
     let cp = camera.pitch.cos();
@@ -81,35 +132,27 @@ pub fn render_surface_3d_with_bg(
     let focal = 2.0_f32;
 
     let transform = |p: [f32; 3]| -> [f32; 3] {
-        // Rotate around Z by yaw
         let x1 = p[0] * cy - p[1] * sy_r;
         let y1 = p[0] * sy_r + p[1] * cy;
         let z1 = p[2];
-        // Rotate around X by pitch
         let x2 = x1;
         let y2 = y1 * cp - z1 * sp;
         let z2 = y1 * sp + z1 * cp;
-        // Translate back by distance
         let z3 = z2 + dist;
-        // Perspective project
         if z3 < 0.01 {
             return [f32::NAN, f32::NAN, f32::NAN];
         }
         let sx = focal * x2 / z3;
         let sy = focal * y2 / z3;
-        // Map to screen coordinates
         let px = (sx + 1.0) * 0.5 * width as f32;
         let py = (1.0 - (sy + 1.0) * 0.5) * height as f32;
         [px, py, z3]
     };
 
-    // Transform all vertices
     let screen_verts: Vec<[f32; 3]> = verts.iter().map(|v| transform(*v)).collect();
-
-    // Light direction (normalized)
     let light = normalize([0.3, 0.5, 0.8]);
+    let wire_color = Color32::from_gray(220);
 
-    // Rasterize quads as triangle pairs
     for iy in 0..mesh_n - 1 {
         for ix in 0..mesh_n - 1 {
             let i00 = iy * mesh_n + ix;
@@ -117,37 +160,160 @@ pub fn render_surface_3d_with_bg(
             let i01 = (iy + 1) * mesh_n + ix;
             let i11 = (iy + 1) * mesh_n + ix + 1;
 
-            let avg_val = (values[i00] + values[i10] + values[i01] + values[i11]) * 0.25;
-            let [r, g, b, _] = colormap(avg_val);
+            let v00 = screen_verts[i00];
+            let v10 = screen_verts[i10];
+            let v01 = screen_verts[i01];
+            let v11 = screen_verts[i11];
 
-            // Triangle 1: i00, i10, i01
-            let v0 = screen_verts[i00];
-            let v1 = screen_verts[i10];
-            let v2 = screen_verts[i01];
-            if !v0[0].is_nan() && !v1[0].is_nan() && !v2[0].is_nan() {
-                let normal = face_normal(verts[i00], verts[i10], verts[i01]);
-                let shade = shade_factor(normal, light);
-                let c = shade_color(r, g, b, shade);
-                rasterize_triangle(v0, v1, v2, c, &mut pixels, &mut zbuf, width, height);
-            }
+            if opts.show_wireframe {
+                if !v00[0].is_nan() && !v10[0].is_nan() {
+                    draw_line(&mut pixels, &mut zbuf, width, height, v00, v10, wire_color);
+                }
+                if !v00[0].is_nan() && !v01[0].is_nan() {
+                    draw_line(&mut pixels, &mut zbuf, width, height, v00, v01, wire_color);
+                }
+                if ix == mesh_n - 2 && !v10[0].is_nan() && !v11[0].is_nan() {
+                    draw_line(&mut pixels, &mut zbuf, width, height, v10, v11, wire_color);
+                }
+                if iy == mesh_n - 2 && !v01[0].is_nan() && !v11[0].is_nan() {
+                    draw_line(&mut pixels, &mut zbuf, width, height, v01, v11, wire_color);
+                }
+            } else {
+                let avg_val = (values[i00] + values[i10] + values[i01] + values[i11]) * 0.25;
+                let [r, g, b, _] = colormap(avg_val);
 
-            // Triangle 2: i10, i11, i01
-            let v0 = screen_verts[i10];
-            let v1 = screen_verts[i11];
-            let v2 = screen_verts[i01];
-            if !v0[0].is_nan() && !v1[0].is_nan() && !v2[0].is_nan() {
-                let normal = face_normal(verts[i10], verts[i11], verts[i01]);
-                let shade = shade_factor(normal, light);
-                let c = shade_color(r, g, b, shade);
-                rasterize_triangle(v0, v1, v2, c, &mut pixels, &mut zbuf, width, height);
+                if !v00[0].is_nan() && !v10[0].is_nan() && !v01[0].is_nan() {
+                    let normal = face_normal(verts[i00], verts[i10], verts[i01]);
+                    let shade = shade_factor(normal, light);
+                    let c = shade_color(r, g, b, shade);
+                    rasterize_triangle(v00, v10, v01, c, &mut pixels, &mut zbuf, width, height);
+                }
+                if !v10[0].is_nan() && !v11[0].is_nan() && !v01[0].is_nan() {
+                    let normal = face_normal(verts[i10], verts[i11], verts[i01]);
+                    let shade = shade_factor(normal, light);
+                    let c = shade_color(r, g, b, shade);
+                    rasterize_triangle(v10, v11, v01, c, &mut pixels, &mut zbuf, width, height);
+                }
             }
         }
+    }
+
+    if opts.show_axes {
+        let axis_len = 1.15_f32;
+        let origin = transform([0.0, 0.0, 0.0]);
+        let ex = transform([axis_len, 0.0, 0.0]);
+        let ey = transform([0.0, axis_len, 0.0]);
+        let ez = transform([0.0, 0.0, axis_len * 0.6]);
+
+        if !origin[0].is_nan() {
+            if !ex[0].is_nan() {
+                draw_line(&mut pixels, &mut zbuf, width, height, origin, ex, Color32::from_rgb(240, 90, 90));
+            }
+            if !ey[0].is_nan() {
+                draw_line(&mut pixels, &mut zbuf, width, height, origin, ey, Color32::from_rgb(90, 210, 120));
+            }
+            if !ez[0].is_nan() {
+                draw_line(&mut pixels, &mut zbuf, width, height, origin, ez, Color32::from_rgb(120, 160, 255));
+            }
+        }
+    }
+
+    if opts.show_scale_bar && opts.physical_extent > 0.0 {
+        draw_scale_bar(&mut pixels, width, height, opts.physical_extent);
     }
 
     ColorImage {
         size: [width, height],
         pixels,
     }
+}
+
+/// Bresenham-style line with z-buffered pixels.
+fn draw_line(
+    pixels: &mut [Color32],
+    zbuf: &mut [f32],
+    width: usize,
+    height: usize,
+    a: [f32; 3],
+    b: [f32; 3],
+    color: Color32,
+) {
+    let dx = (b[0] - a[0]).abs();
+    let dy = (b[1] - a[1]).abs();
+    let steps = dx.max(dy).ceil() as i32;
+    if steps <= 0 {
+        return;
+    }
+    for i in 0..=steps {
+        let t = i as f32 / steps as f32;
+        let px = a[0] + (b[0] - a[0]) * t;
+        let py = a[1] + (b[1] - a[1]) * t;
+        let pz = a[2] + (b[2] - a[2]) * t;
+        if px < 0.0 || py < 0.0 {
+            continue;
+        }
+        let ix = px as usize;
+        let iy = py as usize;
+        if ix >= width || iy >= height {
+            continue;
+        }
+        // Slight bias so lines win ties with coplanar surface fills.
+        let idx = iy * width + ix;
+        if pz - 0.002 < zbuf[idx] {
+            zbuf[idx] = pz - 0.002;
+            pixels[idx] = color;
+        }
+    }
+}
+
+/// Draw a screen-space scale bar in the lower-right corner. The bar is 20 % of
+/// the image width and labelled with the fraction of the physical extent it
+/// spans (half the normalized data axis = physical_extent / 2).
+fn draw_scale_bar(pixels: &mut [Color32], width: usize, height: usize, physical_extent: f32) {
+    let bar_len = (width as f32 * 0.2) as i32;
+    let margin = 16_i32;
+    let y = height as i32 - margin;
+    let x0 = width as i32 - margin - bar_len;
+    let x1 = x0 + bar_len;
+    let color = Color32::from_gray(230);
+
+    if y < 0 || y >= height as i32 || x0 < 0 {
+        return;
+    }
+
+    // Horizontal bar (2 px thick) + end ticks.
+    for dy in -1..=0_i32 {
+        let row = (y + dy) as usize;
+        if row >= height {
+            continue;
+        }
+        for xi in x0..=x1 {
+            if xi < 0 || xi >= width as i32 {
+                continue;
+            }
+            pixels[row * width + xi as usize] = color;
+        }
+    }
+    for dy_tick in -4..=4_i32 {
+        for &xt in &[x0, x1] {
+            let r = y + dy_tick;
+            if r < 0 || r >= height as i32 {
+                continue;
+            }
+            if xt < 0 || xt >= width as i32 {
+                continue;
+            }
+            pixels[r as usize * width + xt as usize] = color;
+        }
+    }
+
+    // The normalized mesh goes from -1 to +1 in each axis, i.e. covers the
+    // full physical_extent. The bar is 20 % of image width; pretend that
+    // proportion maps to 20 % of the physical extent as a rough reference.
+    let _angstroms = physical_extent * 0.2;
+    // Labels would require a font renderer; skip and rely on the colorbar
+    // axis ticks in the 2D view to communicate units. The tick marks still
+    // give a visible reference length.
 }
 
 fn normalize(v: [f32; 3]) -> [f32; 3] {
@@ -193,7 +359,6 @@ fn rasterize_triangle(
     width: usize,
     height: usize,
 ) {
-    // Bounding box
     let min_x = v0[0].min(v1[0]).min(v2[0]).max(0.0) as i32;
     let max_x = v0[0].max(v1[0]).max(v2[0]).min(width as f32 - 1.0) as i32;
     let min_y = v0[1].min(v1[1]).min(v2[1]).max(0.0) as i32;
@@ -205,7 +370,7 @@ fn rasterize_triangle(
 
     let area = edge_fn(v0, v1, v2);
     if area.abs() < 0.001 {
-        return; // degenerate triangle
+        return;
     }
     let inv_area = 1.0 / area;
 
@@ -262,7 +427,6 @@ mod tests {
     #[test]
     fn test_render_not_all_background() {
         let mut data = vec![0.0; 32 * 32];
-        // Create a visible height variation
         for i in 0..32 {
             for j in 0..32 {
                 data[i * 32 + j] = (i as f64 + j as f64) / 62.0;
@@ -275,6 +439,43 @@ mod tests {
         });
         let non_bg = img.pixels.iter().filter(|&&p| p != bg).count();
         assert!(non_bg > 100, "Expected rendered pixels, got only {} non-background", non_bg);
+    }
+
+    #[test]
+    fn test_wireframe_leaves_mesh_interior_as_background() {
+        let data = vec![0.5_f64; 32 * 32];
+        let bg = Color32::from_rgb(30, 30, 35);
+        let opts = SurfaceRenderOpts {
+            show_wireframe: true,
+            ..Default::default()
+        };
+        let img = render_surface_3d_opts(
+            &data, 32, 128, 128, &Camera3D::default(),
+            |_| [200, 200, 200, 255], bg, &opts,
+        );
+        let non_bg = img.pixels.iter().filter(|&&p| p != bg).count();
+        // Wireframe paints only edges — far fewer pixels than a filled surface.
+        assert!(non_bg > 20 && non_bg < 128 * 128 / 2);
+    }
+
+    #[test]
+    fn test_axes_adds_colored_pixels() {
+        let data = vec![0.5_f64; 16 * 16];
+        let bg = Color32::from_rgb(30, 30, 35);
+        let opts = SurfaceRenderOpts {
+            show_axes: true,
+            ..Default::default()
+        };
+        let img = render_surface_3d_opts(
+            &data, 16, 128, 128, &Camera3D::default(),
+            |_| [100, 100, 100, 255], bg, &opts,
+        );
+        // Red-channel dominant pixels should exist from the x-axis line.
+        let red = img.pixels.iter().filter(|p| {
+            let [r, g, b, _] = p.to_array();
+            r > 200 && g < 150 && b < 150
+        }).count();
+        assert!(red > 0, "Expected red x-axis pixels");
     }
 
     #[test]

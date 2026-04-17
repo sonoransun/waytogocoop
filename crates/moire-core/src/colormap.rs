@@ -1,3 +1,12 @@
+//! Colormap palettes for scalar-field visualization.
+//!
+//! Convention (must stay in sync with Python `figure_factory.py`):
+//! - `viridis`  — unsigned scalar fields (moire pattern, generic surface).
+//! - `coolwarm` — diverging / signed fields (gap modulation, combined gap).
+//! - `inferno`  — FFT power spectra (log-scaled, normalized).
+//!
+//! Each palette maps a value `t` in `[0, 1]` to an RGBA quadruplet.
+
 /// Interpolate between colormap control points.
 /// Each control point is (t, r, g, b) where t is in [0, 1] and r,g,b are in [0, 255].
 fn interpolate_colormap(t: f64, points: &[(f64, f64, f64, f64)]) -> [u8; 4] {

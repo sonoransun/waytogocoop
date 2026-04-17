@@ -12,6 +12,34 @@ Based on [Moire Engineering of Cooper-Pair Density Modulation States](https://ar
 
 ---
 
+## Quick Start
+
+```bash
+# Python web UI (http://localhost:8050)
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+python -m waytogocoop.app
+
+# Rust native desktop (on any platform with a cargo toolchain)
+cargo run --release -p moire-desktop
+```
+
+Once the Python app is running, the **Moire Viewer** at `/viewer` is the best entry point — pick a substrate/overlayer pair from the preset dropdown ("Sb₂Te₃ / FeTe (paper default)" is a good start) and adjust the twist angle to see the moire period shrink. Hover any heatmap for unit-labelled `(x Å, y Å, value)` readouts. Click **Open in Moire Viewer** on the Fourier page to re-load the same material pair in real space.
+
+The Rust desktop app uses the same physics core. Menu bar: **File → Save screenshot** (Ctrl+S), **Edit → Reset parameters** (Ctrl+R), **View → Reset 3D camera** (R), **Toggle wireframe** (W). **F1** opens the About dialog with the arxiv link.
+
+### Screenshots
+
+Screenshots are kept in [`docs/images/`](docs/images/). Capture new ones with Ctrl+S from the Rust app or Plotly's camera button in the Python app.
+
+- **Moire Viewer (Python)** — real-space pattern with hover readouts and 3D surface toggle.
+- **Fourier Analysis (Python)** — FFT log₁₀(|F|²) colorbar and clickable peaks table.
+- **Proximity 3D (Python)** — volumetric isosurface annotated with the z=0 interface plane and the ξ_prox decay length.
+- **Rust Desktop 2D** — pattern with axis ticks and a vertical colorbar.
+- **Rust Desktop 3D** — shaded surface with optional wireframe and world axes.
+
+---
+
 ## What This Software Does
 
 Good Job Coop analyzes how superconducting states are spatially modulated when a thin topological insulator film is grown on an iron-chalcogenide substrate. The lattice mismatch between the two layers creates a moire superlattice -- a long-wavelength interference pattern -- that imprints a periodic variation onto the superconducting Cooper-pair density. This tool lets you predict, visualize, and explore those modulations for different material combinations.

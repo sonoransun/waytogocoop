@@ -1,4 +1,11 @@
-"""Plotly figure constructors for moire visualisation."""
+"""Plotly figure constructors for moire visualisation.
+
+Colormap convention (must stay in sync with crates/moire-core/src/colormap.rs):
+- Viridis   — unsigned scalar fields (moire pattern, surface plots)
+- RdBu_r    — signed gap modulation and gap-aware overlays (meV)
+- Hot       — FFT power spectrum (log10 scaled), Majorana density
+- Plasma    — susceptibility (arbitrary units)
+"""
 
 from __future__ import annotations
 
@@ -7,21 +14,42 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
+# ---------------------------------------------------------------------------
+# Theme + shared layout helpers
+# ---------------------------------------------------------------------------
+
+
 def _template(dark: bool = True) -> str:
-    """Return the Plotly template name for the current theme."""
     return "plotly_dark" if dark else "plotly_white"
 
 
 def _line_colors(dark: bool = True) -> tuple[str, str, str]:
-    """Return (primary, secondary, muted) line colors for the theme."""
     if dark:
         return "#5dade2", "#ec7063", "#888"
     return "steelblue", "firebrick", "gray"
 
 
 def _marker_color(dark: bool = True) -> str:
-    """Return marker color contrasting with the background."""
     return "white" if dark else "black"
+
+
+def _equal_aspect_axes() -> dict:
+    """Strict 1:1 pixel aspect for real-space heatmaps."""
+    return dict(scaleanchor="x", scaleratio=1, constrain="domain")
+
+
+def _hover_scalar(x_unit: str, y_unit: str, value_label: str, value_fmt: str = ".3g") -> str:
+    return (
+        f"x: %{{x:.2f}} {x_unit}"
+        f"<br>y: %{{y:.2f}} {y_unit}"
+        f"<br>{value_label}: %{{z:{value_fmt}}}"
+        "<extra></extra>"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Real-space 2D heatmaps
+# ---------------------------------------------------------------------------
 
 
 def create_moire_heatmap(
@@ -31,19 +59,7 @@ def create_moire_heatmap(
     title: str = "Moire Pattern",
     dark: bool = True,
 ) -> go.Figure:
-    """Create a heatmap of the real-space moire pattern.
-
-    Parameters
-    ----------
-    x, y : np.ndarray
-        1D coordinate axes (Angstrom).
-    pattern : np.ndarray
-        2D pattern values.
-    title : str
-        Figure title.
-    dark : bool
-        Whether to use dark theme styling.
-    """
+    """Heatmap of the real-space moire pattern."""
     fig = go.Figure(
         data=go.Heatmap(
             z=pattern,
@@ -51,13 +67,14 @@ def create_moire_heatmap(
             y=y,
             colorscale="Viridis",
             colorbar=dict(title="Intensity"),
+            hovertemplate=_hover_scalar("Å", "Å", "intensity"),
         )
     )
     fig.update_layout(
         title=title,
-        xaxis_title="x (Angstrom)",
-        yaxis_title="y (Angstrom)",
-        yaxis_scaleanchor="x",
+        xaxis_title="x (Å)",
+        yaxis_title="y (Å)",
+        yaxis=_equal_aspect_axes(),
         margin=dict(l=60, r=20, t=50, b=50),
         template=_template(dark),
     )
@@ -71,33 +88,22 @@ def create_gap_heatmap(
     title: str = "Gap Modulation",
     dark: bool = True,
 ) -> go.Figure:
-    """Create a heatmap of the spatially varying superconducting gap.
-
-    Parameters
-    ----------
-    x, y : np.ndarray
-        1D coordinate axes (Angstrom).
-    gap_field : np.ndarray
-        2D gap values (meV).
-    title : str
-        Figure title.
-    dark : bool
-        Whether to use dark theme styling.
-    """
+    """Heatmap of the spatially varying superconducting gap."""
     fig = go.Figure(
         data=go.Heatmap(
             z=gap_field,
             x=x,
             y=y,
             colorscale="RdBu_r",
-            colorbar=dict(title="Delta (meV)"),
+            colorbar=dict(title="Δ (meV)"),
+            hovertemplate=_hover_scalar("Å", "Å", "Δ (meV)"),
         )
     )
     fig.update_layout(
         title=title,
-        xaxis_title="x (Angstrom)",
-        yaxis_title="y (Angstrom)",
-        yaxis_scaleanchor="x",
+        xaxis_title="x (Å)",
+        yaxis_title="y (Å)",
+        yaxis=_equal_aspect_axes(),
         margin=dict(l=60, r=20, t=50, b=50),
         template=_template(dark),
     )
@@ -111,145 +117,28 @@ def create_fft_heatmap(
     title: str = "FFT Power Spectrum",
     dark: bool = True,
 ) -> go.Figure:
-    """Create a heatmap of the FFT power spectrum.
-
-    Parameters
-    ----------
-    kx, ky : np.ndarray
-        1D wavevector axes (inverse Angstrom).
-    power_spectrum : np.ndarray
-        2D log-scaled power spectrum.
-    title : str
-        Figure title.
-    dark : bool
-        Whether to use dark theme styling.
-    """
+    """Heatmap of the log-scaled FFT power spectrum."""
     fig = go.Figure(
         data=go.Heatmap(
             z=power_spectrum,
             x=kx,
             y=ky,
             colorscale="Hot",
-            colorbar=dict(title="log10(|F|^2)"),
+            colorbar=dict(title="log₁₀(|F|²)"),
+            hovertemplate=(
+                "kx: %{x:.3f} 1/Å"
+                "<br>ky: %{y:.3f} 1/Å"
+                "<br>log₁₀(|F|²): %{z:.2f}"
+                "<extra></extra>"
+            ),
         )
     )
     fig.update_layout(
         title=title,
-        xaxis_title="kx (1/Angstrom)",
-        yaxis_title="ky (1/Angstrom)",
-        yaxis_scaleanchor="x",
+        xaxis_title="kx (1/Å)",
+        yaxis_title="ky (1/Å)",
+        yaxis=_equal_aspect_axes(),
         margin=dict(l=60, r=20, t=50, b=50),
-        template=_template(dark),
-    )
-    return fig
-
-
-def create_sweep_plot(
-    param_values: np.ndarray,
-    periods: np.ndarray,
-    amplitudes: np.ndarray,
-    param_name: str = "Parameter",
-    dark: bool = True,
-) -> go.Figure:
-    """Create a dual-axis line plot for parameter sweeps.
-
-    Left y-axis: moire period.  Right y-axis: CPDM amplitude.
-
-    Parameters
-    ----------
-    param_values : np.ndarray
-        Swept parameter values.
-    periods : np.ndarray
-        Moire periods (Angstrom).
-    amplitudes : np.ndarray
-        CPDM amplitudes (dimensionless).
-    param_name : str
-        Label for the x-axis.
-    dark : bool
-        Whether to use dark theme styling.
-    """
-    primary, secondary, _muted = _line_colors(dark)
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    fig.add_trace(
-        go.Scatter(
-            x=param_values,
-            y=periods,
-            name="Moire period (A)",
-            mode="lines+markers",
-            line=dict(color=primary),
-        ),
-        secondary_y=False,
-    )
-
-    fig.add_trace(
-        go.Scatter(
-            x=param_values,
-            y=amplitudes,
-            name="CPDM amplitude",
-            mode="lines+markers",
-            line=dict(color=secondary),
-        ),
-        secondary_y=True,
-    )
-
-    fig.update_layout(
-        title=f"Parameter Sweep: {param_name}",
-        xaxis_title=param_name,
-        margin=dict(l=60, r=60, t=50, b=50),
-        template=_template(dark),
-    )
-    fig.update_yaxes(title_text="Moire period (Angstrom)", secondary_y=False)
-    fig.update_yaxes(title_text="CPDM amplitude", secondary_y=True)
-    return fig
-
-
-def create_3d_surface(
-    x: np.ndarray,
-    y: np.ndarray,
-    z: np.ndarray,
-    title: str,
-    colorscale: str = "Viridis",
-    z_label: str = "Intensity",
-    dark: bool = True,
-) -> go.Figure:
-    """3D rotatable surface plot using go.Surface.
-
-    Parameters
-    ----------
-    x, y : np.ndarray
-        1D coordinate axes (Angstrom).
-    z : np.ndarray
-        2D array of surface heights.
-    title : str
-        Figure title.
-    colorscale : str
-        Plotly colorscale name.
-    z_label : str
-        Label for the colour bar and z-axis.
-    dark : bool
-        Whether to use dark theme styling.
-    """
-    fig = go.Figure(
-        data=go.Surface(
-            z=z,
-            x=x,
-            y=y,
-            colorscale=colorscale,
-            colorbar=dict(title=z_label),
-        )
-    )
-    fig.update_layout(
-        title=title,
-        scene=dict(
-            xaxis_title="x (Angstrom)",
-            yaxis_title="y (Angstrom)",
-            zaxis_title=z_label,
-            aspectmode="manual",
-            aspectratio=dict(x=1, y=1, z=0.4),
-            camera=dict(eye=dict(x=1.5, y=1.5, z=1.0)),
-        ),
-        margin=dict(l=20, r=20, t=50, b=20),
         template=_template(dark),
     )
     return fig
@@ -264,23 +153,7 @@ def create_2d_contour(
     z_label: str = "Intensity",
     dark: bool = True,
 ) -> go.Figure:
-    """2D contour/topographic map projection.
-
-    Parameters
-    ----------
-    x, y : np.ndarray
-        1D coordinate axes (Angstrom).
-    z : np.ndarray
-        2D array of field values.
-    title : str
-        Figure title.
-    colorscale : str
-        Plotly colorscale name.
-    z_label : str
-        Label for the colour bar.
-    dark : bool
-        Whether to use dark theme styling.
-    """
+    """2D contour/topographic map projection of a real-space field."""
     fig = go.Figure(
         data=go.Contour(
             z=z,
@@ -289,15 +162,242 @@ def create_2d_contour(
             colorscale=colorscale,
             colorbar=dict(title=z_label),
             contours=dict(showlabels=True, labelfont=dict(size=10)),
+            hovertemplate=_hover_scalar("Å", "Å", z_label),
         )
     )
     fig.update_layout(
         title=title,
-        xaxis_title="x (Angstrom)",
-        yaxis_title="y (Angstrom)",
-        yaxis_scaleanchor="x",
+        xaxis_title="x (Å)",
+        yaxis_title="y (Å)",
+        yaxis=_equal_aspect_axes(),
         margin=dict(l=60, r=20, t=50, b=50),
         template=_template(dark),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Line plots
+# ---------------------------------------------------------------------------
+
+
+def create_sweep_plot(
+    param_values: np.ndarray,
+    periods: np.ndarray,
+    amplitudes: np.ndarray,
+    param_name: str = "Parameter",
+    dark: bool = True,
+) -> go.Figure:
+    """Dual-axis line plot for parameter sweeps (moire period + CPDM amplitude)."""
+    primary, secondary, _muted = _line_colors(dark)
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(
+        go.Scatter(
+            x=param_values,
+            y=periods,
+            name="Moire period (Å)",
+            mode="lines+markers",
+            line=dict(color=primary),
+            hovertemplate=(
+                f"{param_name}: %{{x:.3g}}"
+                "<br>Moire period: %{y:.2f} Å"
+                "<extra></extra>"
+            ),
+        ),
+        secondary_y=False,
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=param_values,
+            y=amplitudes,
+            name="CPDM amplitude",
+            mode="lines+markers",
+            line=dict(color=secondary),
+            hovertemplate=(
+                f"{param_name}: %{{x:.3g}}"
+                "<br>CPDM amplitude: %{y:.3g}"
+                "<extra></extra>"
+            ),
+        ),
+        secondary_y=True,
+    )
+
+    fig.update_layout(
+        title=f"Parameter Sweep: {param_name}",
+        xaxis_title=param_name,
+        margin=dict(l=60, r=60, t=50, b=50),
+        template=_template(dark),
+        hovermode="x unified",
+    )
+    fig.update_yaxes(title_text="Moire period (Å)", secondary_y=False)
+    fig.update_yaxes(title_text="CPDM amplitude", secondary_y=True)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 3D views
+# ---------------------------------------------------------------------------
+
+
+def _scene_camera_presets() -> dict:
+    """Named camera positions for the preset buttons on 3D figures."""
+    return {
+        "iso":  dict(eye=dict(x=1.5, y=1.5, z=1.0)),
+        "top":  dict(eye=dict(x=0.0, y=0.0, z=2.5), up=dict(x=0, y=1, z=0)),
+        "side": dict(eye=dict(x=2.5, y=0.0, z=0.2)),
+    }
+
+
+def _camera_buttons(pos_x: float = 0.02, pos_y: float = 0.98) -> dict:
+    presets = _scene_camera_presets()
+    return dict(
+        type="buttons",
+        direction="right",
+        x=pos_x,
+        y=pos_y,
+        xanchor="left",
+        yanchor="top",
+        showactive=False,
+        pad=dict(t=2, r=2),
+        buttons=[
+            dict(label="Iso",  method="relayout", args=[{"scene.camera": presets["iso"]}]),
+            dict(label="Top",  method="relayout", args=[{"scene.camera": presets["top"]}]),
+            dict(label="Side", method="relayout", args=[{"scene.camera": presets["side"]}]),
+        ],
+    )
+
+
+def create_3d_surface(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    title: str,
+    colorscale: str = "Viridis",
+    z_label: str = "Intensity",
+    dark: bool = True,
+) -> go.Figure:
+    """3D rotatable surface plot with camera-preset buttons."""
+    fig = go.Figure(
+        data=go.Surface(
+            z=z,
+            x=x,
+            y=y,
+            colorscale=colorscale,
+            colorbar=dict(title=z_label),
+            hovertemplate=(
+                "x: %{x:.2f} Å"
+                "<br>y: %{y:.2f} Å"
+                f"<br>{z_label}: %{{z:.3g}}"
+                "<extra></extra>"
+            ),
+        )
+    )
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title="x (Å)",
+            yaxis_title="y (Å)",
+            zaxis_title=z_label,
+            aspectmode="manual",
+            aspectratio=dict(x=1, y=1, z=0.4),
+            camera=_scene_camera_presets()["iso"],
+        ),
+        margin=dict(l=20, r=20, t=50, b=20),
+        template=_template(dark),
+        updatemenus=[_camera_buttons()],
+    )
+    return fig
+
+
+def create_3d_isosurface(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    values: np.ndarray,
+    title: str = "3D Cooper Surface",
+    iso_min: float | None = None,
+    iso_max: float | None = None,
+    colorscale: str = "RdBu_r",
+    dark: bool = True,
+    annotations: list[dict] | None = None,
+) -> go.Figure:
+    """3D isosurface of Δ(x,y,z) with camera-preset buttons."""
+    X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
+
+    if iso_min is None:
+        iso_min = float(np.percentile(values, 20))
+    if iso_max is None:
+        iso_max = float(np.percentile(values, 80))
+
+    fig = go.Figure(
+        data=go.Isosurface(
+            x=X.flatten(),
+            y=Y.flatten(),
+            z=Z.flatten(),
+            value=values.transpose(2, 1, 0).flatten(),
+            isomin=iso_min,
+            isomax=iso_max,
+            surface_count=5,
+            colorscale=colorscale,
+            caps=dict(x_show=False, y_show=False, z_show=False),
+            colorbar=dict(title="Δ (meV)"),
+            hovertemplate=(
+                "x: %{x:.2f} Å"
+                "<br>y: %{y:.2f} Å"
+                "<br>z: %{z:.2f} Å"
+                "<br>Δ: %{value:.3g} meV"
+                "<extra></extra>"
+            ),
+        )
+    )
+    scene = dict(
+        xaxis_title="x (Å)",
+        yaxis_title="y (Å)",
+        zaxis_title="z (Å)",
+        aspectmode="manual",
+        aspectratio=dict(x=1, y=1, z=0.5),
+        camera=_scene_camera_presets()["iso"],
+    )
+    if annotations:
+        scene["annotations"] = annotations
+    fig.update_layout(
+        title=title,
+        scene=scene,
+        margin=dict(l=20, r=20, t=50, b=20),
+        template=_template(dark),
+        updatemenus=[_camera_buttons()],
+    )
+    return fig
+
+
+def create_z_decay_profile(
+    z: np.ndarray,
+    profile: np.ndarray,
+    title: str = "Proximity Decay Profile",
+    dark: bool = True,
+) -> go.Figure:
+    """Line plot of the proximity decay f(z) with the interface marked."""
+    primary, _secondary, muted = _line_colors(dark)
+    fig = go.Figure(
+        data=go.Scatter(
+            x=z,
+            y=profile,
+            mode="lines",
+            line=dict(color=primary, width=2),
+            name="f(z)",
+            hovertemplate="z: %{x:.2f} Å<br>f(z): %{y:.3g}<extra></extra>",
+        )
+    )
+    fig.add_vline(x=0, line=dict(dash="dash", color=muted), annotation_text="Interface")
+    fig.update_layout(
+        title=title,
+        xaxis_title="z (Å)",
+        yaxis_title="f(z)",
+        margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
+        hovermode="x unified",
     )
     return fig
 
@@ -322,7 +422,8 @@ def create_vortex_overlay_heatmap(
         go.Heatmap(
             z=gap_field, x=x, y=y,
             colorscale="RdBu_r",
-            colorbar=dict(title="Delta (meV)"),
+            colorbar=dict(title="Δ (meV)"),
+            hovertemplate=_hover_scalar("Å", "Å", "Δ (meV)"),
         )
     )
     if vortex_positions.size > 0:
@@ -333,100 +434,14 @@ def create_vortex_overlay_heatmap(
                 mode="markers",
                 marker=dict(size=6, color=marker_col, symbol="x"),
                 name="Vortex cores",
+                hovertemplate="Vortex core<br>x: %{x:.1f} Å<br>y: %{y:.1f} Å<extra></extra>",
             )
         )
     fig.update_layout(
         title=title,
-        xaxis_title="x (Angstrom)",
-        yaxis_title="y (Angstrom)",
-        yaxis_scaleanchor="x",
-        margin=dict(l=60, r=20, t=50, b=50),
-        template=_template(dark),
-    )
-    return fig
-
-
-def create_3d_isosurface(
-    x: np.ndarray,
-    y: np.ndarray,
-    z: np.ndarray,
-    values: np.ndarray,
-    title: str = "3D Cooper Surface",
-    iso_min: float | None = None,
-    iso_max: float | None = None,
-    colorscale: str = "RdBu_r",
-    dark: bool = True,
-) -> go.Figure:
-    """3D isosurface of Delta(x,y,z) using go.Isosurface.
-
-    Parameters
-    ----------
-    x, y, z : np.ndarray
-        1D coordinate arrays.
-    values : np.ndarray
-        3D array (nz, ny, nx).
-    dark : bool
-        Whether to use dark theme styling.
-    """
-    nz, ny, nx = values.shape
-    X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
-
-    if iso_min is None:
-        iso_min = float(np.percentile(values, 20))
-    if iso_max is None:
-        iso_max = float(np.percentile(values, 80))
-
-    fig = go.Figure(
-        data=go.Isosurface(
-            x=X.flatten(),
-            y=Y.flatten(),
-            z=Z.flatten(),
-            value=values.transpose(2, 1, 0).flatten(),
-            isomin=iso_min,
-            isomax=iso_max,
-            surface_count=5,
-            colorscale=colorscale,
-            caps=dict(x_show=False, y_show=False, z_show=False),
-            colorbar=dict(title="Delta (meV)"),
-        )
-    )
-    fig.update_layout(
-        title=title,
-        scene=dict(
-            xaxis_title="x (Angstrom)",
-            yaxis_title="y (Angstrom)",
-            zaxis_title="z (Angstrom)",
-            aspectmode="manual",
-            aspectratio=dict(x=1, y=1, z=0.5),
-            camera=dict(eye=dict(x=1.5, y=1.5, z=1.0)),
-        ),
-        margin=dict(l=20, r=20, t=50, b=20),
-        template=_template(dark),
-    )
-    return fig
-
-
-def create_z_decay_profile(
-    z: np.ndarray,
-    profile: np.ndarray,
-    title: str = "Proximity Decay Profile",
-    dark: bool = True,
-) -> go.Figure:
-    """Line plot of the proximity decay profile f(z)."""
-    primary, _secondary, muted = _line_colors(dark)
-    fig = go.Figure(
-        data=go.Scatter(
-            x=z, y=profile,
-            mode="lines",
-            line=dict(color=primary, width=2),
-            name="f(z)",
-        )
-    )
-    fig.add_vline(x=0, line=dict(dash="dash", color=muted), annotation_text="Interface")
-    fig.update_layout(
-        title=title,
-        xaxis_title="z (Angstrom)",
-        yaxis_title="f(z)",
+        xaxis_title="x (Å)",
+        yaxis_title="y (Å)",
+        yaxis=_equal_aspect_axes(),
         margin=dict(l=60, r=20, t=50, b=50),
         template=_template(dark),
     )
@@ -441,13 +456,14 @@ def create_majorana_density_map(
     title: str = "Majorana ZM Density (SPECULATIVE)",
     dark: bool = True,
 ) -> go.Figure:
-    """Heatmap of Majorana zero-mode probability density."""
+    """Heatmap of Majorana zero-mode probability density with vortex cores."""
     fig = go.Figure()
     fig.add_trace(
         go.Heatmap(
             z=density, x=x, y=y,
             colorscale="Hot",
-            colorbar=dict(title="|psi|^2"),
+            colorbar=dict(title="|ψ|²"),
+            hovertemplate=_hover_scalar("Å", "Å", "|ψ|²"),
         )
     )
     if vortex_positions.size > 0:
@@ -458,13 +474,14 @@ def create_majorana_density_map(
                 mode="markers",
                 marker=dict(size=8, color="cyan", symbol="circle-open", line=dict(width=2)),
                 name="Vortex cores",
+                hovertemplate="Vortex core<br>x: %{x:.1f} Å<br>y: %{y:.1f} Å<extra></extra>",
             )
         )
     fig.update_layout(
         title=title,
-        xaxis_title="x (Angstrom)",
-        yaxis_title="y (Angstrom)",
-        yaxis_scaleanchor="x",
+        xaxis_title="x (Å)",
+        yaxis_title="y (Å)",
+        yaxis=_equal_aspect_axes(),
         margin=dict(l=60, r=20, t=50, b=50),
         template=_template(dark),
     )
@@ -481,31 +498,22 @@ def create_quiver_field(
     skip: int = 8,
     dark: bool = True,
 ) -> go.Figure:
-    """Background heatmap with arrow overlay for vector field.
-
-    Parameters
-    ----------
-    skip : int
-        Subsample every ``skip`` grid points for arrows.
-    dark : bool
-        Whether to use dark theme styling.
-    """
+    """Background gap heatmap with arrow overlay for current density."""
     arrow_color = "white" if dark else "black"
     fig = go.Figure()
     fig.add_trace(
         go.Heatmap(
             z=base_field, x=x, y=y,
             colorscale="RdBu_r",
-            colorbar=dict(title="Delta (meV)"),
+            colorbar=dict(title="Δ (meV)"),
             opacity=0.6,
+            hovertemplate=_hover_scalar("Å", "Å", "Δ (meV)"),
         )
     )
 
-    # Subsample for arrows
     xs, ys = x[::skip], y[::skip]
     jxs, jys = jx[::skip, ::skip], jy[::skip, ::skip]
 
-    # Scale factor for arrow length
     scale = (x[-1] - x[0]) / max(len(xs), 1) * 0.8
     mag = np.sqrt(jxs**2 + jys**2)
     mag_max = mag.max() if mag.size > 0 else 1.0
@@ -531,9 +539,9 @@ def create_quiver_field(
 
     fig.update_layout(
         title=title,
-        xaxis_title="x (Angstrom)",
-        yaxis_title="y (Angstrom)",
-        yaxis_scaleanchor="x",
+        xaxis_title="x (Å)",
+        yaxis_title="y (Å)",
+        yaxis=_equal_aspect_axes(),
         margin=dict(l=60, r=20, t=50, b=50),
         template=_template(dark),
     )
@@ -552,14 +560,15 @@ def create_susceptibility_heatmap(
         data=go.Heatmap(
             z=chi, x=x, y=y,
             colorscale="Plasma",
-            colorbar=dict(title="chi (a.u.)"),
+            colorbar=dict(title="χ (a.u.)"),
+            hovertemplate=_hover_scalar("Å", "Å", "χ"),
         )
     )
     fig.update_layout(
         title=title,
-        xaxis_title="x (Angstrom)",
-        yaxis_title="y (Angstrom)",
-        yaxis_scaleanchor="x",
+        xaxis_title="x (Å)",
+        yaxis_title="y (Å)",
+        yaxis=_equal_aspect_axes(),
         margin=dict(l=60, r=20, t=50, b=50),
         template=_template(dark),
     )
@@ -572,7 +581,7 @@ def create_phase_colormap(
     phase_index: np.ndarray,
     title: str = "Topological Phase Diagram (SPECULATIVE)",
     x_label: str = "B (Tesla)",
-    y_label: str = "Delta (meV)",
+    y_label: str = "Δ (meV)",
     dark: bool = True,
 ) -> go.Figure:
     """2D colormap of topological phase index with boundary overlay."""
@@ -587,6 +596,12 @@ def create_phase_colormap(
             colorbar=dict(title="Phase", tickvals=[0, 1], ticktext=["Trivial", "Topological"]),
             zmin=0,
             zmax=1,
+            hovertemplate=(
+                f"{x_label}: %{{x:.3g}}"
+                f"<br>{y_label}: %{{y:.3g}}"
+                "<br>Phase: %{z}"
+                "<extra></extra>"
+            ),
         )
     )
     fig.add_trace(
@@ -598,6 +613,7 @@ def create_phase_colormap(
             line=dict(color="white" if dark else "black", width=2),
             showscale=False,
             name="Phase boundary",
+            hoverinfo="skip",
         )
     )
     fig.update_layout(
@@ -624,9 +640,10 @@ def create_commensuration_sweep(
     fig.add_trace(
         go.Scatter(
             x=B_values, y=a_v_values,
-            name="a_v (Angstrom)",
+            name="a_v (Å)",
             mode="lines",
             line=dict(color=primary),
+            hovertemplate="B: %{x:.2f} T<br>a_v: %{y:.2f} Å<extra></extra>",
         ),
         secondary_y=False,
     )
@@ -638,6 +655,7 @@ def create_commensuration_sweep(
             name="a_v / L_m",
             mode="lines",
             line=dict(color=secondary),
+            hovertemplate="B: %{x:.2f} T<br>a_v/L_m: %{y:.3g}<extra></extra>",
         ),
         secondary_y=True,
     )
@@ -654,7 +672,8 @@ def create_commensuration_sweep(
         xaxis_title="B (Tesla)",
         margin=dict(l=60, r=60, t=50, b=50),
         template=_template(dark),
+        hovermode="x unified",
     )
-    fig.update_yaxes(title_text="Vortex period (Angstrom)", secondary_y=False)
+    fig.update_yaxes(title_text="Vortex period (Å)", secondary_y=False)
     fig.update_yaxes(title_text="a_v / L_m", secondary_y=True)
     return fig

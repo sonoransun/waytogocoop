@@ -1,0 +1,59 @@
+/* Responsive tweaks + small polish for the Good Job Coop Dash UI.
+ *
+ * Dash auto-loads any CSS file in this `assets/` directory on app start.
+ * Keep the file small; page-specific styling belongs in that page's module
+ * (inline style dicts) rather than here.
+ */
+
+/* Sidebar-style columns: stack above md, become sticky beyond it.
+ * Apply className="sidebar-col" on a dbc.Col and use xs=12 md=4 lg=3.
+ */
+.sidebar-col {
+    padding-right: 12px;
+}
+
+@media (min-width: 992px) {
+    .sidebar-col {
+        position: sticky;
+        top: 70px;           /* clears the navbar */
+        max-height: calc(100vh - 80px);
+        overflow-y: auto;
+    }
+}
+
+/* Tighten up the navbar's spacing on narrow screens so the brand + links
+ * don't overflow.
+ */
+@media (max-width: 767px) {
+    .navbar {
+        padding: 0.25rem 0.5rem;
+    }
+    .navbar .nav-item {
+        margin: 0 4px;
+    }
+}
+
+/* Cards inside the sidebar should flex to available width on mobile. */
+@media (max-width: 767px) {
+    .sidebar-col .card {
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Help-badge icons (ⓘ) inherit text color from the Label. */
+.dbc-label-help {
+    opacity: 0.7;
+    cursor: help;
+    font-size: 0.85em;
+}
+
+/* Loading spinner subtitle is dimmed so it doesn't compete with the plot. */
+.dash-loading + .text-muted {
+    font-size: 0.8em;
+    opacity: 0.75;
+}
+
+/* Ensure plot graphs resize cleanly when their column collapses. */
+.js-plotly-plot .plotly {
+    width: 100% !important;
+}
