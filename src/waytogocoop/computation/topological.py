@@ -251,6 +251,43 @@ def majorana_probability_density(
     )
 
 
+def majorana_probability_density_3d(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    vortex_positions: np.ndarray,
+    xi_M: float = XI_MAJORANA_DEFAULT,
+    k_F: float = K_F_TSS,
+    xi_prox: float = XI_PROXIMITY_DEFAULT,
+) -> np.ndarray:
+    """SPECULATIVE: 3D Majorana zero mode probability density.
+
+    Extends :func:`majorana_probability_density` (the 2D in-plane envelope
+    × Bessel oscillation) into z by multiplying with an exponential decay
+    ``exp(-2|z|/xi_prox)`` anchored at the interface (z = 0). The factor of 2
+    matches the probability density (|ψ|² inherits twice the wavefunction
+    decay rate).
+
+    Returns an array of shape ``(nz, ny, nx)`` normalised so that the peak
+    across the full volume is 1. If there are no vortices, the volume is
+    all zeros.
+    """
+    if xi_prox <= 0:
+        raise ValueError("xi_prox must be positive")
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    z = np.asarray(z, dtype=np.float64)
+
+    planar = majorana_probability_density(x, y, vortex_positions, xi_M=xi_M, k_F=k_F)
+    envelope_z = np.exp(-2.0 * np.abs(z) / xi_prox)  # (nz,)
+    density_3d = envelope_z[:, None, None] * planar.probability_density[None, :, :]
+
+    peak = density_3d.max()
+    if peak > 1.0e-30:
+        density_3d = density_3d / peak
+    return density_3d
+
+
 # ---------------------------------------------------------------------------
 # SPECULATIVE — topological phase boundary
 # ---------------------------------------------------------------------------

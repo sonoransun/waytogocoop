@@ -124,12 +124,34 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
 
     // --- 3D view options ---
     ui.label("3D overlays:");
-    if ui.checkbox(&mut app.show_world_axes, "World axes + scale bar").changed() {
+    if ui
+        .checkbox(&mut app.show_world_axes, "World axes + scale bar")
+        .changed()
+    {
         app.needs_surface_rerender = true;
     }
     if ui.checkbox(&mut app.show_wireframe, "Wireframe").changed() {
         app.needs_surface_rerender = true;
     }
+
+    // --- Clipping plane ---
+    // In normalised surface coords: the mesh spans z in [0, 0.3] (software
+    // rasterizer convention) so clip_z = 1.0 means "disabled" for most
+    // values. Exposed here so both backends receive it via the Renderer3D
+    // FrameInputs.clip_z field.
+    ui.horizontal(|ui| {
+        if ui.checkbox(&mut app.clip_z_enabled, "Clip plane").changed() {
+            app.needs_surface_rerender = true;
+        }
+        ui.add_enabled_ui(app.clip_z_enabled, |ui| {
+            if ui
+                .add(egui::Slider::new(&mut app.clip_z, -0.1_f32..=0.3_f32).step_by(0.005))
+                .changed()
+            {
+                app.needs_surface_rerender = true;
+            }
+        });
+    });
 
     ui.add_space(16.0);
     ui.separator();

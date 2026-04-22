@@ -10,23 +10,23 @@ pub fn show_info_panel(ui: &mut Ui, app: &MoireApp) {
     let substrate = app.substrate_material();
     let overlayer = app.overlayer_material();
 
-    ui.label(format!("Substrate: {} (a = {:.3} A)", substrate.formula, substrate.a));
-    ui.label(format!("Overlayer: {} (a = {:.3} A)", overlayer.formula, overlayer.a));
+    ui.label(format!(
+        "Substrate: {} (a = {:.3} A)",
+        substrate.formula, substrate.a
+    ));
+    ui.label(format!(
+        "Overlayer: {} (a = {:.3} A)",
+        overlayer.formula, overlayer.a
+    ));
     ui.label(format!("Twist angle: {:.1} deg", app.twist_angle));
 
     ui.add_space(8.0);
 
     if let Some(ref result) = app.moire_result {
-        ui.label(format!(
-            "Lattice mismatch: {:.2}%",
-            result.mismatch_percent
-        ));
+        ui.label(format!("Lattice mismatch: {:.2}%", result.mismatch_percent));
 
         if result.moire_period.is_finite() {
-            ui.label(format!(
-                "Moire period: {:.2} A",
-                result.moire_period
-            ));
+            ui.label(format!("Moire period: {:.2} A", result.moire_period));
         } else {
             ui.label("Moire period: infinite (no mismatch)");
         }
@@ -69,10 +69,7 @@ pub fn show_info_panel(ui: &mut Ui, app: &MoireApp) {
                 ui.label(format!("  Comm. field: {:.1} T", vr.commensuration_field));
             }
             if vr.is_commensurate {
-                ui.colored_label(
-                    egui::Color32::from_rgb(50, 220, 50),
-                    "  COMMENSURATE",
-                );
+                ui.colored_label(egui::Color32::from_rgb(50, 220, 50), "  COMMENSURATE");
             }
             ui.label(format!("  Vortex cores: {}", vr.vortex_positions.len()));
         } else {

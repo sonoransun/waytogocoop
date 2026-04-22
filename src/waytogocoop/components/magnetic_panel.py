@@ -125,9 +125,10 @@ def create_magnetic_panel(id_prefix: str) -> dbc.Card:
                     options=[
                         {"label": "Vortex Lattice", "value": "vortex"},
                         {"label": "Combined Gap", "value": "combined"},
-                        {"label": "Screening Currents", "value": "currents"},
+                        {"label": "Screening Currents (3D cones)", "value": "currents"},
                         {"label": "Susceptibility (speculative)", "value": "chi"},
-                        {"label": "Majorana Density (speculative)", "value": "majorana"},
+                        {"label": "Majorana 2D (speculative)", "value": "majorana"},
+                        {"label": "Majorana 3D (speculative)", "value": "majorana3d"},
                     ],
                     value="vortex",
                     className="mb-2",

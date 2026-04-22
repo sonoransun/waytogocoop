@@ -21,12 +21,12 @@ from waytogocoop.components.figure_factory import (
 from waytogocoop.components.isotope_panel import create_isotope_panel
 from waytogocoop.components.material_selector import create_material_selector
 from waytogocoop.components.parameter_panel import create_parameter_panel
-from waytogocoop.state import register_url_sync
 from waytogocoop.computation.isotope_effects import compute_isotope_effects
 from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.computation.superconducting import cpdm_amplitude, gap_modulation
 from waytogocoop.config import DELTA_1, DELTA_2, DELTA_AMPLITUDE, DELTA_AVG
 from waytogocoop.materials.database import get_material
+from waytogocoop.state import register_url_sync
 
 dash.register_page(
     __name__, path="/viewer", name="Moire Viewer", title="Good Job Coop! - Viewer"
@@ -306,21 +306,19 @@ def _update_viewer(
                 dark=dark,
             )
         elif view_mode == "3d":
-            if grid_size > 150:
-                x_s, y_s = x[::2], y[::2]
-                pattern_s = pattern[::2, ::2]
-                gap_s = gap[::2, ::2]
-            else:
-                x_s, y_s, pattern_s, gap_s = x, y, pattern, gap
+            # High-density grids route to go.Mesh3d (WebGL-friendly) via the
+            # high_density flag; low-density keeps go.Surface so the hover
+            # tooltip with unit-labelled coordinates stays available.
+            high_density = grid_size >= 150
             moire_fig = create_3d_surface(
-                x_s, y_s, pattern_s, title=moire_title,
-                colorscale="Viridis", z_label="Intensity",
-                dark=dark,
+                x, y, pattern, title=moire_title,
+                colorscale="viridis", z_label="Intensity",
+                dark=dark, high_density=high_density,
             )
             gap_fig = create_3d_surface(
-                x_s, y_s, gap_s, title=gap_title,
+                x, y, gap, title=gap_title,
                 colorscale="RdBu_r", z_label="Delta (meV)",
-                dark=dark,
+                dark=dark, high_density=high_density,
             )
         else:
             moire_fig = create_moire_heatmap(

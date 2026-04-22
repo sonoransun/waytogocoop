@@ -70,7 +70,10 @@ pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
         .show(ui, |ui| {
             ui.label("Proximity xi (A):");
             if ui
-                .add(egui::Slider::new(&mut app.proximity_config.xi_prox, 10.0..=500.0))
+                .add(egui::Slider::new(
+                    &mut app.proximity_config.xi_prox,
+                    10.0..=500.0,
+                ))
                 .changed()
             {
                 changed = true;
@@ -78,11 +81,8 @@ pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
             ui.label("Interface transparency:");
             if ui
                 .add(
-                    egui::Slider::new(
-                        &mut app.proximity_config.interface_transparency,
-                        0.1..=1.0,
-                    )
-                    .step_by(0.05),
+                    egui::Slider::new(&mut app.proximity_config.interface_transparency, 0.1..=1.0)
+                        .step_by(0.05),
                 )
                 .changed()
             {
@@ -101,7 +101,10 @@ pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
 
     // --- Display options ---
     ui.checkbox(&mut app.show_vortices, "Show vortex cores");
-    ui.checkbox(&mut app.show_majorana, "Show Majorana density (speculative)");
+    ui.checkbox(
+        &mut app.show_majorana,
+        "Show Majorana density (speculative)",
+    );
 
     // --- Summary readout ---
     if let Some(ref vr) = app.vortex_result {
@@ -112,10 +115,7 @@ pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
             ui.label(format!("Vortex period: {:.1} A", vr.vortex_period));
             ui.label(format!("Flux/cell: {:.3} Phi_0", vr.flux_per_moire_cell));
             if vr.is_commensurate {
-                ui.colored_label(
-                    egui::Color32::from_rgb(50, 220, 50),
-                    "COMMENSURATE",
-                );
+                ui.colored_label(egui::Color32::from_rgb(50, 220, 50), "COMMENSURATE");
             }
         } else {
             ui.label("No vortices (Bz ≈ 0)");

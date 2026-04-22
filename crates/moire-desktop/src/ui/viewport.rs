@@ -67,7 +67,11 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
     let density_range = || -> (f64, f64) {
         if let Some(ref d) = app.density_result {
             let min = d.gap_field.iter().copied().fold(f64::INFINITY, f64::min);
-            let max = d.gap_field.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let max = d
+                .gap_field
+                .iter()
+                .copied()
+                .fold(f64::NEG_INFINITY, f64::max);
             if min.is_finite() && max.is_finite() && (max - min).abs() > 1e-12 {
                 return (min, max);
             }
@@ -136,12 +140,13 @@ fn show_flat_2d(ui: &mut Ui, app: &MoireApp) {
     let (image_rect, colorbar_rect) = axes::layout(available);
     ui.allocate_rect(available, egui::Sense::hover());
 
-    let Some(meta) = view_meta(app) else { return; };
+    let Some(meta) = view_meta(app) else {
+        return;
+    };
 
     if let Some(tex) = texture {
         let uv = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0));
-        ui.painter()
-            .image(tex.id(), image_rect, uv, Color32::WHITE);
+        ui.painter().image(tex.id(), image_rect, uv, Color32::WHITE);
 
         let axes_spec = AxesSpec {
             x_range: meta.x_range,
@@ -198,7 +203,8 @@ fn show_surface_3d(ui: &mut Ui, app: &mut MoireApp) {
         let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
     } else {
-        ui.painter().rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
+        ui.painter()
+            .rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
         ui.painter().text(
             rect.center(),
             egui::Align2::CENTER_CENTER,

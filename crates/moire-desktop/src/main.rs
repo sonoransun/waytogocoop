@@ -1,6 +1,4 @@
-mod app;
-mod ui;
-mod render;
+use moire_desktop::app;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {

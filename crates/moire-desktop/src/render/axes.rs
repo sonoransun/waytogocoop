@@ -116,7 +116,10 @@ pub fn draw_axes(painter: &Painter, image: Rect, spec: &AxesSpec, dark: bool) {
         let xv = x0 + (i as f64 / (n - 1) as f64) * x_range;
 
         painter.line_segment(
-            [Pos2::new(px, image.max.y), Pos2::new(px, image.max.y + tick_len)],
+            [
+                Pos2::new(px, image.max.y),
+                Pos2::new(px, image.max.y + tick_len),
+            ],
             stroke,
         );
         painter.text(
@@ -145,7 +148,10 @@ pub fn draw_axes(painter: &Painter, image: Rect, spec: &AxesSpec, dark: bool) {
         let yv = y0 + (i as f64 / (n - 1) as f64) * y_range;
 
         painter.line_segment(
-            [Pos2::new(image.min.x - tick_len, py), Pos2::new(image.min.x, py)],
+            [
+                Pos2::new(image.min.x - tick_len, py),
+                Pos2::new(image.min.x, py),
+            ],
             stroke,
         );
         painter.text(
@@ -185,7 +191,11 @@ pub fn draw_colorbar(painter: &Painter, rect: Rect, spec: &ColorbarSpec, dark: b
             Pos2::new(rect.min.x, slice_top),
             Pos2::new(rect.max.x, slice_bot),
         );
-        painter.rect_filled(slice_rect, 0.0, Color32::from_rgba_premultiplied(r, g, b, a));
+        painter.rect_filled(
+            slice_rect,
+            0.0,
+            Color32::from_rgba_premultiplied(r, g, b, a),
+        );
     }
 
     painter.rect_stroke(rect, 0.0, stroke, StrokeKind::Outside);
@@ -201,7 +211,10 @@ pub fn draw_colorbar(painter: &Painter, rect: Rect, spec: &ColorbarSpec, dark: b
         let value = v0 + (i as f64 / (n - 1) as f64) * v_span;
 
         painter.line_segment(
-            [Pos2::new(rect.max.x, py), Pos2::new(rect.max.x + tick_len, py)],
+            [
+                Pos2::new(rect.max.x, py),
+                Pos2::new(rect.max.x + tick_len, py),
+            ],
             stroke,
         );
         painter.text(

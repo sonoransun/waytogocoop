@@ -85,7 +85,13 @@ pub fn render_surface_3d_with_bg(
     bg_color: Color32,
 ) -> ColorImage {
     render_surface_3d_opts(
-        data, n, width, height, camera, colormap, bg_color,
+        data,
+        n,
+        width,
+        height,
+        camera,
+        colormap,
+        bg_color,
         &SurfaceRenderOpts::default(),
     )
 }
@@ -207,13 +213,37 @@ pub fn render_surface_3d_opts(
 
         if !origin[0].is_nan() {
             if !ex[0].is_nan() {
-                draw_line(&mut pixels, &mut zbuf, width, height, origin, ex, Color32::from_rgb(240, 90, 90));
+                draw_line(
+                    &mut pixels,
+                    &mut zbuf,
+                    width,
+                    height,
+                    origin,
+                    ex,
+                    Color32::from_rgb(240, 90, 90),
+                );
             }
             if !ey[0].is_nan() {
-                draw_line(&mut pixels, &mut zbuf, width, height, origin, ey, Color32::from_rgb(90, 210, 120));
+                draw_line(
+                    &mut pixels,
+                    &mut zbuf,
+                    width,
+                    height,
+                    origin,
+                    ey,
+                    Color32::from_rgb(90, 210, 120),
+                );
             }
             if !ez[0].is_nan() {
-                draw_line(&mut pixels, &mut zbuf, width, height, origin, ez, Color32::from_rgb(120, 160, 255));
+                draw_line(
+                    &mut pixels,
+                    &mut zbuf,
+                    width,
+                    height,
+                    origin,
+                    ez,
+                    Color32::from_rgb(120, 160, 255),
+                );
             }
         }
     }
@@ -438,7 +468,11 @@ mod tests {
             [v, v, v, 255]
         });
         let non_bg = img.pixels.iter().filter(|&&p| p != bg).count();
-        assert!(non_bg > 100, "Expected rendered pixels, got only {} non-background", non_bg);
+        assert!(
+            non_bg > 100,
+            "Expected rendered pixels, got only {} non-background",
+            non_bg
+        );
     }
 
     #[test]
@@ -450,8 +484,14 @@ mod tests {
             ..Default::default()
         };
         let img = render_surface_3d_opts(
-            &data, 32, 128, 128, &Camera3D::default(),
-            |_| [200, 200, 200, 255], bg, &opts,
+            &data,
+            32,
+            128,
+            128,
+            &Camera3D::default(),
+            |_| [200, 200, 200, 255],
+            bg,
+            &opts,
         );
         let non_bg = img.pixels.iter().filter(|&&p| p != bg).count();
         // Wireframe paints only edges — far fewer pixels than a filled surface.
@@ -467,14 +507,24 @@ mod tests {
             ..Default::default()
         };
         let img = render_surface_3d_opts(
-            &data, 16, 128, 128, &Camera3D::default(),
-            |_| [100, 100, 100, 255], bg, &opts,
+            &data,
+            16,
+            128,
+            128,
+            &Camera3D::default(),
+            |_| [100, 100, 100, 255],
+            bg,
+            &opts,
         );
         // Red-channel dominant pixels should exist from the x-axis line.
-        let red = img.pixels.iter().filter(|p| {
-            let [r, g, b, _] = p.to_array();
-            r > 200 && g < 150 && b < 150
-        }).count();
+        let red = img
+            .pixels
+            .iter()
+            .filter(|p| {
+                let [r, g, b, _] = p.to_array();
+                r > 200 && g < 150 && b < 150
+            })
+            .count();
         assert!(red > 0, "Expected red x-axis pixels");
     }
 

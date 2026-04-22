@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Mapping, Sequence
 from string import Template
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from dash import Input, Output, State, clientside_callback
 

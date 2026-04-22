@@ -29,8 +29,16 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
 
     // --- Fe mass slider ---
     let fe_nat = natural_average_mass(&FE);
-    let fe_min = FE.isotopes.first().expect("FE isotopes must not be empty").atomic_mass;
-    let fe_max = FE.isotopes.last().expect("FE isotopes must not be empty").atomic_mass;
+    let fe_min = FE
+        .isotopes
+        .first()
+        .expect("FE isotopes must not be empty")
+        .atomic_mass;
+    let fe_max = FE
+        .isotopes
+        .last()
+        .expect("FE isotopes must not be empty")
+        .atomic_mass;
     let mut fe_mass = app.fe_mass_override.unwrap_or(fe_nat);
 
     ui.label(format!("Fe mass (amu) — nat: {:.2}", fe_nat));
@@ -44,8 +52,16 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
 
     // --- Te mass slider ---
     let te_nat = natural_average_mass(&TE);
-    let te_min = TE.isotopes.first().expect("TE isotopes must not be empty").atomic_mass;
-    let te_max = TE.isotopes.last().expect("TE isotopes must not be empty").atomic_mass;
+    let te_min = TE
+        .isotopes
+        .first()
+        .expect("TE isotopes must not be empty")
+        .atomic_mass;
+    let te_max = TE
+        .isotopes
+        .last()
+        .expect("TE isotopes must not be empty")
+        .atomic_mass;
     let mut te_mass = app.te_mass_override.unwrap_or(te_nat);
 
     ui.label(format!("Te mass (amu) — nat: {:.2}", te_nat));
@@ -64,8 +80,16 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
 
     if overlayer_has_sb {
         let sb_nat = natural_average_mass(&SB);
-        let sb_min = SB.isotopes.first().expect("SB isotopes must not be empty").atomic_mass;
-        let sb_max = SB.isotopes.last().expect("SB isotopes must not be empty").atomic_mass;
+        let sb_min = SB
+            .isotopes
+            .first()
+            .expect("SB isotopes must not be empty")
+            .atomic_mass;
+        let sb_max = SB
+            .isotopes
+            .last()
+            .expect("SB isotopes must not be empty")
+            .atomic_mass;
         let mut sb_mass = app.sb_mass_override.unwrap_or(sb_nat);
 
         ui.label(format!("Sb mass (amu) — nat: {:.2}", sb_nat));
@@ -82,8 +106,16 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
     let has_graphene = substrate.name == "Graphene" || overlayer.name == "Graphene";
     if has_graphene {
         let c_nat = natural_average_mass(&C);
-        let c_min = C.isotopes.first().expect("C isotopes must not be empty").atomic_mass;
-        let c_max = C.isotopes.last().expect("C isotopes must not be empty").atomic_mass;
+        let c_min = C
+            .isotopes
+            .first()
+            .expect("C isotopes must not be empty")
+            .atomic_mass;
+        let c_max = C
+            .isotopes
+            .last()
+            .expect("C isotopes must not be empty")
+            .atomic_mass;
         let mut c_mass = app.c_mass_override.unwrap_or(c_nat);
 
         ui.label(format!("C mass (amu) — nat: {:.3}", c_nat));

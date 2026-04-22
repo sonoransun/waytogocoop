@@ -11,9 +11,9 @@ use moire_core::density::{DensityConfig, DensityResult};
 use moire_core::isotope_effects::{IsotopeEffects, IsotopeEffectsConfig};
 use moire_core::isotopes::IsotopeConfig;
 use moire_core::magnetic::{MagneticFieldConfig, VortexLatticeResult, ZeemanResult};
-use moire_core::topological::ProximityConfig;
 use moire_core::materials;
 use moire_core::moire::{MoireConfig, MoireResult};
+use moire_core::topological::ProximityConfig;
 
 use crate::render;
 use crate::ui;
@@ -128,6 +128,14 @@ pub struct MoireApp {
     /// Whether to draw world axes and a scale bar on the 3D surface.
     #[serde(default = "default_true")]
     pub show_world_axes: bool,
+    /// Whether the clipping plane is active. When off, the full mesh renders.
+    #[serde(default)]
+    pub clip_z_enabled: bool,
+    /// Clipping plane height in normalised surface coordinates (-1..1).
+    /// Consumed by the wgpu shader's `uniforms.clip_z` and — once the CPU
+    /// rasterizer gains a clip pass — by the software path too.
+    #[serde(default = "default_clip_z")]
+    pub clip_z: f32,
 
     // --- Runtime state (not serialized) ---
     /// Currently selected tab.
@@ -206,6 +214,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_clip_z() -> f32 {
+    1.0
+}
+
 fn default_isotope_alpha() -> f64 {
     0.25
 }
@@ -272,6 +284,8 @@ impl Default for MoireApp {
             dark_mode: true,
             show_wireframe: false,
             show_world_axes: true,
+            clip_z_enabled: false,
+            clip_z: 1.0,
             active_tab: Tab::Pattern,
             needs_recompute: true,
             needs_surface_rerender: true,
@@ -401,13 +415,14 @@ impl MoireApp {
                 return;
             }
         };
-        let density = match moire_core::density::compute_density_modulation(&moire, &self.density_config) {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("Density computation error: {e}");
-                return;
-            }
-        };
+        let density =
+            match moire_core::density::compute_density_modulation(&moire, &self.density_config) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Density computation error: {e}");
+                    return;
+                }
+            };
         let fft_data = match moire_core::fft::compute_fft_2d(&moire.pattern, moire.resolution) {
             Ok(f) => f,
             Err(e) => {
@@ -542,7 +557,14 @@ impl MoireApp {
                 }
             };
             return Some(render_surface_3d_opts(
-                &data, n, CAPTURE_W, CAPTURE_H, &self.camera, colormap, bg, &opts,
+                &data,
+                n,
+                CAPTURE_W,
+                CAPTURE_H,
+                &self.camera,
+                colormap,
+                bg,
+                &opts,
             ));
         }
 
@@ -583,16 +605,17 @@ impl MoireApp {
                 egui::Color32::from_rgba_premultiplied(r, g, b, a)
             })
             .collect();
-        Some(egui::ColorImage { size: [n, n], pixels })
+        Some(egui::ColorImage {
+            size: [n, n],
+            pixels,
+        })
     }
 
     /// Save the current view to a timestamped PNG in the working directory.
     /// Updates `last_screenshot_status` with the outcome.
     pub fn save_screenshot(&mut self) {
         let Some(image) = self.capture_current_view() else {
-            self.last_screenshot_status = Some(
-                "Screenshot skipped: nothing rendered yet".into(),
-            );
+            self.last_screenshot_status = Some("Screenshot skipped: nothing rendered yet".into());
             return;
         };
         let path = render::screenshot::default_screenshot_path();
@@ -668,14 +691,18 @@ impl MoireApp {
                             let img = render::surface3d::render_surface_3d_opts(
                                 &norm,
                                 d.resolution,
-                                512, 512,
+                                512,
+                                512,
                                 &self.camera,
                                 moire_core::colormap::coolwarm,
                                 surface_bg,
                                 &opts,
                             );
-                            self.surface_texture =
-                                Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
+                            self.surface_texture = Some(ctx.load_texture(
+                                "surface_3d",
+                                img,
+                                egui::TextureOptions::LINEAR,
+                            ));
                         }
                         return;
                     }
@@ -710,7 +737,14 @@ impl MoireApp {
         }
 
         let img = render::surface3d::render_surface_3d_opts(
-            data, n, 512, 512, &self.camera, colormap, surface_bg, &opts,
+            data,
+            n,
+            512,
+            512,
+            &self.camera,
+            colormap,
+            surface_bg,
+            &opts,
         );
         self.surface_texture =
             Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
@@ -753,8 +787,8 @@ impl MoireApp {
             );
 
             // Normalize for colormap
-            let norm: Vec<f64> = normalize_to_unit_range(&combined)
-                .unwrap_or_else(|| vec![0.5; combined.len()]);
+            let norm: Vec<f64> =
+                normalize_to_unit_range(&combined).unwrap_or_else(|| vec![0.5; combined.len()]);
 
             // Build ColorImage from colormapped data
             let pixels: Vec<egui::Color32> = norm
@@ -786,9 +820,8 @@ impl MoireApp {
                 );
             }
 
-            self.magnetic_texture = Some(
-                ctx.load_texture("magnetic_overlay", img, egui::TextureOptions::LINEAR),
-            );
+            self.magnetic_texture =
+                Some(ctx.load_texture("magnetic_overlay", img, egui::TextureOptions::LINEAR));
         }
 
         // Compute Zeeman
@@ -845,8 +878,7 @@ impl MoireApp {
                     surface_bg,
                     &comp_opts,
                 );
-                textures
-                    .push(ctx.load_texture("comp_moire", img, egui::TextureOptions::LINEAR));
+                textures.push(ctx.load_texture("comp_moire", img, egui::TextureOptions::LINEAR));
             } else {
                 textures.push(render::pattern::create_texture(
                     ctx,
@@ -857,13 +889,15 @@ impl MoireApp {
                 ));
             }
 
-            let density = match moire_core::density::compute_density_modulation(&moire, &self.density_config) {
-                Ok(d) => d,
-                Err(e) => {
-                    eprintln!("Comparison density computation error: {e}");
-                    continue;
-                }
-            };
+            let density =
+                match moire_core::density::compute_density_modulation(&moire, &self.density_config)
+                {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("Comparison density computation error: {e}");
+                        continue;
+                    }
+                };
             let d_norm: Vec<f64> = normalize_to_unit_range(&density.gap_field)
                 .unwrap_or_else(|| vec![0.5; density.gap_field.len()]);
 
@@ -879,8 +913,7 @@ impl MoireApp {
                     surface_bg,
                     &comp_opts,
                 );
-                textures
-                    .push(ctx.load_texture("comp_density", img, egui::TextureOptions::LINEAR));
+                textures.push(ctx.load_texture("comp_density", img, egui::TextureOptions::LINEAR));
             } else {
                 textures.push(render::pattern::create_texture(
                     ctx,
@@ -973,10 +1006,8 @@ impl eframe::App for MoireApp {
                                         "Mismatch: {:.1}%",
                                         (mat.a - substrate.a).abs() / substrate.a * 100.0
                                     ));
-                                    let period = moire_core::moire::moire_periodicity_1d(
-                                        mat.a,
-                                        substrate.a,
-                                    );
+                                    let period =
+                                        moire_core::moire::moire_periodicity_1d(mat.a, substrate.a);
                                     ui.label(format!("Period: {:.1} A", period));
                                     ui.add_space(4.0);
 

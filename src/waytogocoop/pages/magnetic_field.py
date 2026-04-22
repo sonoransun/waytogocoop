@@ -9,9 +9,10 @@ import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dcc, html
 
 from waytogocoop.components.figure_factory import (
+    create_3d_cone_field,
+    create_3d_majorana_isosurface,
     create_gap_heatmap,
     create_majorana_density_map,
-    create_quiver_field,
     create_susceptibility_heatmap,
     create_vortex_overlay_heatmap,
 )
@@ -32,7 +33,10 @@ from waytogocoop.computation.magnetic import (
 )
 from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.computation.superconducting import gap_modulation
-from waytogocoop.computation.topological import majorana_probability_density
+from waytogocoop.computation.topological import (
+    majorana_probability_density,
+    majorana_probability_density_3d,
+)
 from waytogocoop.config import DEFAULT_COHERENCE_LENGTH, DELTA_AMPLITUDE, DELTA_AVG
 from waytogocoop.materials.database import get_material
 
@@ -169,13 +173,24 @@ def update_magnetic(
             )
         elif viz_mode == "currents":
             Jx, Jy = screening_currents(x, y, vortex_pos)
-            fig = create_quiver_field(x, y, Jx, Jy, combined_gap, dark=dark)
+            fig = create_3d_cone_field(
+                x, y, 0.0, Jx, Jy, jz=None,
+                base_surface=combined_gap, skip=8, dark=dark,
+            )
         elif viz_mode == "chi":
             chi = local_susceptibility(combined_gap)
             fig = create_susceptibility_heatmap(x, y, chi, dark=dark)
         elif viz_mode == "majorana":
             mzm = majorana_probability_density(x, y, vortex_pos)
             fig = create_majorana_density_map(x, y, mzm.probability_density, vortex_pos, dark=dark)
+        elif viz_mode == "majorana3d":
+            # Sparse z-grid keeps the isosurface cheap to build; resolution of
+            # xy is already capped upstream by the moire grid.
+            z3d = np.linspace(-40.0, 200.0, 32)
+            density_3d = majorana_probability_density_3d(
+                x, y, z3d, vortex_pos, xi_prox=xi_prox,
+            )
+            fig = create_3d_majorana_isosurface(x, y, z3d, density_3d, vortex_pos, dark=dark)
         else:
             fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos, dark=dark)
 

@@ -30,13 +30,82 @@ The Rust desktop app uses the same physics core. Menu bar: **File → Save scree
 
 ### Screenshots
 
-Screenshots are kept in [`docs/images/`](docs/images/). Capture new ones with Ctrl+S from the Rust app or Plotly's camera button in the Python app.
+All images below are regenerated from physics — Python scenes via `python scripts/capture_screenshots.py` (kaleido), Rust scenes via `cargo run -p moire-desktop --bin capture --release` (headless software rasterizer). Both write into [`docs/images/`](docs/images/). The same files are also reachable live: Plotly's camera button in the web UI and **Ctrl+S** in the desktop app.
 
-- **Moire Viewer (Python)** — real-space pattern with hover readouts and 3D surface toggle.
-- **Fourier Analysis (Python)** — FFT log₁₀(|F|²) colorbar and clickable peaks table.
-- **Proximity 3D (Python)** — volumetric isosurface annotated with the z=0 interface plane and the ξ_prox decay length.
-- **Rust Desktop 2D** — pattern with axis ticks and a vertical colorbar.
-- **Rust Desktop 3D** — shaded surface with optional wireframe and world axes.
+**Python stack (Plotly Dash)**
+
+![Moire Viewer — 2D heatmap](docs/images/viewer-2d.png)
+*Moire Viewer — real-space pattern of Sb₂Te₃ / FeTe with hover readouts.*
+
+![Moire Viewer — 3D WebGL mesh](docs/images/viewer-3d.png)
+*Moire Viewer 3D — triangulated `go.Mesh3d` for grid ≥ 150 (WebGL-friendly).*
+
+![Fourier Analysis](docs/images/fourier.png)
+*FFT Analysis — log₁₀(|F|²) power spectrum, shared-LUT `inferno`.*
+
+![Proximity 3D — isosurface](docs/images/proximity-3d.png)
+*Proximity 3D — nested isosurfaces annotated with the z=0 interface and ξ_prox.*
+
+![Proximity 3D — volumetric](docs/images/proximity-3d-volume.png)
+*Proximity 3D — true volumetric rendering via `go.Volume`.*
+
+![Proximity 3D — clipped](docs/images/proximity-3d-clipped.png)
+*Proximity 3D — clipping plane at z=100 Å reveals the interior decay profile.*
+
+![Screening Currents 3D](docs/images/magnetic-currents-3d.png)
+*Magnetic — screening currents as native `go.Cone` quivers on a translucent gap surface.*
+
+![Majorana 3D (SPECULATIVE)](docs/images/magnetic-majorana-3d.png)
+*Majorana ZM 3D Density (SPECULATIVE) — isosurface of the envelope × Bessel oscillation × z-decay.*
+
+![Topological Phase Diagram](docs/images/phase-diagram.png)
+*Fu-Kane phase boundary (SPECULATIVE) over (B, Δ) space.*
+
+**Rust desktop (egui/eframe)**
+
+![Rust Desktop 2D](docs/images/rust-desktop-2d.png) ![Rust Desktop 3D](docs/images/rust-desktop-3d.png)
+*Left: top-down moire pattern. Right: shaded 3D surface with world axes and scale bar.*
+
+![Rust Desktop Wireframe](docs/images/rust-desktop-wireframe.png) ![Rust Density 3D](docs/images/rust-density-3d.png)
+*Left: wireframe toggle (W). Right: Cooper-pair density modulation surface with diverging `coolwarm`.*
+
+### Advanced 3D Visualization
+
+The project ships modern 3D techniques on both stacks, wired through a shared colormap LUT so screenshots from the two apps are visually identical:
+
+- **Shared colormap LUT**. One source of truth: `crates/moire-core/src/colormap.rs::colormap_lut` emits 256-stop RGBA tables, dumped to `src/waytogocoop/components/colormaps_data.json` via `cargo run -p moire-core --bin dump_lut`. The Python `components/colormaps.py` loads that JSON; the Rust wgpu shader samples it as a `texture_2d<f32>`. A parity test in `tests/test_topological_3d.py` catches drift.
+- **Python Plotly — WebGL-class 3D**. `go.Mesh3d` (high-density surfaces), `go.Volume` (true volumetric raymarching of the Cooper-pair density), `go.Cone` (native 3D quivers for screening currents), `go.Isosurface` with a user-driven iso-range `RangeSlider` plus a `⏸/▶` Play animation and a clipping-plane slider. URL-sync via `register_url_sync` makes any view shareable as `?q=<base64>`.
+- **Rust wgpu pipeline (scaffolded, feature-gated)**. `render/gpu/` contains the `wgpu`/`egui-wgpu` pipeline, WGSL shader with Lambert + Blinn-Phong specular + Fresnel-Schlick lighting, a volumetric raymarch shader stub, and a readback path. Build with `cargo build --features gpu`. The default build stays on the CPU software rasterizer for CI and headless environments; the wgpu path will flip to default as the wire-through lands (see `CONTRIBUTING.md` "Future work"). Binary size grows ~15 MB with `--features gpu`.
+- **Clipping plane** lives in both stacks: Python via a z-slider on `pages/proximity_3d.py`, Rust via the sidebar "Clip plane" checkbox + slider feeding `FrameInputs::clip_z` into the WGSL uniform.
+
+```mermaid
+flowchart LR
+    LUT[colormap_lut&#40;&#41;<br/>256-stop RGBA]
+    JSON[colormaps_data.json]
+    RUST[Rust egui/wgpu<br/>texture_2d sample]
+    PY[Python Plotly<br/>get_plotly_colorscale]
+    KA[kaleido<br/>scripts/capture_screenshots.py]
+    BIN[cargo bin capture<br/>headless CPU raster]
+    IMG[docs/images/*.png]
+    LUT --> JSON
+    LUT --> RUST
+    JSON --> PY
+    PY --> KA
+    RUST --> BIN
+    KA --> IMG
+    BIN --> IMG
+    style LUT fill:#2c3e50,stroke:#5dade2,color:#fff
+```
+
+Regenerate all screenshots after any visual change:
+
+```bash
+# Python — needs chrome fetched once: .venv/bin/plotly_get_chrome -y
+python scripts/capture_screenshots.py
+
+# Rust — uses the software rasterizer so no display is required
+cargo run -p moire-desktop --bin capture --release
+```
 
 ---
 

@@ -4,6 +4,13 @@ version = "0.1.0"
 edition = "2021"
 description = "Native desktop visualization for moire superlattice patterns"
 
+[features]
+# Default keeps the stable CPU software rasterizer. The wgpu pipeline is
+# opt-in while the full wire-through (app.rs::rerender_surface, sidebar
+# uniforms, volumetric tab) lands incrementally — see CONTRIBUTING.md.
+default = []
+gpu = ["dep:wgpu", "dep:egui-wgpu", "dep:bytemuck", "dep:pollster", "dep:naga", "eframe/wgpu"]
+
 [dependencies]
 moire-core = { path = "../moire-core" }
 eframe = { version = "0.31", features = ["default_fonts", "persistence"] }
@@ -12,3 +19,12 @@ egui_plot = "0.31"
 egui_extras = "0.31"
 serde = { version = "1", features = ["derive"] }
 png = "0.17"
+nalgebra = "0.33"
+
+# GPU backend (opt-in via the `gpu` feature).
+wgpu = { version = "22", optional = true }
+egui-wgpu = { version = "0.31", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+pollster = { version = "0.3", optional = true }
+# naga is used at test time to validate WGSL compiles headlessly.
+naga = { version = "22", features = ["wgsl-in"], optional = true }

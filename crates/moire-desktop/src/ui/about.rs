@@ -22,10 +22,7 @@ pub fn show(ctx: &Context, open: &mut bool) {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.label("Reference paper:");
-                ui.hyperlink_to(
-                    "arXiv:2602.22637",
-                    "https://arxiv.org/abs/2602.22637",
-                );
+                ui.hyperlink_to("arXiv:2602.22637", "https://arxiv.org/abs/2602.22637");
             });
 
             ui.add_space(10.0);

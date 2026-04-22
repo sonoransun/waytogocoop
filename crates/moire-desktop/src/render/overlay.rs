@@ -110,6 +110,9 @@ mod tests {
         // At least one pixel should be green (not all black)
         let green = egui::Color32::from_rgba_unmultiplied(0, 255, 0, 255);
         let has_green = img.pixels.iter().any(|&p| p == green);
-        assert!(has_green, "No green pixels found after cross marker overlay");
+        assert!(
+            has_green,
+            "No green pixels found after cross marker overlay"
+        );
     }
 }

@@ -16,12 +16,12 @@ button can restore them.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from string import Template
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import dash_bootstrap_components as dbc
 from dash import ALL, Input, Output, State, callback, clientside_callback, dcc, html, no_update
-
 
 # ---------------------------------------------------------------------------
 # Help tooltip — an info-style badge paired with a Bootstrap tooltip.

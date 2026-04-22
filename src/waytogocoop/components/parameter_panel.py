@@ -5,7 +5,7 @@ from __future__ import annotations
 import dash_bootstrap_components as dbc
 from dash import Input, State, clientside_callback, dcc, html
 
-from waytogocoop.components.controls import help_tooltip, labeled_with_help
+from waytogocoop.components.controls import labeled_with_help
 from waytogocoop.config import (
     DEFAULT_GRID_SIZE,
     DEFAULT_PHYSICAL_EXTENT,
