@@ -207,6 +207,15 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
         app.needs_magnetic_recompute = true;
     }
 
+    ui.add_space(16.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    // --- Graphene Stack ---
+    if super::graphene_panel::show_graphene_panel(ui, app) {
+        app.needs_graphene_recompute = true;
+    }
+
     if changed {
         app.needs_recompute = true;
     }

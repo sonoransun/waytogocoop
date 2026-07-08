@@ -103,7 +103,8 @@ pub fn show_isotope_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
     }
 
     // --- C mass slider (only for graphene substrate or overlayer) ---
-    let has_graphene = substrate.name == "Graphene" || overlayer.name == "Graphene";
+    let has_graphene =
+        substrate.formula.starts_with("Graphene") || overlayer.formula.starts_with("Graphene");
     if has_graphene {
         let c_nat = natural_average_mass(&C);
         let c_min = C

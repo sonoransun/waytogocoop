@@ -16,7 +16,7 @@ pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
     // Warn when the selected substrate is graphene — the default g-factor,
     // coherence length, and London length are FeTe/TI-calibrated and will
     // give wrong magnitudes for graphene without retuning.
-    if app.substrate_material().name == "Graphene" {
+    if app.substrate_material().formula.starts_with("Graphene") {
         ui.add_space(4.0);
         let warn = ui.colored_label(
             egui::Color32::from_rgb(230, 180, 60),

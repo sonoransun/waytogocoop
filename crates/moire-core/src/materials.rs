@@ -70,6 +70,24 @@ static MATERIALS: &[Material] = &[
         // AA/AB stacking and flat-band physics are NOT resolved.
         role: "both",
     },
+    Material {
+        name: "Bilayer Graphene (AB)",
+        formula: "Graphene-AB",
+        lattice_type: LatticeType::Hexagonal,
+        a: 2.46,
+        c: 6.70,
+        space_group: "P63/mmc",
+        role: "substrate",
+    },
+    Material {
+        name: "Trilayer Graphene (ABA)",
+        formula: "Graphene-ABA",
+        lattice_type: LatticeType::Hexagonal,
+        a: 2.46,
+        c: 10.05,
+        space_group: "P63/mmc",
+        role: "substrate",
+    },
 ];
 
 /// Returns all materials in the database.
@@ -114,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_all_materials_count() {
-        assert_eq!(all_materials().len(), 5);
+        assert_eq!(all_materials().len(), 7);
     }
 
     #[test]
@@ -128,10 +146,12 @@ mod tests {
     #[test]
     fn test_substrates_includes_graphene() {
         let subs = substrates();
-        // FeTe (substrate) + Graphene (both) = 2
-        assert_eq!(subs.len(), 2);
+        // FeTe (substrate) + Graphene (both) + 2 stacked graphenes = 4
+        assert_eq!(subs.len(), 4);
         assert!(subs.iter().any(|m| m.name == "FeTe"));
         assert!(subs.iter().any(|m| m.name == "Graphene"));
+        assert!(subs.iter().any(|m| m.name == "Bilayer Graphene (AB)"));
+        assert!(subs.iter().any(|m| m.name == "Trilayer Graphene (ABA)"));
     }
 
     #[test]
@@ -167,6 +187,34 @@ mod tests {
         let m = by_name("Graphene").unwrap();
         assert_eq!(m.formula, "Graphene");
         assert_eq!(m.space_group, "P6/mmm");
+    }
+
+    #[test]
+    fn test_stacked_graphene_substrate_only() {
+        for name in ["Bilayer Graphene (AB)", "Trilayer Graphene (ABA)"] {
+            assert!(substrates().iter().any(|m| m.name == name));
+            assert!(!overlayers().iter().any(|m| m.name == name));
+        }
+    }
+
+    #[test]
+    fn test_by_name_bilayer_graphene() {
+        let m = by_name("Bilayer Graphene (AB)").unwrap();
+        assert_eq!(m.formula, "Graphene-AB");
+        assert_eq!(m.space_group, "P63/mmc");
+        assert_eq!(m.lattice_type, LatticeType::Hexagonal);
+        assert!((m.a - 2.46).abs() < 1e-10);
+        assert!((m.c - 6.70).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_by_name_trilayer_graphene() {
+        let m = by_name("Trilayer Graphene (ABA)").unwrap();
+        assert_eq!(m.formula, "Graphene-ABA");
+        assert_eq!(m.space_group, "P63/mmc");
+        assert_eq!(m.lattice_type, LatticeType::Hexagonal);
+        assert!((m.a - 2.46).abs() < 1e-10);
+        assert!((m.c - 10.05).abs() < 1e-10);
     }
 
     #[test]

@@ -190,6 +190,9 @@ pub fn material_composition(formula: &str) -> Option<&'static [(&'static str, u3
         "Sb2Te" => Some(&[("Sb", 2), ("Te", 1)]),
         // 2 carbon atoms per graphene hexagonal unit cell (A and B sublattices).
         "Graphene" => Some(&[("C", 2)]),
+        // 4 / 6 carbon atoms per AB-bilayer / ABA-trilayer hexagonal unit cell.
+        "Graphene-AB" => Some(&[("C", 4)]),
+        "Graphene-ABA" => Some(&[("C", 6)]),
         _ => None,
     }
 }
@@ -272,6 +275,8 @@ mod tests {
         assert!(material_composition("Sb2Te3").is_some());
         assert!(material_composition("Bi2Te3").is_some());
         assert!(material_composition("Sb2Te").is_some());
+        assert!(material_composition("Graphene-AB").is_some());
+        assert!(material_composition("Graphene-ABA").is_some());
         assert!(material_composition("Unknown").is_none());
     }
 
@@ -313,5 +318,39 @@ mod tests {
         };
         let m = formula_unit_avg_mass("Graphene", &config).unwrap();
         assert!((m - 13.00335).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_stacked_graphene_composition() {
+        assert_eq!(
+            material_composition("Graphene-AB").unwrap(),
+            &[("C", 4)]
+        );
+        assert_eq!(
+            material_composition("Graphene-ABA").unwrap(),
+            &[("C", 6)]
+        );
+    }
+
+    #[test]
+    fn test_formula_unit_avg_mass_stacked_graphene() {
+        // Per-atom average of a single-element formula is the natural C mass.
+        let config = IsotopeConfig::default();
+        for formula in ["Graphene-AB", "Graphene-ABA"] {
+            let m = formula_unit_avg_mass(formula, &config).unwrap();
+            assert!((m - natural_average_mass(&C)).abs() < 1e-10, "{}", formula);
+        }
+    }
+
+    #[test]
+    fn test_stacked_graphene_c_mass_override() {
+        let config = IsotopeConfig {
+            c_mass: Some(13.00335), // pure C-13
+            ..Default::default()
+        };
+        for formula in ["Graphene-AB", "Graphene-ABA"] {
+            let m = formula_unit_avg_mass(formula, &config).unwrap();
+            assert!((m - 13.00335).abs() < 1e-10, "{}", formula);
+        }
     }
 }

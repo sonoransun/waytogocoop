@@ -177,6 +177,7 @@ register_url_sync(_URL_ID, _PRESET_BINDINGS)
     Input(f"{_PREFIX}-fe-mass", "value"),
     Input(f"{_PREFIX}-te-mass", "value"),
     Input(f"{_PREFIX}-sb-mass", "value"),
+    Input(f"{_PREFIX}-c-mass", "value"),
     Input(f"{_PREFIX}-isotope-alpha", "value"),
     Input(f"{_PREFIX}-isotope-comparison", "value"),
     Input("theme-store", "data"),
@@ -192,6 +193,7 @@ def _update_viewer(
     fe_mass: float,
     te_mass: float,
     sb_mass: float,
+    c_mass: float,
     isotope_alpha: float,
     isotope_comparison: list,
     theme: str,
@@ -224,6 +226,7 @@ def _update_viewer(
                 "Fe": float(fe_mass) if fe_mass is not None else 0,
                 "Te": float(te_mass) if te_mass is not None else 0,
                 "Sb": float(sb_mass) if sb_mass is not None else 0,
+                "C": float(c_mass) if c_mass is not None else 0,
             }
             alpha = float(isotope_alpha) if isotope_alpha is not None else 0.4
 

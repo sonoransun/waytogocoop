@@ -25,8 +25,8 @@ from waytogocoop.materials.lattice import (
 
 class TestMaterialRegistry:
     def test_materials_count(self):
-        # 4 TI/chalcogenide materials + Graphene
-        assert len(MATERIALS) == 5
+        # 4 TI/chalcogenide materials + 3 graphene variants
+        assert len(MATERIALS) == 7
 
     def test_fete_properties(self, fete):
         assert fete.formula == "FeTe"
@@ -61,15 +61,17 @@ class TestMaterialRegistry:
 
     def test_list_materials_all(self):
         all_mats = list_materials()
-        assert len(all_mats) == 5
+        assert len(all_mats) == 7
 
     def test_list_materials_substrates(self):
-        # FeTe ("substrate") and Graphene ("both") both qualify.
+        # FeTe, Graphene-AB, Graphene-ABA ("substrate") and Graphene ("both") qualify.
         substrates = list_materials(role="substrate")
         formulas = {m.formula for m in substrates}
         assert "FeTe" in formulas
         assert "Graphene" in formulas
-        assert len(substrates) == 2
+        assert "Graphene-AB" in formulas
+        assert "Graphene-ABA" in formulas
+        assert len(substrates) == 4
 
     def test_list_materials_overlayers(self):
         # 3 TI overlayers plus Graphene ("both") = 4.

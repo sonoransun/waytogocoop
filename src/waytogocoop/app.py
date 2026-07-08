@@ -29,6 +29,7 @@ def create_app() -> Dash:
                     dbc.NavItem(dbc.NavLink("Magnetic Field", href="/magnetic")),
                     dbc.NavItem(dbc.NavLink("3D Proximity", href="/proximity3d")),
                     dbc.NavItem(dbc.NavLink("Phase Diagram", href="/phase")),
+                    dbc.NavItem(dbc.NavLink("Graphene", href="/graphene")),
                     dbc.NavItem(
                         dbc.Button(
                             "Light Mode",

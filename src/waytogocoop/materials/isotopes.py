@@ -110,6 +110,8 @@ MATERIAL_COMPOSITION: dict[str, dict[str, int]] = {
     "Bi2Te3": {"Bi": 2, "Te": 3},
     "Sb2Te": {"Sb": 2, "Te": 1},
     "Graphene": {"C": 2},  # 2 C atoms per hexagonal unit cell (A and B sublattices)
+    "Graphene-AB": {"C": 4},   # 2 C atoms per layer per cell, 2 layers
+    "Graphene-ABA": {"C": 6},  # 2 C atoms per layer per cell, 3 layers
 }
 
 

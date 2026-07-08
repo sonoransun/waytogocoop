@@ -7,7 +7,8 @@ pixel-identical screenshots so long as that JSON is regenerated after Rust-side
 edits.
 
 - ``viridis``  — unsigned scalar fields (moire pattern, surface plots)
-- ``coolwarm`` / ``coolwarm_r`` — signed gap modulation and gap-aware overlays (meV)
+- ``coolwarm`` / ``coolwarm_r`` — signed gap modulation, gap-aware overlays (meV),
+  and the signed pseudo-magnetic field (T)
 - ``inferno``  — FFT power spectrum (log10 scaled), Majorana density
 - ``plasma``   — susceptibility (arbitrary units)
 """
@@ -208,6 +209,36 @@ def create_2d_contour(
     return fig
 
 
+def create_pseudo_field_heatmap(
+    x: np.ndarray,
+    y: np.ndarray,
+    b_ps: np.ndarray,
+    title: str = "Pseudo-Magnetic Field (SPECULATIVE)",
+    dark: bool = True,
+) -> go.Figure:
+    """Heatmap of the strain-induced pseudo-magnetic field (K valley)."""
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=b_ps,
+            x=x,
+            y=y,
+            colorscale="RdBu_r",
+            zmid=0,
+            colorbar=dict(title="B_ps (T)"),
+            hovertemplate=_hover_scalar("Å", "Å", "B_ps (T)"),
+        )
+    )
+    fig.update_layout(
+        title=title,
+        xaxis_title="x (Å)",
+        yaxis_title="y (Å)",
+        yaxis=_equal_aspect_axes(),
+        margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
+    )
+    return fig
+
+
 # ---------------------------------------------------------------------------
 # Line plots
 # ---------------------------------------------------------------------------
@@ -265,6 +296,160 @@ def create_sweep_plot(
     )
     fig.update_yaxes(title_text="Moire period (Å)", secondary_y=False)
     fig.update_yaxes(title_text="CPDM amplitude", secondary_y=True)
+    return fig
+
+
+def create_flat_band_plot(
+    theta_values: np.ndarray,
+    velocity_ratios: np.ndarray,
+    delta_values: np.ndarray,
+    theta_current: float,
+    title: str = "Flat Band vs Twist Angle",
+    dark: bool = True,
+) -> go.Figure:
+    """Dual-axis plot: renormalized Dirac velocity and flat-band gap vs twist."""
+    primary, secondary, muted = _line_colors(dark)
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(
+        go.Scatter(
+            x=theta_values,
+            y=velocity_ratios,
+            name="v*/v_F",
+            mode="lines",
+            line=dict(color=primary),
+            hovertemplate=(
+                "θ: %{x:.3f}°"
+                "<br>v*/v_F: %{y:.3g}"
+                "<extra></extra>"
+            ),
+        ),
+        secondary_y=False,
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=theta_values,
+            y=delta_values,
+            name="Delta_max (meV) (SPECULATIVE)",
+            mode="lines",
+            line=dict(color=secondary),
+            hovertemplate=(
+                "θ: %{x:.3f}°"
+                "<br>Delta_max: %{y:.3g} meV"
+                "<extra></extra>"
+            ),
+        ),
+        secondary_y=True,
+    )
+
+    fig.add_vline(
+        x=theta_current,
+        line=dict(dash="dash", color=muted),
+        annotation_text=f"theta = {theta_current:.2f} deg",
+    )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Twist angle (deg)",
+        margin=dict(l=60, r=60, t=50, b=50),
+        template=_template(dark),
+        hovermode="x unified",
+    )
+    fig.update_yaxes(title_text="v*/v_F", secondary_y=False)
+    fig.update_yaxes(title_text="Delta_max (meV)", secondary_y=True)
+    return fig
+
+
+def create_band_structure_plot(
+    k_distances: np.ndarray,
+    energies_mev: np.ndarray,
+    tick_positions: list[float],
+    tick_labels: list[str],
+    flat_bandwidth_mev: float,
+    title: str = "Moire Band Structure (BM model)",
+    dark: bool = True,
+) -> go.Figure:
+    """Band structure along the moire high-symmetry path, flat bands highlighted.
+
+    One line per band; the two middle bands (the flat bands) are drawn in an
+    accent color with a heavier line. Ticks/gridlines sit at the
+    high-symmetry-point path distances, and an annotation reports the
+    flat-band width W.
+    """
+    _primary, secondary, muted = _line_colors(dark)
+    n_bands = energies_mev.shape[1]
+    flat_indices = {n_bands // 2 - 1, n_bands // 2}
+
+    fig = go.Figure()
+    for band in range(n_bands):
+        if band in flat_indices:
+            trace_kwargs = dict(
+                line=dict(color=secondary, width=3),
+                hovertemplate="k: %{x:.4f} 1/Å<br>E: %{y:.2f} meV<extra>flat band</extra>",
+            )
+        else:
+            trace_kwargs = dict(line=dict(color=muted, width=1), hoverinfo="skip")
+        fig.add_trace(
+            go.Scatter(
+                x=k_distances,
+                y=energies_mev[:, band],
+                mode="lines",
+                showlegend=False,
+                **trace_kwargs,
+            )
+        )
+
+    fig.add_annotation(
+        xref="paper", yref="paper",
+        x=0.02, y=0.98,
+        xanchor="left", yanchor="top",
+        text=f"W = {flat_bandwidth_mev:.1f} meV",
+        showarrow=False,
+    )
+    fig.update_layout(
+        title=title,
+        xaxis=dict(
+            tickvals=tick_positions,
+            ticktext=tick_labels,
+            showgrid=True,  # vertical gridlines land exactly on the ticks
+            range=[float(k_distances[0]), float(k_distances[-1])],
+        ),
+        yaxis_title="E (meV)",
+        margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
+    )
+    return fig
+
+
+def create_dos_plot(
+    energies_mev: np.ndarray,
+    dos: np.ndarray,
+    title: str = "Density of States (BM model)",
+    dark: bool = True,
+) -> go.Figure:
+    """Density of states versus energy with a shaded fill and E = 0 marker."""
+    primary, _secondary, muted = _line_colors(dark)
+    fig = go.Figure(
+        data=go.Scatter(
+            x=energies_mev,
+            y=dos,
+            mode="lines",
+            line=dict(color=primary, width=2),
+            fill="tozeroy",
+            name="DOS",
+            hovertemplate="E: %{x:.1f} meV<br>DOS: %{y:.3g}<extra></extra>",
+        )
+    )
+    fig.add_vline(x=0, line=dict(dash="dash", color=muted))
+    fig.update_layout(
+        title=title,
+        xaxis_title="E (meV)",
+        yaxis_title="DOS (states / meV per moire cell, a.u.)",
+        margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
+        hovermode="x unified",
+    )
     return fig
 
 
@@ -345,6 +530,8 @@ def create_3d_surface(
     z_label: str = "Intensity",
     dark: bool = True,
     high_density: bool = False,
+    surfacecolor: np.ndarray | None = None,
+    color_label: str | None = None,
 ) -> go.Figure:
     """3D rotatable surface.
 
@@ -353,26 +540,36 @@ def create_3d_surface(
     hover-interpolation — that path stays responsive at grid sizes >= 150
     where ``go.Surface`` would stutter. Otherwise we use ``go.Surface`` with
     the shared PBR-ish lighting preset.
+
+    When ``surfacecolor`` is given, the surface is colored by that field
+    instead of height; ``color_label`` titles the colorbar (falls back to
+    ``z_label``).
     """
     if high_density:
         return create_surface_mesh3d(
             x, y, z, title=title, colorscale=colorscale, z_label=z_label, dark=dark
         )
-    surface = _apply_surface_lighting(
-        go.Surface(
-            z=z,
-            x=x,
-            y=y,
-            colorscale=_resolve_colorscale(colorscale),
-            colorbar=dict(title=z_label),
-            hovertemplate=(
-                "x: %{x:.2f} Å"
-                "<br>y: %{y:.2f} Å"
-                f"<br>{z_label}: %{{z:.3g}}"
-                "<extra></extra>"
-            ),
-        )
+    cbar_label = color_label or z_label
+    if surfacecolor is not None:
+        value_line = f"<br>{cbar_label}: %{{surfacecolor:.3g}}"
+    else:
+        value_line = f"<br>{z_label}: %{{z:.3g}}"
+    surface_kwargs = dict(
+        z=z,
+        x=x,
+        y=y,
+        colorscale=_resolve_colorscale(colorscale),
+        colorbar=dict(title=cbar_label),
+        hovertemplate=(
+            "x: %{x:.2f} Å"
+            "<br>y: %{y:.2f} Å"
+            f"{value_line}"
+            "<extra></extra>"
+        ),
     )
+    if surfacecolor is not None:
+        surface_kwargs["surfacecolor"] = surfacecolor
+    surface = _apply_surface_lighting(go.Surface(**surface_kwargs))
     fig = go.Figure(data=surface)
     return _apply_3d_scene(fig, dark=dark, title=title, z_label=z_label, aspect_z=0.4)
 

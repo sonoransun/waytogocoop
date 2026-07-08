@@ -97,8 +97,45 @@ pub fn render_surface_3d_with_bg(
 }
 
 /// Render the surface with full control over wireframe / axes / scale bar.
+#[allow(clippy::too_many_arguments)]
 pub fn render_surface_3d_opts(
     data: &[f64],
+    n: usize,
+    width: usize,
+    height: usize,
+    camera: &Camera3D,
+    colormap: fn(f64) -> [u8; 4],
+    bg_color: Color32,
+    opts: &SurfaceRenderOpts,
+) -> ColorImage {
+    render_mesh(data, data, n, width, height, camera, colormap, bg_color, opts)
+}
+
+/// Render a 3D surface whose geometry (`heights`) and colormap value
+/// (`colors`) come from different fields — e.g. curvature height colored by
+/// gap magnitude. Both arrays are row-major n*n, pre-normalized to [0, 1].
+#[allow(clippy::too_many_arguments)]
+pub fn render_surface_3d_colored(
+    heights: &[f64],
+    colors: &[f64],
+    n: usize,
+    width: usize,
+    height: usize,
+    camera: &Camera3D,
+    colormap: fn(f64) -> [u8; 4],
+    bg_color: Color32,
+    opts: &SurfaceRenderOpts,
+) -> ColorImage {
+    debug_assert_eq!(heights.len(), colors.len());
+    render_mesh(heights, colors, n, width, height, camera, colormap, bg_color, opts)
+}
+
+/// Shared rasterizer core: `heights` drives vertex z displacement, `colors`
+/// drives the colormap lookup; both are row-major n*n arrays in [0, 1].
+#[allow(clippy::too_many_arguments)]
+fn render_mesh(
+    heights: &[f64],
+    colors: &[f64],
     n: usize,
     width: usize,
     height: usize,
@@ -111,7 +148,7 @@ pub fn render_surface_3d_opts(
     let mut zbuf = vec![f32::MAX; width * height];
 
     let step = (n / 64).max(1);
-    let mesh_n = (n + step - 1) / step;
+    let mesh_n = n.div_ceil(step);
 
     let height_scale = 0.3_f32;
     let mut verts: Vec<[f32; 3]> = Vec::with_capacity(mesh_n * mesh_n);
@@ -123,10 +160,10 @@ pub fn render_surface_3d_opts(
         for ix in 0..mesh_n {
             let sx = (ix * step).min(n - 1);
             let x = (sx as f32 / n as f32) * 2.0 - 1.0;
-            let val = data[sy * n + sx];
-            let z = val as f32 * height_scale;
+            let idx = sy * n + sx;
+            let z = heights[idx] as f32 * height_scale;
             verts.push([x, y, z]);
-            values.push(val);
+            values.push(colors[idx]);
         }
     }
 
@@ -379,6 +416,7 @@ fn shade_color(r: u8, g: u8, b: u8, shade: f32) -> Color32 {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn rasterize_triangle(
     v0: [f32; 3],
     v1: [f32; 3],
@@ -526,6 +564,63 @@ mod tests {
             })
             .count();
         assert!(red > 0, "Expected red x-axis pixels");
+    }
+
+    #[test]
+    fn test_colored_render_produces_correct_size() {
+        let heights = vec![0.5_f64; 32 * 32];
+        let mut colors = vec![0.0_f64; 32 * 32];
+        for i in 0..32 {
+            for j in 0..32 {
+                colors[i * 32 + j] = (i as f64 + j as f64) / 62.0;
+            }
+        }
+        let bg = Color32::from_rgb(30, 30, 35);
+        let img = render_surface_3d_colored(
+            &heights, &colors, 32, 128, 128, &Camera3D::default(),
+            |t| {
+                let v = (t * 255.0) as u8;
+                [v, v, v, 255]
+            },
+            bg, &SurfaceRenderOpts::default(),
+        );
+        assert_eq!(img.size, [128, 128]);
+        assert_eq!(img.pixels.len(), 128 * 128);
+        let non_bg = img.pixels.iter().filter(|&&p| p != bg).count();
+        assert!(non_bg > 100, "Expected rendered pixels, got only {} non-background", non_bg);
+    }
+
+    #[test]
+    fn test_colored_render_varies_with_color_array() {
+        // Constant heights give a uniform face normal, so shading is constant;
+        // distinct pixel colors can only come from the colors gradient.
+        let heights = vec![0.5_f64; 32 * 32];
+        let mut colors = vec![0.0_f64; 32 * 32];
+        for i in 0..32 {
+            for j in 0..32 {
+                colors[i * 32 + j] = (i as f64 + j as f64) / 62.0;
+            }
+        }
+        let bg = Color32::from_rgb(30, 30, 35);
+        let img = render_surface_3d_colored(
+            &heights, &colors, 32, 128, 128, &Camera3D::default(),
+            |t| {
+                let v = (t * 255.0) as u8;
+                [v, v, v, 255]
+            },
+            bg, &SurfaceRenderOpts::default(),
+        );
+        let distinct: std::collections::HashSet<_> = img
+            .pixels
+            .iter()
+            .filter(|&&p| p != bg)
+            .map(|p| p.to_array())
+            .collect();
+        assert!(
+            distinct.len() > 3,
+            "Expected multiple distinct surface colors, got {}",
+            distinct.len()
+        );
     }
 
     #[test]

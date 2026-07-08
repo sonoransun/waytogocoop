@@ -77,3 +77,54 @@ SMALL_ANGLE_THRESHOLD: float = 1e-6   # Degrees; below this, twist is treated as
 NORM_FLOOR: float = 1e-15             # Minimum denominator for normalization
 EXPONENT_CLAMP: float = 100.0         # Max |exponent| for exp() overflow protection
 PEAK_POWER_FLOOR: float = 1e-30       # Below this, power spectrum is treated as zero
+
+# ---------------------------------------------------------------------------
+# Graphene / twisted-graphene parameters
+# ---------------------------------------------------------------------------
+GRAPHENE_A: float = 2.46          # Angstrom — graphene in-plane lattice constant
+GRAPHENE_A_CC: float = 1.42       # Angstrom — C-C bond length, a/sqrt(3)
+HBAR_VF_GRAPHENE: float = 5.96    # eV*Angstrom — hbar*v_F = (sqrt(3)/2)*t*a with t = 2.8 eV
+                                  # NN hopping (Castro Neto et al., RMP 81, 109 (2009));
+                                  # v_F ~ 0.91e6 m/s.  NOT the common 6.58 value — with 6.58
+                                  # the first magic angle lands at 0.974 deg, outside the
+                                  # observed 1.0-1.2 deg window.
+W_INTERLAYER_TBG: float = 0.110   # eV — AB interlayer tunneling (Bistritzer & MacDonald,
+                                  # PNAS 108, 12233 (2011)); with HBAR_VF_GRAPHENE gives a
+                                  # first magic angle of 1.076 deg, matching the repo's
+                                  # 1.08-deg TBG tests
+BCS_GAP_RATIO: float = 1.764      # Delta(0)/(kB*Tc), weak-coupling BCS
+DELTA_TBG_MAX: float = 0.30       # meV — ~1.764*kB*Tc for Tc~2 K (Cao et al., Nature 556,
+                                  # 43 (2018)); speculative model input
+DELTA_TTG_MAX: float = 0.44       # meV — Tc~2.9 K alternating-twist trilayer (Park et al.,
+                                  # Nature 590, 249 (2021)); speculative model input
+THETA_SC_WIDTH_DEG: float = 0.1   # deg — Lorentzian HWHM of gap vs twist; SPECULATIVE —
+                                  # SC observed roughly 0.9-1.2 deg
+NU_OPTIMAL_FILLING: float = 2.4   # electrons per moire cell (Cao 2018)
+NU_DOME_WIDTH: float = 0.8        # SPECULATIVE dome half-width in filling
+XI_TBG: float = 500.0             # Angstrom — GL coherence length ~52 nm (Cao 2018)
+GRAPHENE_EXTENT_DEFAULT: float = 200.0  # Angstrom half-width; ~3 moire periods at magic angle
+
+# ---------------------------------------------------------------------------
+# Curved-sheet pseudo-magnetic-field parameters (speculative)
+# ---------------------------------------------------------------------------
+ELEMENTARY_CHARGE_C: float = 1.602176634e-19  # Coulomb
+GRAPHENE_BETA: float = 3.0        # beta = -dln(t)/dln(a); literature 2-3.4 (Vozmediano,
+                                  # Katsnelson & Guinea, Phys. Rep. 496, 109 (2010))
+B_PAIRBREAK_DEFAULT: float = 10.0 # Tesla — SPECULATIVE pseudo-field pair-breaking scale
+BUMP_HEIGHT_DEFAULT: float = 5.0  # Angstrom
+BUMP_SIGMA_DEFAULT: float = 50.0  # Angstrom
+RIPPLE_HEIGHT_DEFAULT: float = 2.0        # Angstrom — intrinsic ripples (Meyer et al.,
+RIPPLE_WAVELENGTH_DEFAULT: float = 100.0  # Angstrom    Nature 446, 60 (2007))
+BEND_RADIUS_DEFAULT: float = 1000.0  # Angstrom
+CAP_RADIUS_DEFAULT: float = 2000.0   # Angstrom
+
+# ---------------------------------------------------------------------------
+# Bistritzer-MacDonald / v2 graphene parameters
+# ---------------------------------------------------------------------------
+W_AA_TBG: float = 0.0797     # eV — AA interlayer tunneling, corrugation-reduced
+                             # (Koshino et al., PRX 8, 031087 (2018))
+W_AB_TBG: float = 0.0975     # eV — AB interlayer tunneling (same ref)
+BM_SHELLS_DEFAULT: int = 3   # momentum-lattice truncation shells
+BM_KPOINTS_DEFAULT: int = 16  # k-points per path segment
+DOS_BROADENING_MEV: float = 2.0  # Gaussian broadening for DOS
+POISSON_GRAPHENE: float = 0.16   # graphene Poisson ratio (Blakslee 1970)

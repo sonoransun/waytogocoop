@@ -112,6 +112,34 @@ MATERIALS: dict[str, Material] = {
         ),
         role="both",
     ),
+    "Graphene-AB": Material(
+        name="Bilayer Graphene (AB)",
+        formula="Graphene-AB",
+        lattice_type="hexagonal",
+        a=2.46,
+        c=6.70,
+        space_group="P63/mmc",
+        description=(
+            "Bernal (AB) stacked bilayer graphene substrate. The top-surface "
+            "lattice (a=2.46 hexagonal) sets any interface moire, so the "
+            "interface pattern matches monolayer graphene."
+        ),
+        role="substrate",
+    ),
+    "Graphene-ABA": Material(
+        name="Trilayer Graphene (ABA)",
+        formula="Graphene-ABA",
+        lattice_type="hexagonal",
+        a=2.46,
+        c=10.05,
+        space_group="P63/mmc",
+        description=(
+            "Bernal (ABA) stacked trilayer graphene substrate. The top-surface "
+            "lattice (a=2.46 hexagonal) sets any interface moire, so the "
+            "interface pattern matches monolayer graphene."
+        ),
+        role="substrate",
+    ),
 }
 
 

@@ -7,7 +7,13 @@
 //! colorbar metadata from `ui::viewport::view_meta`.
 
 use eframe::egui;
+use moire_core::bm_model::{BMConfig, BandStructure, DosResult};
+use moire_core::curvature::{CurvatureConfig, CurvatureGeometry, CurvatureResult};
 use moire_core::density::{DensityConfig, DensityResult};
+use moire_core::graphene::{
+    FlatBandConfig, GrapheneStackConfig, GrapheneStackConfigV2, GrapheneStackResult, StackingKind,
+    SupermoireConfig, SupermoireResult,
+};
 use moire_core::isotope_effects::{IsotopeEffects, IsotopeEffectsConfig};
 use moire_core::isotopes::IsotopeConfig;
 use moire_core::magnetic::{MagneticFieldConfig, VortexLatticeResult, ZeemanResult};
@@ -20,6 +26,22 @@ use crate::ui;
 
 /// Default BCS coherence length for FeTe (Angstrom).
 const DEFAULT_COHERENCE_LENGTH: f64 = 20.0;
+
+/// k-points per segment of the K -> Gamma -> M -> K' path (Bands view).
+const BM_N_K_PER_SEGMENT: usize = 12;
+/// k-grid subdivisions per moire reciprocal vector (DOS view).
+const BM_N_K_GRID: usize = 10;
+/// Half-width of the DOS energy window in meV.
+const DOS_E_WINDOW_MEV: f64 = 150.0;
+/// Number of DOS histogram bins.
+const DOS_N_BINS: usize = 200;
+/// Gaussian DOS broadening in meV.
+const DOS_BROADENING_MEV: f64 = 2.0;
+
+/// Owned scalar field + resolution + colormap backing a view texture.
+type ViewScalar = (Vec<f64>, usize, fn(f64) -> [u8; 4]);
+/// Borrowed variant of [`ViewScalar`].
+type ViewScalarRef<'a> = (&'a [f64], usize, fn(f64) -> [u8; 4]);
 
 /// Normalize a slice of f64 values to [0, 1] range.
 /// Returns None if the range is too small (< 1e-15).
@@ -41,6 +63,7 @@ pub enum Tab {
     Fourier,
     MagneticField,
     CooperSurface3D,
+    Graphene,
 }
 
 /// 2D flat or 3D surface view mode.
@@ -48,6 +71,20 @@ pub enum Tab {
 pub enum ViewMode {
     Flat2D,
     Surface3D,
+}
+
+/// Which scalar field or plot the Graphene tab displays. `Bands` and `Dos`
+/// render as egui_plot line charts rather than colormapped textures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum GrapheneView {
+    #[default]
+    Pattern,
+    GapMap,
+    PseudoField,
+    Strain,
+    Fourier,
+    Bands,
+    Dos,
 }
 
 impl Default for Tab {
@@ -137,6 +174,44 @@ pub struct MoireApp {
     #[serde(default = "default_clip_z")]
     pub clip_z: f32,
 
+    // --- Graphene stack (speculative) ---
+    /// Stacking arrangement for the graphene tab.
+    #[serde(default)]
+    pub graphene_stack: StackingKind,
+    /// Twist angle for twisted stackings (degrees).
+    #[serde(default = "default_graphene_twist")]
+    pub graphene_twist: f64,
+    /// Moire flat-band filling |nu|.
+    #[serde(default = "default_graphene_filling")]
+    pub graphene_filling: f64,
+    /// Sheet curvature configuration (speculative).
+    #[serde(default)]
+    pub curvature_config: CurvatureConfig,
+    /// Which scalar field the graphene tab shows.
+    #[serde(default)]
+    pub graphene_view: GrapheneView,
+    /// Include the B-sublattice (honeycomb) term in each layer potential.
+    #[serde(default)]
+    pub graphene_honeycomb: bool,
+    /// Valley index: +1 = K, -1 = K'.
+    #[serde(default = "default_valley")]
+    pub graphene_valley: i32,
+    /// Uniaxial heterostrain on layer index 1, in percent.
+    #[serde(default)]
+    pub graphene_strain_percent: f64,
+    /// Heterostrain tension axis, in degrees.
+    #[serde(default)]
+    pub graphene_strain_angle: f64,
+    /// Warp the stack sampling by the curvature displacement field.
+    #[serde(default)]
+    pub graphene_warp: bool,
+    /// Supermoire overlayer formula (None = plain graphene stack).
+    #[serde(default)]
+    pub supermoire_overlayer: Option<String>,
+    /// Twist between the graphene stack and the supermoire overlayer (deg).
+    #[serde(default)]
+    pub supermoire_interface_twist: f64,
+
     // --- Runtime state (not serialized) ---
     /// Currently selected tab.
     #[serde(skip)]
@@ -204,6 +279,36 @@ pub struct MoireApp {
     /// Last screenshot status message (shown transiently in the info panel).
     #[serde(skip)]
     pub last_screenshot_status: Option<String>,
+    /// Whether the graphene stack needs recompute.
+    #[serde(skip)]
+    pub needs_graphene_recompute: bool,
+    /// Cached graphene stack result.
+    #[serde(skip)]
+    pub graphene_result: Option<GrapheneStackResult>,
+    /// Cached sheet curvature result.
+    #[serde(skip)]
+    pub curvature_result: Option<CurvatureResult>,
+    /// Curvature-suppressed flat-band gap field (meV).
+    #[serde(skip)]
+    pub graphene_gap: Option<Vec<f64>>,
+    /// Texture for the active graphene view.
+    #[serde(skip)]
+    pub graphene_texture: Option<egui::TextureHandle>,
+    /// FFT power spectrum of the graphene pattern (Fourier view).
+    #[serde(skip)]
+    pub graphene_fft: Option<Vec<f64>>,
+    /// Cached supermoire result (when an overlayer is active).
+    #[serde(skip)]
+    pub supermoire_result: Option<SupermoireResult>,
+    /// Cached BM band structure (Bands view; computed lazily).
+    #[serde(skip)]
+    pub band_structure: Option<BandStructure>,
+    /// Cached BM density of states (DOS view; computed lazily).
+    #[serde(skip)]
+    pub dos_result: Option<DosResult>,
+    /// (effective twist, valley) the cached BM results were computed for.
+    #[serde(skip)]
+    pub bm_cache_key: Option<(f64, i32)>,
 }
 
 fn default_dark_mode() -> bool {
@@ -224,6 +329,18 @@ fn default_isotope_alpha() -> f64 {
 
 fn default_g_factor() -> f64 {
     30.0
+}
+
+fn default_graphene_twist() -> f64 {
+    1.08
+}
+
+fn default_graphene_filling() -> f64 {
+    2.4
+}
+
+fn default_valley() -> i32 {
+    1
 }
 
 // Custom Serialize/Deserialize for DensityConfig so the outer derive works.
@@ -286,6 +403,18 @@ impl Default for MoireApp {
             show_world_axes: true,
             clip_z_enabled: false,
             clip_z: 1.0,
+            graphene_stack: StackingKind::default(),
+            graphene_twist: 1.08,
+            graphene_filling: 2.4,
+            curvature_config: CurvatureConfig::default(),
+            graphene_view: GrapheneView::default(),
+            graphene_honeycomb: false,
+            graphene_valley: 1,
+            graphene_strain_percent: 0.0,
+            graphene_strain_angle: 0.0,
+            graphene_warp: false,
+            supermoire_overlayer: None,
+            supermoire_interface_twist: 0.0,
             active_tab: Tab::Pattern,
             needs_recompute: true,
             needs_surface_rerender: true,
@@ -308,6 +437,16 @@ impl Default for MoireApp {
             z_slice_index: 0,
             show_about: false,
             last_screenshot_status: None,
+            needs_graphene_recompute: true,
+            graphene_result: None,
+            curvature_result: None,
+            graphene_gap: None,
+            graphene_texture: None,
+            graphene_fft: None,
+            supermoire_result: None,
+            band_structure: None,
+            dos_result: None,
+            bm_cache_key: None,
         }
     }
 }
@@ -351,6 +490,16 @@ impl MoireApp {
             return materials::substrate();
         }
         overlayers[self.overlayer_idx.min(overlayers.len() - 1)]
+    }
+
+    /// Resolve the persisted supermoire overlayer formula against the
+    /// material database. Graphene-family entries are excluded: a graphene
+    /// stack on graphene is just a larger stack, not a supermoire.
+    pub fn supermoire_material(&self) -> Option<&'static moire_core::materials::Material> {
+        let formula = self.supermoire_overlayer.as_deref()?;
+        materials::overlayers()
+            .into_iter()
+            .find(|m| m.formula == formula && !m.formula.starts_with("Graphene"))
     }
 
     /// Build an IsotopeConfig from the current app state.
@@ -508,17 +657,17 @@ impl MoireApp {
     /// isotope and magnetic flags) to their defaults. Runtime caches and
     /// textures are cleared so the next frame recomputes everything.
     pub fn reset_parameters(&mut self) {
-        let dark = self.dark_mode;
-        let mut fresh = Self::default();
-        fresh.dark_mode = dark;
-        *self = fresh;
+        *self = Self {
+            dark_mode: self.dark_mode,
+            ..Self::default()
+        };
     }
 
     /// Build a high-resolution ColorImage of the currently-displayed view
     /// without touching on-screen textures.
     fn capture_current_view(&self) -> Option<egui::ColorImage> {
         use moire_core::colormap;
-        use render::surface3d::render_surface_3d_opts;
+        use render::surface3d::{render_surface_3d_colored, render_surface_3d_opts};
 
         let opts = self.surface_opts();
         let bg = if self.dark_mode {
@@ -530,7 +679,7 @@ impl MoireApp {
         const CAPTURE_H: usize = 1024;
 
         if self.view_mode == ViewMode::Surface3D {
-            let (data, n, colormap): (Vec<f64>, usize, fn(f64) -> [u8; 4]) = match self.active_tab {
+            let (data, n, colormap): ViewScalar = match self.active_tab {
                 Tab::Pattern => {
                     let m = self.moire_result.as_ref()?;
                     (m.pattern.clone(), m.resolution, colormap::viridis)
@@ -555,6 +704,21 @@ impl MoireApp {
                     let norm = normalize_to_unit_range(&combined)?;
                     (norm, d.resolution, colormap::coolwarm)
                 }
+                Tab::Graphene => {
+                    let (colors, cmap) = self.graphene_view_scalar()?;
+                    let n = self.graphene_result.as_ref()?.resolution;
+                    if self.curvature_config.geometry != CurvatureGeometry::Flat {
+                        if let Some(ref c) = self.curvature_result {
+                            if let Some(heights) = normalize_to_unit_range(&c.height) {
+                                return Some(render_surface_3d_colored(
+                                    &heights, &colors, n, CAPTURE_W, CAPTURE_H,
+                                    &self.camera, cmap, bg, &opts,
+                                ));
+                            }
+                        }
+                    }
+                    (colors, n, cmap)
+                }
             };
             return Some(render_surface_3d_opts(
                 &data,
@@ -568,7 +732,7 @@ impl MoireApp {
             ));
         }
 
-        let (data_vec, n, colormap): (Vec<f64>, usize, fn(f64) -> [u8; 4]) = match self.active_tab {
+        let (data_vec, n, colormap): ViewScalar = match self.active_tab {
             Tab::Pattern => {
                 let m = self.moire_result.as_ref()?;
                 (m.pattern.clone(), m.resolution, colormap::viridis)
@@ -593,6 +757,11 @@ impl MoireApp {
                 let norm = normalize_to_unit_range(&combined)?;
                 (norm, d.resolution, colormap::coolwarm)
             }
+            Tab::Graphene => {
+                let (data, cmap) = self.graphene_view_scalar()?;
+                let n = self.graphene_result.as_ref()?.resolution;
+                (data, n, cmap)
+            }
         };
 
         // 2D: colormap the grid directly at the source resolution, then let
@@ -615,7 +784,14 @@ impl MoireApp {
     /// Updates `last_screenshot_status` with the outcome.
     pub fn save_screenshot(&mut self) {
         let Some(image) = self.capture_current_view() else {
-            self.last_screenshot_status = Some("Screenshot skipped: nothing rendered yet".into());
+            let msg = if self.active_tab == Tab::Graphene
+                && matches!(self.graphene_view, GrapheneView::Bands | GrapheneView::Dos)
+            {
+                "Screenshot skipped: band/DOS plots are not captured"
+            } else {
+                "Screenshot skipped: nothing rendered yet"
+            };
+            self.last_screenshot_status = Some(msg.into());
             return;
         };
         let path = render::screenshot::default_screenshot_path();
@@ -648,7 +824,7 @@ impl MoireApp {
         };
         let opts = self.surface_opts();
 
-        let (data, n, colormap): (&[f64], usize, fn(f64) -> [u8; 4]) = match self.active_tab {
+        let (data, n, colormap): ViewScalarRef = match self.active_tab {
             Tab::Pattern => {
                 if let Some(ref m) = self.moire_result {
                     (&m.pattern, m.resolution, moire_core::colormap::viridis)
@@ -706,6 +882,48 @@ impl MoireApp {
                         }
                         return;
                     }
+                }
+                return;
+            }
+            Tab::Graphene => {
+                if let Some((colors, cmap)) = self.graphene_view_scalar() {
+                    let Some(n) = self.graphene_result.as_ref().map(|g| g.resolution) else {
+                        return;
+                    };
+                    let curved_heights = if self.curvature_config.geometry
+                        != CurvatureGeometry::Flat
+                    {
+                        self.curvature_result
+                            .as_ref()
+                            .and_then(|c| normalize_to_unit_range(&c.height))
+                    } else {
+                        None
+                    };
+                    let img = match curved_heights {
+                        Some(heights) => render::surface3d::render_surface_3d_colored(
+                            &heights,
+                            &colors,
+                            n,
+                            512,
+                            512,
+                            &self.camera,
+                            cmap,
+                            surface_bg,
+                            &opts,
+                        ),
+                        None => render::surface3d::render_surface_3d_opts(
+                            &colors,
+                            n,
+                            512,
+                            512,
+                            &self.camera,
+                            cmap,
+                            surface_bg,
+                            &opts,
+                        ),
+                    };
+                    self.surface_texture =
+                        Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
                 }
                 return;
             }
@@ -834,6 +1052,241 @@ impl MoireApp {
         self.vortex_result = Some(vortex);
     }
 
+    /// Run the curvature + graphene stack (or supermoire) + BM computation
+    /// and rebuild the active-view texture. Curvature runs first because its
+    /// height field feeds the optional displacement warp of the stack.
+    fn recompute_graphene(&mut self, ctx: &egui::Context) {
+        // Persisted state may predate the valley field; only +/-1 is valid.
+        if self.graphene_valley != -1 {
+            self.graphene_valley = 1;
+        }
+
+        let mut ccfg = self.curvature_config;
+        ccfg.resolution = self.resolution;
+        ccfg.physical_extent = self.physical_extent;
+        ccfg.valley = self.graphene_valley;
+        let curvature = match moire_core::curvature::compute_curvature(&ccfg) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Curvature computation error: {e}");
+                return;
+            }
+        };
+
+        let displacement = if self.graphene_warp && ccfg.geometry != CurvatureGeometry::Flat {
+            let dx = self.physical_extent / (self.resolution - 1).max(1) as f64;
+            Some(moire_core::curvature::displacement_field(
+                &curvature.height,
+                self.resolution,
+                dx,
+            ))
+        } else {
+            None
+        };
+
+        let stack_cfg = GrapheneStackConfigV2 {
+            base: GrapheneStackConfig {
+                stacking: self.graphene_stack,
+                twist_angle_deg: self.graphene_twist,
+                lattice_a: moire_core::graphene::GRAPHENE_A,
+                resolution: self.resolution,
+                physical_extent: self.physical_extent,
+            },
+            honeycomb: self.graphene_honeycomb,
+            heterostrain_percent: self.graphene_strain_percent,
+            heterostrain_angle_deg: self.graphene_strain_angle,
+        };
+
+        let stack = if let Some(mat) = self.supermoire_material() {
+            // compute_supermoire has no displacement input, so the curvature
+            // warp applies only to the plain stack path.
+            let sm_cfg = SupermoireConfig {
+                stack: stack_cfg,
+                overlayer_a: mat.a,
+                overlayer_lattice_type: mat.lattice_type,
+                interface_twist_deg: self.supermoire_interface_twist,
+            };
+            let sm = match moire_core::graphene::compute_supermoire(&sm_cfg) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Supermoire computation error: {e}");
+                    return;
+                }
+            };
+            let stack = GrapheneStackResult {
+                pattern: sm.pattern.clone(),
+                resolution: sm.resolution,
+                physical_extent: sm.physical_extent,
+                moire_period: sm.stack_period,
+                n_layers: sm.n_layers,
+            };
+            self.supermoire_result = Some(sm);
+            stack
+        } else {
+            self.supermoire_result = None;
+            let disp = displacement
+                .as_ref()
+                .map(|(u_x, u_y)| (u_x.as_slice(), u_y.as_slice()));
+            match moire_core::graphene::compute_graphene_stack_v2(&stack_cfg, disp) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Graphene stack computation error: {e}");
+                    return;
+                }
+            }
+        };
+
+        let delta_max = if self.graphene_stack.is_twisted() && self.graphene_twist > 0.0 {
+            let fb_cfg = FlatBandConfig {
+                twist_angle_deg: self.graphene_twist,
+                n_layers: self.graphene_stack.n_layers(),
+                filling: self.graphene_filling,
+            };
+            match moire_core::graphene::compute_flat_band_sc(&fb_cfg) {
+                Ok(fb) => fb.delta_mev,
+                Err(e) => {
+                    eprintln!("Flat-band computation error: {e}");
+                    0.0
+                }
+            }
+        } else {
+            0.0
+        };
+
+        self.graphene_fft =
+            match moire_core::fft::compute_fft_2d(&stack.pattern, stack.resolution) {
+                Ok(f) => Some(f),
+                Err(e) => {
+                    eprintln!("Graphene FFT computation error: {e}");
+                    None
+                }
+            };
+
+        self.recompute_bm_model();
+
+        // Gap modulation mirrors the Python gap_modulation convention with
+        // amplitude delta_max / 2, then curvature suppression applied.
+        use std::f64::consts::PI;
+        let gap: Vec<f64> = stack
+            .pattern
+            .iter()
+            .zip(curvature.gap_suppression.iter())
+            .map(|(&p, &s)| (delta_max + 0.5 * delta_max * (PI + PI * p).cos()) * s)
+            .collect();
+
+        self.graphene_result = Some(stack);
+        self.curvature_result = Some(curvature);
+        self.graphene_gap = Some(gap);
+
+        if let Some((data, cmap)) = self.graphene_view_scalar() {
+            self.graphene_texture = Some(render::pattern::create_texture(
+                ctx,
+                "graphene_view",
+                &data,
+                self.resolution,
+                cmap,
+            ));
+        }
+        self.needs_surface_rerender = true;
+    }
+
+    /// Lazily compute the Bistritzer-MacDonald band structure / DOS for the
+    /// Bands and Dos views (each costs ~1 s, so untouched views are skipped)
+    /// and invalidate the caches whenever the effective twist or valley
+    /// changes. Untwisted stacks fall back to the magic angle of the same
+    /// layer count.
+    fn recompute_bm_model(&mut self) {
+        let effective_twist = if self.graphene_stack.is_twisted() && self.graphene_twist > 0.0 {
+            self.graphene_twist
+        } else {
+            moire_core::graphene::magic_angle_deg(self.graphene_stack.n_layers())
+                .unwrap_or(default_graphene_twist())
+        };
+
+        let bm_key = (effective_twist, self.graphene_valley);
+        if self.bm_cache_key != Some(bm_key) {
+            self.band_structure = None;
+            self.dos_result = None;
+            self.bm_cache_key = Some(bm_key);
+        }
+
+        let bm_cfg = BMConfig {
+            twist_angle_deg: effective_twist,
+            valley: self.graphene_valley,
+            ..Default::default()
+        };
+
+        if self.graphene_view == GrapheneView::Bands && self.band_structure.is_none() {
+            match moire_core::bm_model::compute_band_structure(&bm_cfg, BM_N_K_PER_SEGMENT) {
+                Ok(bs) => self.band_structure = Some(bs),
+                Err(e) => eprintln!("Band structure computation error: {e}"),
+            }
+        }
+        if self.graphene_view == GrapheneView::Dos && self.dos_result.is_none() {
+            match moire_core::bm_model::compute_dos(
+                &bm_cfg,
+                BM_N_K_GRID,
+                DOS_E_WINDOW_MEV,
+                DOS_N_BINS,
+                DOS_BROADENING_MEV,
+            ) {
+                Ok(d) => self.dos_result = Some(d),
+                Err(e) => eprintln!("DOS computation error: {e}"),
+            }
+        }
+    }
+
+    /// Scalar field for the active graphene view, normalized to [0, 1], plus
+    /// its colormap. The pseudo-field is mapped symmetrically about 0.5 so
+    /// zero field stays at the colormap midpoint.
+    #[allow(clippy::type_complexity)]
+    fn graphene_view_scalar(&self) -> Option<(Vec<f64>, fn(f64) -> [u8; 4])> {
+        match self.graphene_view {
+            GrapheneView::Pattern => {
+                let g = self.graphene_result.as_ref()?;
+                Some((g.pattern.clone(), moire_core::colormap::viridis))
+            }
+            GrapheneView::GapMap => {
+                let gap = self.graphene_gap.as_ref()?;
+                let norm = normalize_to_unit_range(gap)
+                    .unwrap_or_else(|| vec![0.5; gap.len()]);
+                Some((norm, moire_core::colormap::coolwarm))
+            }
+            GrapheneView::PseudoField => {
+                let c = self.curvature_result.as_ref()?;
+                let data = if c.max_abs_field < 1e-15 {
+                    vec![0.5; c.pseudo_field.len()]
+                } else {
+                    c.pseudo_field
+                        .iter()
+                        .map(|&b| 0.5 + 0.5 * b / c.max_abs_field)
+                        .collect()
+                };
+                Some((data, moire_core::colormap::coolwarm))
+            }
+            GrapheneView::Strain => {
+                let c = self.curvature_result.as_ref()?;
+                let mag: Vec<f64> = c
+                    .strain_xx
+                    .iter()
+                    .zip(&c.strain_yy)
+                    .zip(&c.strain_xy)
+                    .map(|((&xx, &yy), &xy)| (xx * xx + yy * yy + 2.0 * xy * xy).sqrt())
+                    .collect();
+                let norm = normalize_to_unit_range(&mag).unwrap_or_else(|| vec![0.0; mag.len()]);
+                Some((norm, moire_core::colormap::viridis))
+            }
+            // Already log-scaled to [0, 1]; same colormap as the Fourier tab.
+            GrapheneView::Fourier => {
+                let f = self.graphene_fft.as_ref()?;
+                Some((f.clone(), moire_core::colormap::inferno))
+            }
+            // Bands and DOS render as egui_plot lines, not textures, so the
+            // texture / 3D-surface / screenshot paths all skip gracefully.
+            GrapheneView::Bands | GrapheneView::Dos => None,
+        }
+    }
+
     /// Compute and render comparison textures for all 3 overlayers.
     fn refresh_comparison(&mut self, ctx: &egui::Context) {
         let surface_bg = if self.dark_mode {
@@ -947,12 +1400,18 @@ impl eframe::App for MoireApp {
         if self.needs_recompute {
             self.recompute(ctx);
             self.needs_magnetic_recompute = true;
+            self.needs_graphene_recompute = true;
             self.needs_recompute = false;
         }
 
         if self.needs_magnetic_recompute {
             self.recompute_magnetic(ctx);
             self.needs_magnetic_recompute = false;
+        }
+
+        if self.needs_graphene_recompute {
+            self.recompute_graphene(ctx);
+            self.needs_graphene_recompute = false;
         }
 
         if self.needs_surface_rerender && self.view_mode == ViewMode::Surface3D {

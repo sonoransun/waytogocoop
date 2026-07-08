@@ -51,17 +51,40 @@ def _register_validation(id_prefix: str) -> None:
     )
 
 
-def create_parameter_panel(id_prefix: str) -> dbc.Card:
+def create_parameter_panel(
+    id_prefix: str,
+    *,
+    twist_min: float = 0.0,
+    twist_max: float = 30.0,
+    twist_step: float = 0.1,
+    twist_marks: dict | None = None,
+    twist_default: float | None = None,
+    extent_min: float = EXTENT_MIN,
+    extent_max: float = EXTENT_MAX,
+    extent_step: float = 10,
+    extent_default: float | None = None,
+) -> dbc.Card:
     """Return a Card with twist-angle, grid and extent controls.
 
     Hover the ⓘ badge next to any label for a short description of the
     parameter. Numeric inputs surface a red error message when the value is
     out of range; callbacks downstream should also guard against invalid
     values.
+
+    The keyword-only overrides let pages narrow the twist range or change
+    the extent bounds/default; the defaults preserve the historical panel
+    exactly.
     """
     twist_id = f"{id_prefix}-twist-slider"
     grid_id = f"{id_prefix}-grid-size"
     extent_id = f"{id_prefix}-physical-extent"
+
+    if twist_marks is None:
+        twist_marks = {i: str(i) for i in range(0, 31, 5)}
+    twist_value = twist_default if twist_default is not None else DEFAULT_TWIST_ANGLE
+    extent_value = (
+        extent_default if extent_default is not None else DEFAULT_PHYSICAL_EXTENT
+    )
 
     _register_validation(id_prefix)
 
@@ -79,11 +102,11 @@ def create_parameter_panel(id_prefix: str) -> dbc.Card:
                 ),
                 dcc.Slider(
                     id=twist_id,
-                    min=0,
-                    max=30,
-                    step=0.1,
-                    value=DEFAULT_TWIST_ANGLE,
-                    marks={i: str(i) for i in range(0, 31, 5)},
+                    min=twist_min,
+                    max=twist_max,
+                    step=twist_step,
+                    value=twist_value,
+                    marks=twist_marks,
                     tooltip={"placement": "bottom", "always_visible": True},
                 ),
                 html.Br(),
@@ -119,14 +142,14 @@ def create_parameter_panel(id_prefix: str) -> dbc.Card:
                 dbc.Input(
                     id=extent_id,
                     type="number",
-                    value=DEFAULT_PHYSICAL_EXTENT,
-                    min=EXTENT_MIN,
-                    max=EXTENT_MAX,
-                    step=10,
+                    value=extent_value,
+                    min=extent_min,
+                    max=extent_max,
+                    step=extent_step,
                     invalid=False,
                 ),
                 dbc.FormFeedback(
-                    f"Physical extent must be between {EXTENT_MIN} and {EXTENT_MAX} Å.",
+                    f"Physical extent must be between {extent_min} and {extent_max} Å.",
                     type="invalid",
                 ),
             ]

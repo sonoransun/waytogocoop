@@ -179,7 +179,9 @@ layout = dbc.Container(
                                             "Gap modulation — BCS proximity with moire "
                                             "amplitude scaling."
                                         ),
-                                        html.Li("FFT analysis — peak detection over power spectrum."),
+                                        html.Li(
+                                            "FFT analysis — peak detection over power spectrum."
+                                        ),
                                     ]
                                 ),
                                 html.H6("Speculative modules"),
