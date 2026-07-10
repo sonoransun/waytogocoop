@@ -190,7 +190,10 @@ layout = dbc.Container(
                                         html.Li(
                                             "Isotope effects on the gap and coherence length "
                                             "(no direct Te-isotope data for FeTe; α taken from "
-                                            "Ba(Fe,Co)₂As₂ consensus)."
+                                            "Ba(Fe,Co)₂As₂ consensus). Includes a HIGHLY "
+                                            "SPECULATIVE exotic/synthetic-isotope mode "
+                                            "(radioactive and hypothetical masses — what-if "
+                                            "illustrations only)."
                                         ),
                                         html.Li(
                                             "Topological proximity / Majorana modes — 3D "

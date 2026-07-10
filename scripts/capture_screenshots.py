@@ -42,19 +42,31 @@ from waytogocoop.components.figure_factory import (
     create_3d_majorana_isosurface,
     create_3d_surface,
     create_3d_volume,
+    create_band_structure_plot,
+    create_dos_plot,
     create_fft_heatmap,
     create_moire_heatmap,
     create_phase_colormap,
+    create_pseudo_field_heatmap,
+    create_sweep_plot,
+    create_vortex_overlay_heatmap,
 )
+from waytogocoop.computation.bm_model import BMConfig, compute_band_structure, compute_dos
+from waytogocoop.computation.curvature import CurvatureConfig, compute_curvature_effects
 from waytogocoop.computation.fourier import fft_2d
+from waytogocoop.computation.graphene import (
+    compute_flat_band_sc,
+    generate_stack_pattern_v2,
+    generate_supermoire_pattern,
+)
 from waytogocoop.computation.magnetic import (
     combined_gap_with_vortices,
     generate_vortex_positions,
     screening_currents,
     vortex_suppression_field,
 )
-from waytogocoop.computation.moire import generate_moire_pattern
-from waytogocoop.computation.superconducting import gap_modulation
+from waytogocoop.computation.moire import generate_moire_pattern, moire_periodicity_with_twist
+from waytogocoop.computation.superconducting import cpdm_amplitude, gap_modulation
 from waytogocoop.computation.topological import (
     ProximityConfig,
     gap_3d,
@@ -223,6 +235,175 @@ def scene_phase_diagram() -> go.Figure:
     return create_phase_colormap(b, delta, phase, dark=True)
 
 
+# ---- Graphene scenes: "Magic-angle TBG" preset of pages/graphene.py --------
+# Twisted bilayer at theta = 1.08 deg, filling nu = 2.4, grid 200, extent 200 Å.
+
+_TBG_TWIST_DEG = 1.08
+_TBG_FILLING = 2.4
+_GRAPHENE_GRID = 200
+_GRAPHENE_EXTENT = 200.0
+
+
+def _fmt_period(period: float) -> str:
+    return "∞" if np.isinf(period) else f"{period:.1f} Å"
+
+
+def scene_graphene_pattern() -> go.Figure:
+    result = generate_stack_pattern_v2(
+        "twisted_bilayer", _TBG_TWIST_DEG,
+        grid_size=_GRAPHENE_GRID, physical_extent=_GRAPHENE_EXTENT,
+    )
+    return create_moire_heatmap(
+        result["x"], result["y"], result["pattern"],
+        title=(
+            f"Moire Pattern: Twisted bilayer — θ = {_TBG_TWIST_DEG}° (magic angle), "
+            f"L = {_fmt_period(result['moire_period'])}"
+        ),
+        dark=True,
+    )
+
+
+def scene_graphene_bands() -> go.Figure:
+    bands = compute_band_structure(BMConfig(twist_angle_deg=_TBG_TWIST_DEG))
+    return create_band_structure_plot(
+        bands.k_distances,
+        bands.energies_mev,
+        bands.tick_positions,
+        bands.tick_labels,
+        bands.flat_bandwidth_mev,
+        title=f"Moire Band Structure (BM model) — θ = {_TBG_TWIST_DEG}°",
+        dark=True,
+    )
+
+
+def scene_graphene_dos() -> go.Figure:
+    dos_result = compute_dos(BMConfig(twist_angle_deg=_TBG_TWIST_DEG))
+    return create_dos_plot(
+        dos_result["energies_mev"], dos_result["dos"],
+        title=f"Density of States (BM model) — θ = {_TBG_TWIST_DEG}°",
+        dark=True,
+    )
+
+
+def _graphene_grid() -> tuple[np.ndarray, np.ndarray]:
+    x = np.linspace(-_GRAPHENE_EXTENT, _GRAPHENE_EXTENT, _GRAPHENE_GRID)
+    y = np.linspace(-_GRAPHENE_EXTENT, _GRAPHENE_EXTENT, _GRAPHENE_GRID)
+    return x, y
+
+
+def scene_graphene_pseudo_field() -> go.Figure:
+    # "Armchair ripple pseudo-field" preset: 2 Å ripple, 100 Å feature size,
+    # oriented 30 deg from zigzag (= armchair), K valley.  The page feeds the
+    # single feature-size slider into sigma, wavelength, and radius alike.
+    x, y = _graphene_grid()
+    cfg = CurvatureConfig(
+        geometry="sinusoidal_ripple",
+        amplitude=2.0,
+        sigma=100.0,
+        wavelength=100.0,
+        radius=100.0,
+        orientation_deg=30.0,
+        valley=1,
+    )
+    curv = compute_curvature_effects(cfg, x, y)
+    return create_pseudo_field_heatmap(
+        x, y, curv.pseudo_field,
+        title="Pseudo-Magnetic Field (SPECULATIVE) — armchair ripple, K valley",
+        dark=True,
+    )
+
+
+def scene_graphene_curved_3d() -> go.Figure:
+    # "Gaussian bump (curved 3D)" preset: 5 Å bump, sigma = 50 Å.  Height is
+    # the bump; the surface color is the SPECULATIVE flat-band gap times the
+    # pseudo-field suppression, exactly as the page's curved3d view builds it.
+    x, y = _graphene_grid()
+    cfg = CurvatureConfig(
+        geometry="gaussian_bump",
+        amplitude=5.0,
+        sigma=50.0,
+        wavelength=50.0,
+        radius=50.0,
+        orientation_deg=30.0,
+        valley=1,
+    )
+    curv = compute_curvature_effects(cfg, x, y)
+    result = generate_stack_pattern_v2(
+        "twisted_bilayer", _TBG_TWIST_DEG,
+        grid_size=_GRAPHENE_GRID, physical_extent=_GRAPHENE_EXTENT,
+    )
+    fb = compute_flat_band_sc(_TBG_TWIST_DEG, 2, _TBG_FILLING)
+    gap = (
+        gap_modulation(result["pattern"], fb.delta_mev, 0.5 * fb.delta_mev)
+        * curv.gap_suppression
+    )
+    # Same [::2] downsampling the graphene page applies for grid_size > 150.
+    return create_3d_surface(
+        x[::2], y[::2], curv.height[::2, ::2],
+        title="Curved Sheet - Gap Overlay (SPECULATIVE)",
+        colorscale="RdBu_r", z_label="h (A)",
+        dark=True,
+        surfacecolor=gap[::2, ::2],
+        color_label="Delta (meV)",
+    )
+
+
+def scene_graphene_supermoire() -> go.Figure:
+    # "Supermoire on Sb2Te3" preset: magic-angle TBG on an untwisted Sb2Te3
+    # overlayer — intra-stack, interface, and beat periods in the title.
+    overlayer = get_material("Sb2Te3")
+    result = generate_supermoire_pattern(
+        "twisted_bilayer", _TBG_TWIST_DEG,
+        overlayer_a=overlayer.a,
+        overlayer_lattice_type=overlayer.lattice_type,
+        interface_twist_deg=0.0,
+        grid_size=_GRAPHENE_GRID,
+        physical_extent=_GRAPHENE_EXTENT,
+    )
+    return create_moire_heatmap(
+        result["x"], result["y"], result["pattern"],
+        title=(
+            f"Supermoire — TBG θ = {_TBG_TWIST_DEG}° on Sb₂Te₃ "
+            f"(stack {_fmt_period(result['stack_period'])}, "
+            f"interface {_fmt_period(result['interface_period'])}, "
+            f"beat {_fmt_period(result['supermoire_period'])})"
+        ),
+        dark=True,
+    )
+
+
+# ---- Sweep + magnetic 2D scenes ---------------------------------------------
+
+
+def scene_sweep_twist() -> go.Figure:
+    # Twist branch of pages/parameter_sweep.py: FeTe homo-bilayer (a = 3.82 Å,
+    # the page's default substrate), 0.5-5.0 deg, 100 points.
+    substrate_a = 3.82
+    param_values = np.linspace(0.5, 5.0, 100)
+    periods = moire_periodicity_with_twist(substrate_a, param_values)
+    amplitudes = cpdm_amplitude(periods)
+    # Cap infinite periods for plotting, exactly like the page.
+    finite_mask = np.isfinite(periods)
+    max_period = np.max(periods[finite_mask]) * 1.1 if finite_mask.any() else 1000.0
+    periods = np.where(finite_mask, periods, max_period)
+    return create_sweep_plot(
+        param_values, periods, amplitudes, "Twist angle (deg)", dark=True
+    )
+
+
+def scene_magnetic_vortex_2d() -> go.Figure:
+    # The magnetic page's "vortex" view: moire gap heatmap with the Abrikosov
+    # vortex core positions overlaid as markers.
+    result = _moire()
+    gap_field = _gap_field(result["pattern"])
+    vortex_pos = generate_vortex_positions(4.0, physical_extent=100.0, grid_size=200)
+    return create_vortex_overlay_heatmap(
+        result["x"], result["y"], gap_field, vortex_pos,
+        title="Gap + Vortex Lattice — Bz = 4 T",
+        dark=True,
+    )
+
+
 # ---- Scene registry -------------------------------------------------------
 
 SCENES: dict[str, tuple[str, Callable[[], go.Figure]]] = {
@@ -235,6 +416,14 @@ SCENES: dict[str, tuple[str, Callable[[], go.Figure]]] = {
     "magnetic-currents-3d":   ("magnetic-currents-3d.png",   scene_magnetic_currents_3d),
     "magnetic-majorana-3d":   ("magnetic-majorana-3d.png",   scene_magnetic_majorana_3d),
     "phase-diagram":          ("phase-diagram.png",          scene_phase_diagram),
+    "graphene-pattern":       ("graphene-pattern.png",       scene_graphene_pattern),
+    "graphene-bands":         ("graphene-bands.png",         scene_graphene_bands),
+    "graphene-dos":           ("graphene-dos.png",           scene_graphene_dos),
+    "graphene-pseudo-field":  ("graphene-pseudo-field.png",  scene_graphene_pseudo_field),
+    "graphene-curved-3d":     ("graphene-curved-3d.png",     scene_graphene_curved_3d),
+    "graphene-supermoire":    ("graphene-supermoire.png",    scene_graphene_supermoire),
+    "sweep-twist":            ("sweep-twist.png",            scene_sweep_twist),
+    "magnetic-vortex-2d":     ("magnetic-vortex-2d.png",     scene_magnetic_vortex_2d),
 }
 
 

@@ -2,13 +2,24 @@
 
 **Moire Engineering of Cooper-Pair Density Modulation States**
 
-A visualization and computation tool for exploring moire-induced Cooper-pair density modulation in topological-insulator / iron-chalcogenide heterostructures, with magnetic field analysis (Abrikosov vortex lattices, Zeeman splitting, screening currents), topological surface-state physics (proximity-induced gap decay, Majorana zero modes, topological phase diagrams), and speculative isotope-engineering capabilities for precision moire tuning.
+A visualization and computation tool for exploring moire-induced Cooper-pair density modulation in topological-insulator / iron-chalcogenide heterostructures, with magnetic field analysis (Abrikosov vortex lattices, Zeeman splitting, screening currents), topological surface-state physics (proximity-induced gap decay, Majorana zero modes, topological phase diagrams), and speculative isotope-engineering capabilities for precision moire tuning. A second moire platform is built in as well: multilayer graphene stacks with magic-angle flat bands, Bistritzer-MacDonald band structures and density of states, heterostrain, supermoire, and curvature-induced pseudo-magnetic fields.
 
 Two implementations are provided:
 - **Python Web UI** (Plotly Dash) -- accessible via browser on any platform
 - **Rust Native App** (egui/eframe) -- native desktop for Linux, macOS, and Windows
 
-Based on [Moire Engineering of Cooper-Pair Density Modulation States](https://arxiv.org/abs/2602.22637) (Wang, Xia, Paolini et al., 2026).
+Based on [Moire Engineering of Cooper-Pair Density Modulation States](https://arxiv.org/abs/2602.22637) (Wang, Xia, Paolini et al., Nature 652, 335 (2026)).
+
+### Documentation
+
+This README is the overview and gallery; the deep dives live in [`docs/`](docs/README.md):
+
+| | |
+|---|---|
+| **Learn** | [Theory index](docs/theory/README.md) — per-module physics: [moire patterns](docs/theory/moire-patterns.md), [gap modulation](docs/theory/gap-modulation.md), [Fourier analysis](docs/theory/fourier-analysis.md), [magnetic field](docs/theory/magnetic.md), [topological](docs/theory/topological.md), [isotope effects](docs/theory/isotope-effects.md), [graphene stacks](docs/theory/graphene-stacks.md), [BM model](docs/theory/bm-model.md), [curvature](docs/theory/curvature.md) |
+| **Use** | [User guide](docs/user-guide.md) — every page, control, preset, and readout in both apps |
+| **Look up** | [Materials & isotope database](docs/materials.md) · [Glossary](docs/glossary.md) · [Annotated references](docs/references.md) |
+| **Context** | [Historical context](docs/history.md) · [Process technologies](docs/process-technologies.md) |
 
 ---
 
@@ -61,6 +72,12 @@ All images below are regenerated from physics — Python scenes via `python scri
 ![Topological Phase Diagram](docs/images/phase-diagram.png)
 *Fu-Kane phase boundary (SPECULATIVE) over (B, Δ) space.*
 
+![Parameter Sweep — twist angle](docs/images/sweep-twist.png)
+*Parameter Sweep — moire periodicity and CPDM amplitude vs. twist angle.*
+
+![Magnetic — vortex overlay](docs/images/magnetic-vortex-2d.png)
+*Magnetic — Abrikosov vortex lattice (B_z = 4 T) overlaid on the moire-modulated gap.*
+
 **Rust desktop (egui/eframe)**
 
 ![Rust Desktop 2D](docs/images/rust-desktop-2d.png) ![Rust Desktop 3D](docs/images/rust-desktop-3d.png)
@@ -68,6 +85,9 @@ All images below are regenerated from physics — Python scenes via `python scri
 
 ![Rust Desktop Wireframe](docs/images/rust-desktop-wireframe.png) ![Rust Density 3D](docs/images/rust-density-3d.png)
 *Left: wireframe toggle (W). Right: Cooper-pair density modulation surface with diverging `coolwarm`.*
+
+![Rust Graphene Pattern](docs/images/rust-graphene-pattern.png) ![Rust Curved Sheet](docs/images/rust-curved-3d.png)
+*Left: magic-angle twisted-bilayer graphene stack pattern (top-down). Right: curved sheet colored by the valley-antisymmetric pseudo-field B_ps — first exercise of the colored-surface render path.*
 
 ### Advanced 3D Visualization
 
@@ -123,6 +143,8 @@ In practice, you select a substrate and an overlayer material, optionally set a 
 6. **Magnetic field analysis** -- Abrikosov vortex lattice generation in perpendicular fields, vortex-core gap suppression via Ginzburg-Landau profiles, Meissner screening currents, Zeeman splitting and Pauli paramagnetic limiting from in-plane fields, and speculative moire-vortex lattice beating
 7. **Topological proximity effects** -- 3D extension of the proximity-induced superconducting gap into the topological insulator via BTK interface transparency, with volumetric isosurface and z-slice visualization
 8. **Topological phase diagrams** -- Fu-Kane criterion for topological-trivial transitions as a function of Zeeman energy and gap magnitude, Chern number estimates, and speculative Majorana zero-mode probability densities localized at vortex cores
+9. **Graphene stack engineering** -- AA/AB bilayers, twisted bilayers, and ABA/ABC/alternating-twist trilayers with honeycomb two-atom basis, uniaxial heterostrain, supermoire beating against a second overlayer, and magic-angle flat bands computed from the Bistritzer-MacDonald continuum model (band structures along K-Gamma-M-K', density of states, flat-band width)
+10. **Curvature effects** -- curved-sheet height fields (bumps, ripples, bends, caps) generating Monge-gauge strain and valley-antisymmetric pseudo-magnetic fields, with speculative pseudo-field pair-breaking of the flat-band superconducting gap
 
 Results are displayed as interactive heatmaps, line plots, 3D isosurfaces, quiver plots, phase diagrams, and parameter sweeps that update in real time as you adjust material parameters.
 
@@ -134,6 +156,8 @@ flowchart LR
         ISO[Isotope Configuration<br/>Fe/Te/Sb mass overrides,<br/>BCS exponent alpha]
         BFIELD[Magnetic Field<br/>Bx, By, Bz<br/>in Tesla]
         TOPO[Topological Params<br/>xi_prox, transparency,<br/>g-factor, mu]
+        STACK[Graphene Stack<br/>stacking, twist,<br/>strain, filling]
+        CURVIN[Curvature<br/>geometry, height,<br/>orientation]
     end
 
     subgraph Computation
@@ -145,6 +169,9 @@ flowchart LR
         ZEEMAN[Zeeman Splitting<br/>Pauli limit,<br/>depairing ratio]
         PROX[Proximity Decay<br/>BTK interface,<br/>3D gap extension]
         PHASE[Phase Diagram<br/>Fu-Kane criterion,<br/>Chern number]
+        GSTACK[Stack Pattern<br/>G-shells with<br/>registry phases]
+        BM[BM Hamiltonian<br/>bands, DOS,<br/>flat-band width]
+        CURV[Monge Strain<br/>pseudo-field B_ps]
     end
 
     subgraph Outputs
@@ -155,6 +182,7 @@ flowchart LR
         MAGVIS[Vortex Overlay<br/>+ Screening<br/>Currents]
         GAP3D[3D Gap<br/>Isosurface /<br/>Z-Slice]
         PHASEVIS[Phase Diagram<br/>Topological vs.<br/>Trivial]
+        BANDVIS[Band Structure<br/>and DOS]
     end
 
     MAT --> MOIRE
@@ -186,6 +214,17 @@ flowchart LR
     GAP --> PHASE
     TOPO --> PHASE
     PHASE --> PHASEVIS
+
+    STACK --> GSTACK
+    GSTACK --> VIS
+    GSTACK --> FFT
+    STACK --> BM
+    BM --> BANDVIS
+    CURVIN --> CURV
+    CURV -->|warp| GSTACK
+    CURV -->|"suppression (speculative)"| GAPVIS
+
+    style CURV fill:#ffd,stroke:#cc3
 ```
 
 ### Concrete Examples by Substrate Combination
@@ -224,10 +263,15 @@ Beyond the built-in presets, both the web UI and desktop app allow you to overri
 - **Twist-angle engineering**: Apply a 2-degree twist to the Sb2Te3/FeTe system and observe the moire pattern transition from a pure-mismatch regime to a twist-dominated regime where L ~ a/theta.
 - **Matched lattices**: Set both layers to the same lattice constant to verify that the moire pattern vanishes (infinite periodicity), confirming the mismatch-driven origin.
 
+#### Magic-angle twisted bilayer graphene (theta = 1.08 degrees)
+
+The `/graphene` page extends the same moire machinery to a second platform. Select the **"Magic-angle TBG"** preset to overlay two graphene sheets at a 1.08-degree twist: the moire period grows to ~130 angstrom and the Bistritzer-MacDonald flat band collapses toward zero width (switch to the **Band structure** or **DOS** view modes to see it). The **"Alt-twist trilayer"** preset shows the same physics at 1.52 degrees (the bilayer magic angle scaled by sqrt(2)), and **"Supermoire on Sb2Te3"** beats the graphene stack moire against an Sb2Te3 overlayer — connecting the graphene platform back to the CPDM heterostructures above. See [Graphene Stacks, Magic Angles & Curvature](#graphene-stacks-magic-angles--curvature).
+
 ---
 
 ## Table of Contents
 
+- [Documentation](#documentation)
 - [What This Software Does](#what-this-software-does)
   - [Concrete Examples by Substrate Combination](#concrete-examples-by-substrate-combination)
 - [Theory Background](#theory-background)
@@ -237,6 +281,13 @@ Beyond the built-in presets, both the web UI and desktop app allow you to overri
   - [Moire Engineering of CPDM States](#moire-engineering-of-cpdm-states)
   - [Materials](#materials)
   - [Key Equations](#key-equations)
+- [Graphene Stacks, Magic Angles & Curvature](#graphene-stacks-magic-angles--curvature)
+  - [Stacking as Reciprocal-Space Phases](#stacking-as-reciprocal-space-phases)
+  - [Magic Angles and Flat Bands](#magic-angles-and-flat-bands)
+  - [The Bistritzer-MacDonald Continuum Model](#the-bistritzer-macdonald-continuum-model)
+  - [Heterostrain and Supermoire](#heterostrain-and-supermoire)
+  - [Curvature and Pseudo-Magnetic Fields](#curvature-and-pseudo-magnetic-fields)
+  - [Speculative: Flat-Band Superconductivity](#speculative-flat-band-superconductivity)
 - [Magnetic Field Analysis](#magnetic-field-analysis)
   - [Abrikosov Vortex Lattice](#abrikosov-vortex-lattice)
   - [Vortex-Core Gap Suppression](#vortex-core-gap-suppression)
@@ -305,6 +356,8 @@ This epitaxial strategy for synthesizing moire superlattices from materials with
 
 **Sb2Te3** and **Bi2Te3** are three-dimensional topological insulators: they are insulating in the bulk but host conducting surface states protected by time-reversal symmetry. A single quintuple layer (QL) consists of five atomic planes stacked as Te-Sb-Te-Sb-Te (or Te-Bi-Te-Bi-Te), held together by covalent bonds within the layer and van der Waals forces between layers.
 
+*Full crystallographic data and per-element isotope tables: [docs/materials.md](docs/materials.md)*
+
 ### Key Equations
 
 **Moire periodicity from a twist angle** (same lattice constant, relative rotation by angle theta):
@@ -336,6 +389,128 @@ Delta(r) = Delta_avg + delta_Delta * cos(Q_moire . r + phi)
 ```
 
 where Q_moire are the moire reciprocal vectors, delta_Delta is the modulation amplitude, and phi is the phase shift relative to the moire potential.
+
+> **Read more:** [Moire pattern geometry — derivations of both period formulas](docs/theory/moire-patterns.md) · [Gap modulation & CPDM](docs/theory/gap-modulation.md) · [Fourier analysis](docs/theory/fourier-analysis.md)
+
+---
+
+## Graphene Stacks, Magic Angles & Curvature
+
+The same plane-wave moire machinery powers a second platform: multilayer graphene. The `/graphene` page (web) and the Graphene panel (desktop) build AA/AB bilayers, twisted bilayers, and ABA/ABC/alternating-twist trilayers; apply uniaxial heterostrain and curvature warping; beat the stack against a second overlayer lattice (supermoire); and diagonalize the Bistritzer-MacDonald continuum model to show magic-angle flat bands.
+
+```mermaid
+flowchart TD
+    PRESET[Stacking preset<br/>AA / AB / twisted bilayer<br/>ABA / ABC / alt-twist trilayer]
+    GVEC["Per-layer G-shells<br/>+ registry phases c_n·φ"]
+    STRAIN["Heterostrain<br/>G' = (I−E)G on layer 1"]
+    WARP["Curvature warp<br/>u = −½·h·∇h"]
+    PATTERN[Stack pattern]
+    FFTG[FFT]
+    BMH[BM Hamiltonian]
+    BANDS[Bands K→Γ→M→K′<br/>flat-band width W]
+    DOSN[Gaussian DOS]
+    HEIGHT["Height field h(x,y)<br/>bump / ripple / bend / cap"]
+    EPS["Monge strain<br/>ε_ij = ½·∂ᵢh·∂ⱼh"]
+    BPS["Pseudo-field B_ps<br/>valley-antisymmetric"]
+    SUPP[Gap suppression]
+    DOME["Flat-band Δ, Tc<br/>twist × filling dome"]
+
+    PRESET --> GVEC
+    STRAIN --> GVEC
+    WARP --> GVEC
+    GVEC --> PATTERN
+    PATTERN --> FFTG
+    PRESET --> BMH
+    BMH --> BANDS
+    BMH --> DOSN
+    HEIGHT --> EPS
+    HEIGHT --> WARP
+    EPS --> BPS
+    BPS --> SUPP
+    BANDS --> DOME
+    SUPP --> DOME
+
+    style SUPP fill:#ffd,stroke:#cc3
+    style DOME fill:#ffd,stroke:#cc3
+```
+
+### Stacking as Reciprocal-Space Phases
+
+Each layer contributes a potential whose reciprocal-space phases encode the stacking registry:
+
+```
+V(r) = sum_n cos(G_n . r - c_n * phi),    phi = stacking_index * 2*pi/3
+```
+
+with phase coefficients c_n = (1, 1, 0, -1, -1, 0) across the six hexagonal G-vectors. A stacking index of 0 (A registry), 1 (B), or 2 (C) selects each layer's lateral shift, so AA, AB (Bernal), ABA, ABC, and alternating-twist trilayer stacks all emerge from one formula. An optional honeycomb mode adds the true two-atom basis, with the B sublattice at (a1 + a2)/3.
+
+![Graphene stack pattern](docs/images/graphene-pattern.png)
+*Magic-angle twisted bilayer (theta = 1.08 degrees) — the moire period reaches ~130 angstrom, fifty times the graphene lattice constant.*
+
+### Magic Angles and Flat Bands
+
+Interlayer tunneling w competes with the twist-induced momentum offset k_theta = 2 k_D sin(theta/2):
+
+```
+alpha = w / (hbar v_F k_theta)
+v*/v_F = (1 - 3 alpha^2) / (1 + 6 alpha^2)
+```
+
+The renormalized Dirac velocity v* vanishes at the first magic angle — theta ~ 1.08 degrees for a bilayer. For alternating-twist trilayers the effective coupling is w_eff = sqrt(2) w, pushing the magic angle up by sqrt(2) to ~1.52 degrees. The twist slider marks both angles.
+
+### The Bistritzer-MacDonald Continuum Model
+
+Near a magic angle the flat bands are computed exactly (within the continuum approximation) by diagonalizing the Bistritzer-MacDonald Hamiltonian on a momentum lattice: layer-1 plane-wave sites at {m b1 + n b2}, layer-2 sites offset by q1 (so the layer-2 Dirac cone sits at the K' corner of the moire Brillouin zone), truncated to hexagonal shells. Band structures run along K -> Gamma -> M -> K', and the density of states is Gaussian-broadened over a Brillouin-zone grid. In the chiral limit (w_AA = 0) the flat bands are exactly particle-hole symmetric — used as a cross-language test anchor in both implementations.
+
+![BM band structure](docs/images/graphene-bands.png)
+*BM band structure at theta = 1.08 degrees — the flat band (highlighted) pinned at charge neutrality, with flat-band width W annotated.*
+
+![BM density of states](docs/images/graphene-dos.png)
+*Density of states — the flat band shows up as a sharp peak at E = 0.*
+
+### Heterostrain and Supermoire
+
+Uniaxial heterostrain deforms one layer's reciprocal vectors, G' = (I - E) G with E = R(phi) diag(epsilon, -nu epsilon) R(phi)^T — strain is applied to layer 1 only, modeling a pinned substrate. Even 0.5% heterostrain visibly distorts the moire pattern, which is why real magic-angle devices vary so much from flake to flake.
+
+A **supermoire** arises when the graphene stack's own moire beats against a second overlayer lattice (e.g. Sb2Te3):
+
+```
+L_super = L_stack * L_int / |L_stack - L_int|
+```
+
+```mermaid
+graph LR
+    STACKM["Stack moire<br/>period L_stack"] --- SUPER["Supermoire<br/>L_super = L_stack·L_int / |L_stack − L_int|"]
+    INTM["Interface moire<br/>period L_int"] --- SUPER
+    SUPER --- OBS["Long-wavelength<br/>beating pattern"]
+```
+
+![Supermoire](docs/images/graphene-supermoire.png)
+*Supermoire — magic-angle TBG beaten against an Sb2Te3 overlayer; the figure title reports all three periods.*
+
+### Curvature and Pseudo-Magnetic Fields
+
+Bending a graphene sheet strains it. For a height field h(x, y) (Gaussian bump, sinusoidal ripple, cylindrical bend, or spherical cap), the Monge-gauge strain and the resulting gauge field are:
+
+```
+eps_ij = (1/2) (d_i h)(d_j h)
+A ~ (beta hbar / 2 e a_cc) * (eps_xx - eps_yy, -2 eps_xy)      (x = zigzag)
+B_ps = curl A
+```
+
+The pseudo-field B_ps is **valley-antisymmetric** (opposite sign at K and K') and its magnitude follows a sin(3 phi) crystallographic anisotropy — rotate a ripple from zigzag to armchair orientation and watch the field turn on. Nanometer-scale bumps reach tens of tesla, echoing the 300+ T fields reported in graphene nanobubbles. Crucially, a pseudo-field preserves time-reversal symmetry — see the caveats in the theory page before interpreting the speculative pair-breaking model below.
+
+![Pseudo-magnetic field](docs/images/graphene-pseudo-field.png)
+*Pseudo-field of a sinusoidal ripple at 30 degrees — the sign structure is valley-antisymmetric (SPECULATIVE gap model downstream).*
+
+![Curved sheet 3D](docs/images/graphene-curved-3d.png)
+*Curved 3D sheet — Gaussian bump geometry colored by the flat-band gap with pseudo-field suppression (SPECULATIVE).*
+
+### Speculative: Flat-Band Superconductivity
+
+> **SPECULATIVE** -- The flat-band gap and Tc are qualitative toy models (a Lorentzian dome in twist angle of width ~0.1 degrees times a filling-factor dome centered at |nu| ~ 2.4), not fits to experiment. Maximum gaps are pinned to reported scales (0.30 meV bilayer, 0.44 meV trilayer) with Tc = Delta / (1.764 k_B).
+
+> **Read more:** [Graphene stacks & magic angles](docs/theory/graphene-stacks.md) · [BM continuum model](docs/theory/bm-model.md) · [Curvature & pseudo-fields](docs/theory/curvature.md)
 
 ---
 
@@ -415,6 +590,9 @@ Delta_combined(r) = Delta_moire(r) * suppression(r)
 
 This produces a gap landscape that is periodic at the moire wavelength but punctured by zeros at each vortex core -- the starting point for hosting topological excitations (see [Majorana Zero Modes](#speculative-majorana-zero-modes)).
 
+![Vortex lattice overlay](docs/images/magnetic-vortex-2d.png)
+*Abrikosov vortex lattice at B_z = 4 T overlaid on the moire-modulated gap — each dark puncture is a vortex core suppressed by the GL profile.*
+
 ### Zeeman Splitting and Pauli Limiting
 
 An in-plane magnetic field B_parallel = (Bx, By) couples to electron spin via the Zeeman effect. For the topological surface state with an enhanced g-factor (g ~ 30 for Sb2Te3/Bi2Te3 surface states, literature range 20--50):
@@ -479,6 +657,8 @@ E_pin ~ cos(2 pi L_m / L_v)
 ```
 
 Peaks in pinning energy at rational ratios (1/1, 1/2, 2/3, ...) would manifest as anomalies in the critical current vs. field curve.
+
+> **Read more:** [Magnetic-field physics — vortices, Zeeman, screening, beating](docs/theory/magnetic.md)
 
 ---
 
@@ -643,6 +823,8 @@ P = (e^2 / (2 pi hbar)) * theta * B
 
 This quantized magnetoelectric response is a bulk signature of the topological insulator and would be observable via anomalous Hall measurements.
 
+> **Read more:** [Topological & proximity physics — BTK, Fu-Kane, Majorana, Chern](docs/theory/topological.md)
+
 ---
 
 ## Speculative Isotope Engineering
@@ -664,7 +846,7 @@ flowchart TD
 
     ZP -->|"da ~ 10^-4 A<br/>(negligible for<br/>moire period)"| LATTICE[Modified Lattice<br/>Constant a]
     BCS -->|"Delta_mod = Delta_0 x<br/>(M_nat/M_enr)^alpha"| GAP[Modified<br/>Superconducting Gap]
-    DW -->|"exp(-G^2 x delta_u2)"| CONTRAST[Moire Pattern<br/>Contrast]
+    DW -->|"zero-point smearing:<br/>heavier = sharper"| CONTRAST[Moire Pattern<br/>Contrast]
     SPIN -->|"125Te I=1/2<br/>fraction"| DECOHERENCE[Nuclear Spin<br/>Decoherence Rate]
 
     LATTICE --> MOIRE[Moire Period<br/>& Pattern]
@@ -711,19 +893,23 @@ For the heavy elements in this system (Fe ~56 amu, Te ~128 amu), the lattice shi
 
 **3. Debye-Waller Factor**
 
-Isotopic mass changes the mean-square atomic displacement, modifying the strength of the periodic potential that generates the moire pattern:
+Isotopic mass changes the zero-point mean-square atomic displacement, modifying how sharply each lattice imprints the periodic potential that generates the moire pattern:
 
 ```
-DW_ratio = exp(-G^2 * delta<u^2>)
+DW_ratio = exp(-G^2 * C * (1/sqrt(M_enr * M_nat) - 1/M_nat)),   C = 3*hbar^2 / (4 * k_B * Theta_nat)
 ```
 
-Heavier isotopes reduce thermal vibrations, producing a ~1--5% sharper moire pattern. Lighter isotopes slightly wash out the pattern contrast.
+The geometric-mean mass appears because the Debye temperature co-varies with isotope mass, Theta_D(M) = Theta_nat * sqrt(M_nat/M). The model is zero-point only -- deliberately: the classical thermal displacement is isotope-independent, so the isotope contrast in the Debye-Waller factor is a purely quantum zero-point effect. Heavier isotopes have less zero-point smearing, so enrichment makes each lattice imprint its potential **very slightly more sharply** (ratio > 1); lighter isotopes work in the opposite direction. The effect is tiny -- about 0.005% for fully 130Te-enriched FeTe and up to ~0.05% for 12C -> 13C graphene -- so the Debye-Waller ratio is reported as an info-panel readout (alongside the isotope-shifted Debye temperatures) rather than a visible change in the (normalized) displayed pattern.
 
 **4. Nuclear Spin Density**
 
 125Te (I = 1/2, 7.07% natural abundance) is the only spin-bearing stable tellurium isotope. All other Te isotopes (122, 124, 126, 128, 130) have I = 0. The software computes the 125Te spin fraction for a given enrichment, relevant for:
 - Nuclear spin decoherence at the TI/SC interface (Majorana physics)
 - NMR/NQR probe sensitivity (125Te Knight shift measurements)
+
+**Exotic and synthetic isotopes (HIGHLY SPECULATIVE)**
+
+An optional exotic-isotope mode extends the mass sliders beyond the stable tables: the database carries synthetic radioactive isotopes with half-lives (52/55/59/60Fe, 121/127/129/132Te, 119/124/125Sb, 207/208/210Bi, 11/14C), and the sliders can roam hypothetical mass ranges far past any known isotope (e.g. Fe 45--75 amu). Each slider shows the nearest known isotope and its half-life. This tier is flagged HIGHLY SPECULATIVE in both UIs: most of the half-lives are far too short to grow or measure a film (60Fe, 14C, and 55Fe are the least implausible), the hypothetical masses correspond to no known nuclide, and the model ignores radioactivity and self-heating entirely -- outputs are what-if illustrations only. Details: [docs/theory/isotope-effects.md](docs/theory/isotope-effects.md).
 
 ### Isotope Database
 
@@ -828,6 +1014,8 @@ Enriching to 130Te (or any I=0 isotope) eliminates this spin bath entirely. The 
 
 Published 125Te NMR on Fe(Te,Se) under pressure (arXiv:2505.11732) reveals that nematic fluctuations -- not antiferromagnetic ones -- dominate the superconducting state, making 125Te a valuable local probe. Conversely, depleting 125Te by enriching to spin-free isotopes would reduce nuclear-spin-induced decoherence, analogous to 28Si purification for silicon qubits.
 
+> **Read more:** [Isotope effects — the four mechanisms](docs/theory/isotope-effects.md) · [Isotope database](docs/materials.md) · [Enrichment technology](docs/process-technologies.md)
+
 ---
 
 ## Features
@@ -848,6 +1036,7 @@ Published 125Te NMR on Fe(Te,Se) under pressure (arXiv:2505.11732) reveals that 
 - **BCS isotope exponent**: Adjustable alpha from -0.5 (inverse effect) to 1.0, with literature-based marks at key values (-0.18 inverse, 0.4 consensus, 0.5 classical BCS, 0.81 FeSe-measured).
 - **Four-channel isotope effects**: Simultaneous computation of lattice shift, gap modification, Debye-Waller contrast, and coherence length scaling.
 - **125Te nuclear spin fraction**: Tracks the spin-bearing isotope fraction for decoherence assessment.
+- **Exotic-isotope mode (HIGHLY SPECULATIVE)**: Optional switch extending the mass sliders to synthetic radioactive isotopes (starred marks, half-life readouts) and hypothetical masses beyond any known isotope, with a nearest-isotope readout under every slider; what-if illustrations only.
 - **Natural vs. enriched comparison**: Toggle overlay showing isotope-modified pattern against the natural-abundance baseline.
 
 ### Magnetic Field Analysis
@@ -874,6 +1063,19 @@ Published 125Te NMR on Fe(Te,Se) under pressure (arXiv:2505.11732) reveals that 
 - **Speculative Chern number**: Half-integer topological invariant C = +/-0.5 in the topological/trivial phase.
 - **Speculative magnetoelectric polarization**: Quantized surface polarization P = (e^2 / 2 pi hbar) theta B from the axion angle theta = pi.
 
+### Graphene & Curvature
+- **Six stacking presets**: AA, AB (Bernal), twisted bilayer, ABA, ABC, and alternating-twist trilayer — registries encoded as reciprocal-space phases c_n·φ.
+- **Honeycomb basis toggle**: true two-atom unit cell with the B sublattice at (a1 + a2)/3.
+- **Uniaxial heterostrain**: 0-2% at any orientation, applied to the pinned layer via G' = (I - E)G.
+- **Supermoire**: the stack moire beaten against a second overlayer (Sb2Te3 by default), with stack, interface, and supermoire periods all reported.
+- **Bistritzer-MacDonald bands**: momentum-lattice diagonalization along K -> Gamma -> M -> K' with flat-band width/gap extraction and Gaussian-broadened DOS.
+- **Magic-angle markers**: twist slider marks at 1.08 degrees (bilayer) and 1.52 degrees (alternating-twist trilayer); live v*/v_F velocity-ratio readout.
+- **Five curvature geometries**: flat, Gaussian bump, sinusoidal ripple, cylindrical bend, spherical cap — adjustable height, feature size, and orientation.
+- **Strain & pseudo-field maps**: Monge-gauge strain and valley-resolved (K / K') pseudo-magnetic field B_ps with sin(3 phi) crystallographic anisotropy.
+- **Curvature warp**: displacement field u = -(1/2) h grad(h) optionally fed into the stack pattern.
+- **Speculative flat-band SC**: Lorentzian Delta/Tc dome in twist x filling, plus pseudo-field pair-breaking suppression.
+- **Eight view modes** on the graphene page: pattern, gap map, pseudo-field, strain, curved 3D sheet, FFT, band structure, DOS.
+
 ### Visualization
 - **Multiple view modes**: 2D heatmap, contour, interactive 3D surface rendering, 3D isosurfaces, and vector quiver plots.
 - **Dual-panel display**: Moire pattern and gap modulation shown simultaneously.
@@ -890,22 +1092,22 @@ Published 125Te NMR on Fe(Te,Se) under pressure (arXiv:2505.11732) reveals that 
 graph TB
     subgraph "Python Web UI (Plotly Dash)"
         APP[app.py<br/>Dash factory]
-        PAGES[pages/<br/>home, viewer, sweep,<br/>fourier, comparison,<br/>magnetic_field,<br/>proximity_3d,<br/>phase_diagram]
-        COMP[components/<br/>material_selector,<br/>parameter_panel,<br/>isotope_panel,<br/>magnetic_panel,<br/>figure_factory]
+        PAGES[pages/<br/>home, viewer, sweep,<br/>fourier, comparison,<br/>magnetic_field,<br/>proximity_3d,<br/>phase_diagram,<br/>graphene]
+        COMP[components/<br/>material_selector,<br/>parameter_panel,<br/>isotope_panel,<br/>magnetic_panel,<br/>graphene_panel,<br/>figure_factory]
 
         APP --> PAGES
         PAGES --> COMP
     end
 
     subgraph "Shared Physics"
-        PYCOMP[Python computation/<br/>moire, superconducting,<br/>fourier, isotope_effects,<br/>magnetic, topological]
+        PYCOMP[Python computation/<br/>moire, superconducting,<br/>fourier, isotope_effects,<br/>magnetic, topological,<br/>graphene, curvature,<br/>bm_model]
         PYMAT[Python materials/<br/>database, lattice,<br/>isotopes]
-        RSCORE[Rust moire-core<br/>moire, density, fft,<br/>isotope_effects, magnetic,<br/>topological, lattice,<br/>materials, isotopes,<br/>colormap]
+        RSCORE[Rust moire-core<br/>moire, density, fft,<br/>isotope_effects, magnetic,<br/>topological, graphene,<br/>curvature, bm_model,<br/>lattice, materials,<br/>isotopes, colormap]
     end
 
     subgraph "Rust Desktop App (egui/eframe)"
         RSAPP[app.rs<br/>MoireApp state]
-        RSUI[ui/<br/>sidebar, viewport,<br/>info_panel, isotope_panel,<br/>magnetic_panel]
+        RSUI[ui/<br/>sidebar, viewport,<br/>info_panel, isotope_panel,<br/>magnetic_panel,<br/>graphene_panel]
         RSRENDER[render/<br/>DensityMap, ColorImage,<br/>TextureHandle, Surface3D,<br/>vortex overlay]
 
         RSAPP --> RSUI
@@ -931,6 +1133,9 @@ Both implementations share identical physics. The Python version computes patter
 | Isotope effects | `computation/isotope_effects.py` | `moire-core/src/isotope_effects.rs` | Lattice shift, BCS gap, DW factor, spin fraction |
 | Magnetic field | `computation/magnetic.py` | `moire-core/src/magnetic.rs` | Vortex lattice, GL suppression, Zeeman, screening currents, beating |
 | Topological | `computation/topological.py` | `moire-core/src/topological.rs` | Proximity decay, 3D gap, Majorana modes, phase diagrams, Chern number |
+| Graphene stacks | `computation/graphene.py` | `moire-core/src/graphene.rs` | Stacking phases, heterostrain, supermoire, magic angles |
+| Curvature | `computation/curvature.py` | `moire-core/src/curvature.rs` | Height fields, Monge strain, pseudo-field B_ps |
+| BM model | `computation/bm_model.py` | `moire-core/src/bm_model.rs` | Momentum-lattice Hamiltonian, bands, DOS |
 | Material data | `materials/database.py` | `moire-core/src/materials.rs` | Lattice constants, space groups, roles |
 | Isotope data | `materials/isotopes.py` | `moire-core/src/isotopes.rs` | Masses, abundances, Debye temps, Gruneisen params |
 
@@ -973,6 +1178,9 @@ The web UI will be available at `http://localhost:8050`.
 | Magnetic Field | `/magnetic` | Vortex lattice, combined gap, screening currents, susceptibility, Majorana density |
 | 3D Proximity | `/proximity3d` | Isosurface and z-slice views of proximity-induced gap into TI |
 | Phase Diagram | `/phase` | Topological-trivial phase boundary sweep over (B, Delta) space |
+| Graphene | `/graphene` | Stacked/twisted graphene, magic-angle flat bands, BM bands/DOS, curvature pseudo-fields |
+
+Every page's controls, presets, and readouts are documented in the [user guide](docs/user-guide.md).
 
 ### Rust Native App (egui/eframe)
 
@@ -1007,16 +1215,34 @@ cargo test
 waytogocoop/
   README.md
   CLAUDE.md
+  CONTRIBUTING.md                   # Conventions: Python<->Rust sync rule, colormaps, screenshots
   pyproject.toml                    # Python project config
-  Cargo.toml                       # Rust workspace root
+  Cargo.toml                        # Rust workspace root
+  up.sh                             # Local publish/mirror script
+
+  docs/                             # Documentation suite (see docs/README.md)
+    README.md                       # Navigation hub
+    user-guide.md                   # Page-by-page guide for both apps
+    materials.md                    # Materials + isotope database reference
+    glossary.md                     # Term definitions with repo defaults
+    references.md                   # Annotated bibliography
+    history.md                      # Historical context
+    process-technologies.md         # MBE, STM/STS, enrichment, graphene fabrication
+    theory/                         # Per-module physics deep-dives (9 pages + index)
+    images/                         # Script-generated screenshots (23 PNGs)
+
+  scripts/
+    capture_screenshots.py          # Headless Plotly/kaleido screenshot generator (17 scenes)
 
   src/waytogocoop/                  # Python Web UI
-    app.py                          # Dash entry point
+    app.py                          # Dash entry point (create_app factory)
     config.py                       # Physical constants and defaults
+    state.py                        # URL state sharing (?q=<base64>)
+    assets/                         # CSS
     materials/
-      database.py                   # Material registry (FeTe, Sb2Te3, Bi2Te3, Sb2Te)
+      database.py                   # Material registry (FeTe, Sb2Te3, Bi2Te3, Sb2Te, graphene stacks)
       lattice.py                    # Lattice vector generation (square/hexagonal)
-      isotopes.py                   # Isotope masses, abundances, spin fractions
+      isotopes.py                   # Isotope masses, abundances, spin fractions (AME2020)
     computation/
       moire.py                      # Plane-wave moire pattern generation
       superconducting.py            # Gap modulation and CPDM amplitude
@@ -1024,21 +1250,29 @@ waytogocoop/
       isotope_effects.py            # Speculative isotope calculations
       magnetic.py                   # Vortex lattice, Zeeman, screening, beating
       topological.py                # Proximity decay, Majorana, phase diagrams
+      graphene.py                   # Stacking phases, heterostrain, supermoire, magic angles
+      curvature.py                  # Height fields, Monge strain, pseudo-field B_ps
+      bm_model.py                   # Bistritzer-MacDonald bands and DOS
     pages/
-      home.py                       # Landing page with material table
+      home.py                       # Landing page with material table + physics reference
       moire_viewer.py               # Interactive moire + gap viewer
       parameter_sweep.py            # Lattice/twist parameter sweeps
       fourier_analysis.py           # Reciprocal-space analysis
       substrate_comparison.py       # Side-by-side overlayer comparison
-      magnetic_field.py             # Magnetic field analysis with 5 viz modes
-      proximity_3d.py               # 3D proximity gap isosurface/z-slice
+      magnetic_field.py             # Magnetic field analysis with 6 viz modes
+      proximity_3d.py               # 3D proximity gap isosurface/volume/z-slice
       phase_diagram.py              # Topological phase diagram sweeps
+      graphene.py                   # Graphene stacks, BM bands/DOS, curvature
     components/
       material_selector.py          # Dropdown material picker
       parameter_panel.py            # Slider controls
       isotope_panel.py              # Isotope enrichment controls
       magnetic_panel.py             # Magnetic field and proximity controls
+      graphene_panel.py             # Stack/supermoire/curvature controls + figure builders
+      controls.py                   # Shared control builders
       figure_factory.py             # Plotly figure builders
+      colormaps.py                  # Cross-stack colormap LUT loader
+      colormaps_data.json           # 256-stop RGBA LUTs (generated by dump_lut)
 
   crates/
     moire-core/                     # Rust computation library (no UI deps)
@@ -1052,35 +1286,43 @@ waytogocoop/
         isotope_effects.rs          # Speculative isotope calculations
         magnetic.rs                 # Vortex lattice, Zeeman, screening, beating
         topological.rs              # Proximity decay, Majorana, phase diagrams
-        colormap.rs                 # viridis/inferno/coolwarm
+        graphene.rs                 # Stacking phases, heterostrain, supermoire, magic angles
+        curvature.rs                # Height fields, Monge strain, pseudo-field
+        bm_model.rs                 # Bistritzer-MacDonald bands and DOS
+        colormap.rs                 # viridis/inferno/coolwarm LUTs
+        bin/dump_lut.rs             # Regenerates components/colormaps_data.json
     moire-desktop/                  # Rust egui desktop app
       src/
         app.rs                      # MoireApp state, recompute-on-change
+        bin/capture.rs              # Headless screenshot generator (6 scenes)
         ui/
           sidebar.rs                # Parameter controls
-          viewport.rs               # Pattern/density/FFT rendering
+          viewport.rs               # Pattern/density/FFT rendering + tabs
           info_panel.rs             # Computed results display
           isotope_panel.rs          # Isotope enrichment controls
           magnetic_panel.rs         # Magnetic field and proximity controls
+          graphene_panel.rs         # Graphene stack/curvature controls
+          menu.rs, about.rs         # Menu bar, F1 physics reference
         render/                     # DensityMap -> ColorImage -> TextureHandle
+          pattern.rs, surface3d.rs, renderer3d.rs, axes.rs, screenshot.rs
           overlay.rs                # Vortex marker overlay
+          gpu/                      # Feature-gated wgpu pipeline (WGSL shaders)
 
-  tests/                            # Python tests
-    test_materials.py
-    test_moire.py
-    test_superconducting.py
-    test_isotopes.py
-    test_magnetic.py                # Vortex lattice, Zeeman, screening, beating
-    test_topological.py             # Proximity decay, Majorana, phase diagrams
+  tests/                            # Python tests (Rust tests are inline #[cfg(test)] modules)
+    test_materials.py  test_moire.py  test_superconducting.py  test_fourier.py
+    test_isotopes.py   test_magnetic.py  test_topological.py  test_topological_3d.py
+    test_graphene.py   test_curvature.py  test_bm_model.py
 ```
 
 ---
 
 ## References
 
+Annotated versions of all references — what each work established and where the codebase uses it — live in [docs/references.md](docs/references.md).
+
 ### Primary
 
-1. Z. Wang, B. Xia, S. Paolini, Z.-J. Yan, P. Xiao, J. Song, V. Gowda, H. Rong, D. Xiao, X. Xu, W. Wu, Z. Wang, and C.-Z. Chang, "Moire Engineering of Cooper-Pair Density Modulation States," [arXiv:2602.22637](https://arxiv.org/abs/2602.22637) (2026).
+1. Z. Wang, B. Xia, S. Paolini, Z.-J. Yan, P. Xiao, J. Song, V. Gowda, H. Rong, D. Xiao, X. Xu, W. Wu, Z. Wang, and C.-Z. Chang, "Moire Engineering of Cooper-Pair Density Modulation States," Nature 652, 335 (2026); [arXiv:2602.22637](https://arxiv.org/abs/2602.22637).
 
 2. J. Bardeen, L. N. Cooper, and J. R. Schrieffer, "Theory of Superconductivity," Phys. Rev. 108, 1175 (1957).
 
@@ -1100,33 +1342,47 @@ waytogocoop/
 
 ### Isotope Effects in Iron-Based Superconductors
 
-9. R. Khasanov et al., "Iron isotope effect on the superconducting transition temperature and the crystal structure of FeSe1-x," [arXiv:1002.2510](https://arxiv.org/abs/1002.2510) (2010).
+9. R. Khasanov et al., "Iron isotope effect on the superconducting transition temperature and the crystal structure of FeSe1-x," New J. Phys. 12, 073024 (2010); [arXiv:1002.2510](https://arxiv.org/abs/1002.2510).
 
 10. R. H. Liu et al., "A large iron isotope effect in SmFeAsO1-xFx and Ba1-xKxFe2As2," Nature 459, 64 (2009).
 
 11. P. M. Shirage et al., "Inverse Iron Isotope Effect on the Transition Temperature of the (Ba,K)Fe2As2 Superconductor," Phys. Rev. Lett. 103, 257003 (2009).
 
-12. A. Bussmann-Holder et al., "The isotope effect as a probe of superconductivity in SrTiO3 and iron-pnictide/chalcogenide-based superconductors," PMC6447578 (2019).
+12. W.-M. Huang and H.-H. Lin, "Anomalous isotope effect in iron-based superconductors," Sci. Rep. 9, 5547 (2019).
 
-13. S. Zhang et al., "Role of SrTiO3 phonon penetrating into thin FeSe films in the enhancement of superconductivity," PMC6377624 (2019).
+13. Q. Song et al., "Evidence of cooperative effect on the enhanced superconducting transition temperature at the FeSe/SrTiO3 interface," Nat. Commun. 10, 758 (2019).
 
 ### Stoichiometric FeTe Superconductivity
 
-14. C. C. Homes et al., "Stoichiometric FeTe is a superconductor," Nature (2026).
+14. Z.-J. Yan, Z. Wang, B. Xia, et al., "Stoichiometric FeTe is a superconductor," Nature 652, 342 (2026); [arXiv:2603.16115](https://arxiv.org/abs/2603.16115). (Companion paper to Ref. 1 in the same issue.)
 
 ### Tellurium NMR and Nuclear Spin
 
-15. S.-H. Park et al., "125Te and 77Se NMR of FeSe0.47Te0.53 under pressure," [arXiv:2505.11732](https://arxiv.org/abs/2505.11732) (2025).
+15. Q.-P. Ding et al., "Role of Nematic Fluctuations on Superconductivity in FeSe0.47Te0.53 Revealed by NMR under Pressure," Phys. Rev. Lett. 134, 226002 (2025); [arXiv:2505.11732](https://arxiv.org/abs/2505.11732).
 
-16. M. Y. Seyidov et al., "125Te NMR in Bi2Te3 and Sb2Te3," Z. Anorg. Allg. Chem. (2022).
+16. Nachtigal et al., "125Te NMR study of the bulk of topological insulators Bi2Te3 and Sb2Te3," Z. Anorg. Allg. Chem. 648, e202200208 (2022).
 
 ### Isotope Phonon Engineering
 
 17. D. Bessas et al., "Lattice dynamics in Bi2Te3 and Sb2Te3: Te and Sb density of phonon states," Phys. Rev. B 86, 224301 (2012).
 
-18. S. Koga et al., "Isotope superlattice phonon engineering in diamond," Phys. Rev. B 104, 054112 (2021).
+18. H.-K. Weng, A. Nagakubo, H. Watanabe, and H. Ogi, "Phonon propagation in isotopic diamond superlattices," Phys. Rev. B 104, 054112 (2021).
 
-19. L. Lindsay and D. A. Broido, "Three-phonon phase space and lattice thermal conductivity in semiconductors," J. Phys.: Condens. Matter (2008); Phys. Rev. B 88, 144306 (2013).
+19. L. Lindsay and D. A. Broido, "Three-phonon phase space and lattice thermal conductivity in semiconductors," J. Phys.: Condens. Matter 20, 165209 (2008); and L. Lindsay, D. A. Broido, and T. L. Reinecke, "Phonon-isotope scattering and thermal conductivity in materials with a large isotope effect," Phys. Rev. B 88, 144306 (2013).
+
+### Graphene Moire & Flat Bands
+
+20. R. Bistritzer and A. H. MacDonald, "Moire bands in twisted double-layer graphene," PNAS 108, 12233 (2011).
+
+21. Y. Cao et al., "Unconventional superconductivity in magic-angle graphene superlattices," Nature 556, 43 (2018); "Correlated insulator behaviour at half-filling in magic-angle graphene superlattices," Nature 556, 80 (2018).
+
+22. M. Koshino et al., "Maximally Localized Wannier Orbitals and the Extended Hubbard Model for Twisted Bilayer Graphene," Phys. Rev. X 8, 031087 (2018).
+
+23. G. Tarnopolsky, A. J. Kruchkov, and A. Vishwanath, "Origin of Magic Angles in Twisted Bilayer Graphene," Phys. Rev. Lett. 122, 106405 (2019).
+
+24. J. M. Park, Y. Cao, K. Watanabe, T. Taniguchi, and P. Jarillo-Herrero, "Tunable strongly coupled superconductivity in magic-angle twisted trilayer graphene," Nature 590, 249 (2021).
+
+25. N. Levy et al., "Strain-Induced Pseudo-Magnetic Fields Greater Than 300 Tesla in Graphene Nanobubbles," Science 329, 544 (2010).
 
 ---
 

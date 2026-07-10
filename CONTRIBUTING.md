@@ -93,6 +93,8 @@ wire it in the appropriate page under `pages/`. Builders should:
 `ui/viewport.rs::view_meta` (axis + colorbar metadata) and
 `app::recompute` / `app::rerender_surface` (which texture to draw).
 
+**Docs figures** — any figure embedded in the README or `docs/` pages must also get a scene in the matching capture script (`scripts/capture_screenshots.py` or `crates/moire-desktop/src/bin/capture.rs`) so it stays regenerable.
+
 ## Speculative vs established physics
 
 Three subsystems use simplified or speculative models not directly validated

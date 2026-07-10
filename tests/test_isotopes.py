@@ -6,14 +6,30 @@ import numpy as np
 import pytest
 
 from waytogocoop.computation.isotope_effects import compute_isotope_effects
-from waytogocoop.config import DELTA_1, DELTA_2
+from waytogocoop.config import DELTA_1, DELTA_2, EXOTIC_MASS_RANGES
 from waytogocoop.materials.isotopes import (
     ELEMENTS,
     formula_unit_avg_mass,
     get_composition,
     get_element,
+    humanize_half_life,
     natural_average_mass,
+    nearest_isotope_info,
+    te_125_spin_fraction,
 )
+
+
+def _fete_effects(mass_overrides=None, alpha=0.4):
+    """FeTe / Sb2Te3 isotope effects with the standard test geometry."""
+    return compute_isotope_effects(
+        substrate_formula="FeTe",
+        overlayer_formula="Sb2Te3",
+        substrate_a=3.82,
+        overlayer_a=4.264,
+        overlayer_lattice_type="hexagonal",
+        mass_overrides=mass_overrides,
+        alpha=alpha,
+    )
 
 # ---------------------------------------------------------------------------
 # Isotope data integrity
@@ -299,3 +315,153 @@ class TestIsotopeValidation:
         )
         assert np.isfinite(effects.dw_factor_substrate)
         assert effects.dw_factor_substrate > 0
+
+
+# ---------------------------------------------------------------------------
+# Debye-Waller ratio — direction and cross-language parity anchor
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.speculative
+class TestDebyeWallerRatio:
+    def test_heavier_enrichment_raises_dw_factor(self):
+        """Heavier isotopes: less zero-point smearing, ratio > 1."""
+        effects = _fete_effects({"Te": 129.906})  # pure 130Te
+        assert effects.dw_factor_substrate > 1.0
+
+    def test_lighter_enrichment_lowers_dw_factor(self):
+        """Lighter isotopes: more zero-point smearing, ratio < 1."""
+        effects = _fete_effects({"Fe": 53.9396})  # pure 54Fe
+        assert effects.dw_factor_substrate < 1.0
+
+    def test_dw_parity_anchor_130te_fete(self):
+        """Cross-language parity anchor: 130Te-enriched FeTe (a=3.82, square).
+
+        M_nat = 91.235683 amu, M_enr = 92.876590 amu, Theta_nat = 212.5 K,
+        G = 2*pi/3.82 1/Angstrom.  Same number asserted in the Rust suite.
+        """
+        effects = _fete_effects({"Te": 129.906})
+        assert effects.dw_factor_substrate == pytest.approx(1.0000450, abs=5e-6)
+
+
+# ---------------------------------------------------------------------------
+# Isotope-shifted Debye temperature
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.speculative
+class TestDebyeTemperatureShift:
+    def test_natural_theta_d_substrate(self):
+        effects = _fete_effects(None)
+        assert effects.theta_d_substrate == pytest.approx(212.5, rel=1e-12)
+
+    def test_130te_theta_d_substrate(self):
+        effects = _fete_effects({"Te": 129.906})
+        assert effects.theta_d_substrate == pytest.approx(210.61, abs=0.05)
+
+    def test_heavier_enrichment_lowers_theta_d(self):
+        effects = _fete_effects({"Te": 129.906})
+        assert effects.theta_d_substrate < 212.5
+        assert effects.theta_d_overlayer < effects.theta_d_substrate  # Sb2Te3 softer
+
+
+# ---------------------------------------------------------------------------
+# 125Te spin fraction — two-isotope mixture interpolation
+# ---------------------------------------------------------------------------
+
+
+class TestTe125SpinFraction:
+    def test_pure_125te(self):
+        assert te_125_spin_fraction(124.904) == pytest.approx(1.0)
+
+    def test_mixture_125_126(self):
+        assert te_125_spin_fraction(125.4035) == pytest.approx(0.500, abs=0.01)
+
+    def test_mixture_124_125(self):
+        assert te_125_spin_fraction(124.4035) == pytest.approx(0.500, abs=0.01)
+
+    def test_no_125te_component(self):
+        assert te_125_spin_fraction(127.0) == pytest.approx(0.0)
+
+    def test_natural_abundance(self):
+        assert te_125_spin_fraction(None) == pytest.approx(0.071)
+
+
+# ---------------------------------------------------------------------------
+# Synthetic isotopes and nearest-isotope classification
+# ---------------------------------------------------------------------------
+
+
+class TestSyntheticIsotopes:
+    def test_synthetic_isotopes_have_half_life_and_zero_abundance(self):
+        checked = 0
+        for elem in ELEMENTS.values():
+            for iso in elem.synthetic_isotopes:
+                assert iso.half_life_s is not None
+                assert iso.half_life_s > 0
+                assert iso.natural_abundance == 0.0
+                checked += 1
+        assert checked == 16  # Fe(4) + Te(4) + Sb(3) + Bi(3) + C(2)
+
+    def test_stable_isotopes_have_no_half_life(self):
+        for elem in ELEMENTS.values():
+            for iso in elem.isotopes:
+                assert iso.half_life_s is None
+
+    def test_nearest_synthetic(self):
+        info = nearest_isotope_info("Fe", 54.94)
+        assert info.kind == "synthetic"
+        assert info.label == "55Fe"
+        assert info.half_life_s == pytest.approx(2.74 * 3.156e7)
+
+    def test_nearest_hypothetical(self):
+        info = nearest_isotope_info("Fe", 50.0)
+        assert info.kind == "hypothetical"
+        assert info.label is None
+        assert info.half_life_s is None
+
+    def test_nearest_stable(self):
+        info = nearest_isotope_info("Fe", 55.9349)
+        assert info.kind == "stable"
+        assert info.label == "56Fe"
+        assert info.half_life_s is None
+
+    @pytest.mark.parametrize(
+        ("seconds", "expected"),
+        [
+            (69.6 * 60.0, "69.6 min"),
+            (8.28 * 3600.0, "8.3 h"),
+            (44.5 * 86400.0, "44.5 d"),
+            (2.74 * 3.156e7, "2.7 y"),
+            (2.62e6 * 3.156e7, "2.6 My"),
+        ],
+    )
+    def test_humanize_half_life(self, seconds, expected):
+        assert humanize_half_life(seconds) == expected
+
+
+# ---------------------------------------------------------------------------
+# Exotic mass ranges — HIGHLY SPECULATIVE amplification
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.speculative
+class TestExoticAmplification:
+    def test_lighter_exotic_mass_amplifies_gap_ratio(self):
+        """Gap ratio grows monotonically as Fe gets lighter (alpha=0.4)."""
+        ratio_exotic = _fete_effects({"Fe": 45.0}, alpha=0.4).delta_1_modified / DELTA_1
+        ratio_54 = _fete_effects({"Fe": 53.9396}, alpha=0.4).delta_1_modified / DELTA_1
+        assert ratio_exotic > ratio_54 > 1.0
+
+    @pytest.mark.parametrize("element", ["Fe", "Te", "Sb"])
+    def test_finite_at_exotic_range_extremes(self, element):
+        """Clamped exponents keep everything finite at the range edges."""
+        lo, hi = EXOTIC_MASS_RANGES[element]
+        for mass in (lo, hi):
+            effects = _fete_effects({element: mass})
+            assert np.isfinite(effects.dw_factor_substrate)
+            assert effects.dw_factor_substrate > 0
+            assert np.isfinite(effects.dw_factor_overlayer)
+            assert np.isfinite(effects.delta_1_modified)
+            assert np.isfinite(effects.theta_d_substrate)
+            assert np.isfinite(effects.substrate_delta_a)

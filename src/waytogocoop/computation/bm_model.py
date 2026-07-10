@@ -22,6 +22,8 @@ Literature basis:
     twisted bilayer graphene, first magic angle.
   - Koshino et al., PRX 8, 031087 (2018) — corrugation-corrected tunneling
     amplitudes w_aa < w_ab.
+  - Tarnopolsky, Kruchkov & Vishwanath, PRL 122, 106405 (2019) — chiral
+    limit (w_aa = 0) with exact particle-hole symmetric flat bands.
 """
 
 from __future__ import annotations

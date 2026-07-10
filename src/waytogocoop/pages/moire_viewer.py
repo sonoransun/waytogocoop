@@ -26,6 +26,7 @@ from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.computation.superconducting import cpdm_amplitude, gap_modulation
 from waytogocoop.config import DELTA_1, DELTA_2, DELTA_AMPLITUDE, DELTA_AVG
 from waytogocoop.materials.database import get_material
+from waytogocoop.materials.isotopes import natural_average_mass
 from waytogocoop.state import register_url_sync
 
 dash.register_page(
@@ -222,12 +223,17 @@ def _update_viewer(
         isotope_info_children = []
 
         if isotope_on:
-            mass_overrides = {
-                "Fe": float(fe_mass) if fe_mass is not None else 0,
-                "Te": float(te_mass) if te_mass is not None else 0,
-                "Sb": float(sb_mass) if sb_mass is not None else 0,
-                "C": float(c_mass) if c_mass is not None else 0,
-            }
+            # A slider sitting at the element's natural average mass means
+            # "natural composition" — omit it so te_125_spin_fraction and the
+            # mass averages use the natural-abundance path (None), matching
+            # the Rust app, instead of treating it as an enriched blend.
+            mass_overrides = {}
+            for sym, raw in (("Fe", fe_mass), ("Te", te_mass), ("Sb", sb_mass), ("C", c_mass)):
+                if raw is None:
+                    continue
+                value = float(raw)
+                if abs(value - natural_average_mass(sym)) > 1e-6:
+                    mass_overrides[sym] = value
             alpha = float(isotope_alpha) if isotope_alpha is not None else 0.4
 
             effects = compute_isotope_effects(
@@ -269,6 +275,9 @@ def _update_viewer(
                         f"DW sub: {effects.dw_factor_substrate:.6f}",
                         html.Br(),
                         f"DW over: {effects.dw_factor_overlayer:.6f}",
+                        html.Br(),
+                        f"Θ_D (sub/over): {effects.theta_d_substrate:.2f} / "
+                        f"{effects.theta_d_overlayer:.2f} K",
                         html.Br(),
                         f"125Te spin fraction: {effects.te_125_spin_fraction:.3f}"
                         f" (nat: 0.071)",

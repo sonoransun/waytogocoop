@@ -55,6 +55,8 @@ class IsotopeEffects:
     coherence_length_modified: float
     dw_factor_substrate: float
     dw_factor_overlayer: float
+    theta_d_substrate: float  # isotope-shifted Debye temperature (K)
+    theta_d_overlayer: float  # isotope-shifted Debye temperature (K)
     te_125_spin_fraction: float  # fraction of Te that is ¹²⁵Te (I=1/2)
 
 
@@ -73,6 +75,9 @@ def _lattice_shift(
     Formula:
         delta_a = -a * (3 * gamma_G * k_B * T_D) / (4 * E_coh)
                   * (1 - sqrt(M_natural / M_enriched))
+
+    Heavier enrichment contracts the lattice via reduced zero-point
+    anharmonic expansion.  The prefactor uses the natural T_D (leading order).
 
     The relevant mass is the average atomic mass per formula-unit atom.
     Uses element-averaged Gruneisen parameter, Debye temperature, and
@@ -168,12 +173,28 @@ def _debye_waller_ratio(
     a: float,
     mass_overrides: dict[str, float] | None,
 ) -> float:
-    """Debye-Waller factor ratio (enriched vs natural).
+    """Debye-Waller factor ratio (enriched vs natural), zero-point only.
 
-    DW = exp(-G^2 * C / 2 * (1/M_natural - 1/M_enriched))
-    C  = 3 * hbar^2 / (2 * k_B_J * T_D * M_amu_to_kg)
+    Per-component zero-point DW exponent for an atom of mass M:
 
-    G is the magnitude of the first reciprocal lattice vector.
+        2W(M) = G^2 * C / sqrt(M * M_nat),   C = 3*hbar^2 / (4 * k_B * Theta_nat)
+
+    which follows from the zero-point mean-square displacement
+    <u^2>_zp = 9*hbar^2 / (4 * M * k_B * Theta_D(M)), the isotropic
+    projection <u_G^2> = <u^2>/3, and the Debye-temperature mass
+    co-variation Theta_D(M) = Theta_nat * sqrt(M_nat / M).  Hence
+
+        DW_ratio = exp(-G^2 * C * (1/sqrt(M_enr * M_nat) - 1/M_nat))
+
+    The model is zero-point only — and that is the right model here: the
+    classical (high-T) thermal MSD 3*k_B*T/(M*omega_bar^2) is
+    mass-independent because M*omega_bar^2 does not depend on isotope mass,
+    so the isotope contrast in the DW factor is purely a quantum zero-point
+    effect.  Heavier enrichment gives ratio > 1 (less zero-point smearing,
+    sharper potential); lighter gives ratio < 1.
+
+    G is the magnitude of the first reciprocal lattice vector; all
+    quantities in SI (masses in kg via AMU_TO_KG).
     """
     comp = MATERIAL_COMPOSITION.get(formula)
     if comp is None:
@@ -186,7 +207,7 @@ def _debye_waller_ratio(
     if m_enriched <= 0 or m_natural <= 0:
         return 1.0
 
-    # Average Debye temperature
+    # Average natural Debye temperature (Theta_nat)
     total_atoms = sum(comp.values())
     t_debye = sum(
         count * ELEMENTS[sym].debye_temperature for sym, count in comp.items()
@@ -195,9 +216,7 @@ def _debye_waller_ratio(
     # k_B in SI (J/K)
     k_b_j = KB_EV_K * 1.602176634e-19  # convert eV/K to J/K
 
-    # Mean-square displacement difference:
-    #   delta<u^2> = 3*hbar^2 / (4 * k_B * T_D) * (1/M_nat - 1/M_enr)
-    # DW_ratio = exp(-G^2 * delta<u^2>)
+    # C = 3*hbar^2 / (4 * k_B * Theta_nat)
     c_val = 3.0 * HBAR_J_S**2 / (4.0 * k_b_j * t_debye)
 
     # G magnitude in SI (1/m)
@@ -207,13 +226,38 @@ def _debye_waller_ratio(
         g_mag = 2.0 * math.pi / a
     g_si = g_mag / ANGSTROM_TO_M
 
-    # Mass difference in SI (1/kg)
-    inv_mass_diff = 1.0 / (m_natural * AMU_TO_KG) - 1.0 / (m_enriched * AMU_TO_KG)
+    # Zero-point exponent difference in SI (1/kg)
+    m_nat_kg = m_natural * AMU_TO_KG
+    m_enr_kg = m_enriched * AMU_TO_KG
+    mass_term = 1.0 / math.sqrt(m_enr_kg * m_nat_kg) - 1.0 / m_nat_kg
 
-    exponent = -g_si**2 * c_val * inv_mass_diff
+    exponent = -g_si**2 * c_val * mass_term
     # Clamp to prevent math.exp overflow for extreme mass differences
     exponent = max(-EXPONENT_CLAMP, min(EXPONENT_CLAMP, exponent))
     return math.exp(exponent)
+
+
+def _isotope_shifted_debye_temperature(
+    formula: str,
+    mass_overrides: dict[str, float] | None,
+) -> float:
+    """Isotope-shifted Debye temperature (Kelvin).
+
+    Theta_enr = Theta_nat * sqrt(M_nat / M_enr), with Theta_nat the
+    stoichiometry-weighted average Debye temperature and the masses the
+    formula-unit per-atom averages.
+    """
+    comp = MATERIAL_COMPOSITION[formula]
+    total_atoms = sum(comp.values())
+    theta_nat = sum(
+        count * ELEMENTS[sym].debye_temperature for sym, count in comp.items()
+    ) / total_atoms
+
+    m_natural = formula_unit_avg_mass(formula, mass_overrides=None)
+    m_enriched = formula_unit_avg_mass(formula, mass_overrides=mass_overrides)
+    if m_enriched <= 0 or m_natural <= 0:
+        return theta_nat
+    return theta_nat * math.sqrt(m_natural / m_enriched)
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +342,9 @@ def compute_isotope_effects(
         overlayer_formula, overlayer_lattice_type, overlayer_a, mass_overrides
     )
 
+    theta_sub = _isotope_shifted_debye_temperature(substrate_formula, mass_overrides)
+    theta_over = _isotope_shifted_debye_temperature(overlayer_formula, mass_overrides)
+
     overrides = mass_overrides or {}
     spin_frac = te_125_spin_fraction(overrides.get("Te"))
 
@@ -311,5 +358,7 @@ def compute_isotope_effects(
         coherence_length_modified=xi_mod,
         dw_factor_substrate=dw_sub,
         dw_factor_overlayer=dw_over,
+        theta_d_substrate=theta_sub,
+        theta_d_overlayer=theta_over,
         te_125_spin_fraction=spin_frac,
     )

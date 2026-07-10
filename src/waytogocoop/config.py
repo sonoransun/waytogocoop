@@ -44,6 +44,16 @@ DEFAULT_ISOTOPE_EXPONENT: float = 0.4      # BCS isotope exponent — literature
 # α = −0.18 inverse effect in (Ba,K)Fe₂As₂ (Shirage 2009).
 # 0.4 is the corrected consensus value (PRB 82, 212505).
 
+# HIGHLY SPECULATIVE exploration ranges (amu) for the exotic-isotope mode:
+# masses span far beyond the known isotopes, out towards the driplines.
+# Values between/beyond known isotopes are purely hypothetical what-ifs.
+EXOTIC_MASS_RANGES: dict[str, tuple[float, float]] = {
+    "Fe": (45.0, 75.0),
+    "Te": (105.0, 145.0),
+    "Sb": (103.0, 140.0),
+    "C": (8.0, 22.0),
+}
+
 # ---------------------------------------------------------------------------
 # Magnetic / topological constants
 # ---------------------------------------------------------------------------

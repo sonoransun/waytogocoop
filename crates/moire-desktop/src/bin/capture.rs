@@ -19,11 +19,18 @@ use std::path::PathBuf;
 use egui::Color32;
 
 use moire_core::colormap::{coolwarm, viridis};
+use moire_core::curvature::{compute_curvature, CurvatureConfig, CurvatureGeometry};
 use moire_core::density::{compute_density_modulation, DensityConfig};
+use moire_core::graphene::{
+    compute_graphene_stack_v2, GrapheneStackConfig, GrapheneStackConfigV2, StackingKind,
+    GRAPHENE_A,
+};
 use moire_core::materials::LatticeType;
 use moire_core::moire::{compute_moire, MoireConfig, MoireResult};
 use moire_desktop::render::screenshot::save_color_image_to_png;
-use moire_desktop::render::surface3d::{render_surface_3d_opts, Camera3D, SurfaceRenderOpts};
+use moire_desktop::render::surface3d::{
+    render_surface_3d_colored, render_surface_3d_opts, Camera3D, SurfaceRenderOpts,
+};
 
 /// Paper-default preset: FeTe substrate + Sb2Te3 overlayer, θ=0°.
 fn compute_moire_paper_default(grid: usize, extent: f64) -> MoireResult {
@@ -173,6 +180,65 @@ fn scene_rust_density_3d() -> egui::ColorImage {
     )
 }
 
+/// Magic-angle twisted-bilayer graphene, mirroring the desktop graphene
+/// panel's "Magic-angle TBG" preset: twist 1.08°, 200 Å extent, plain
+/// (non-honeycomb) basis, no heterostrain, no warp.
+fn scene_rust_graphene_pattern() -> egui::ColorImage {
+    let extent = 200.0_f64;
+    let cfg = GrapheneStackConfigV2 {
+        base: GrapheneStackConfig {
+            stacking: StackingKind::TwistedBilayer,
+            twist_angle_deg: 1.08,
+            lattice_a: GRAPHENE_A,
+            resolution: 220,
+            physical_extent: extent,
+        },
+        ..GrapheneStackConfigV2::default()
+    };
+    let stack = compute_graphene_stack_v2(&cfg, None)
+        .expect("graphene stack must compute for magic-angle preset");
+    let norm = normalize(&stack.pattern).expect("graphene pattern must be normalizable");
+    render_surface_3d_opts(
+        &norm,
+        stack.resolution,
+        1024,
+        1024,
+        &preset_camera("top"),
+        viridis,
+        bg_dark(),
+        &default_opts(extent),
+    )
+}
+
+/// Curved-sheet scene: Gaussian-bump height field colored by the signed
+/// pseudo-magnetic field B_ps (coolwarm per the signed-quantity convention).
+/// Exercises the colored-surface render path (geometry ≠ colormap field).
+fn scene_rust_curved_3d() -> egui::ColorImage {
+    let extent = 200.0_f64;
+    let cfg = CurvatureConfig {
+        geometry: CurvatureGeometry::GaussianBump,
+        amplitude: 5.0,
+        sigma: 50.0,
+        resolution: 220,
+        physical_extent: extent,
+        ..CurvatureConfig::default()
+    };
+    let curved = compute_curvature(&cfg).expect("curvature must compute for Gaussian bump");
+    let heights = normalize(&curved.height).expect("height field must be normalizable");
+    let colors = normalize(&curved.pseudo_field).expect("pseudo-field must be normalizable");
+    render_surface_3d_colored(
+        &heights,
+        &colors,
+        curved.resolution,
+        1024,
+        1024,
+        &preset_camera("tilt"),
+        coolwarm,
+        bg_dark(),
+        &default_opts(extent),
+    )
+}
+
 fn main() -> Result<(), String> {
     let mut out_dir = PathBuf::from("docs/images");
     let mut only: Vec<String> = Vec::new();
@@ -198,7 +264,8 @@ fn main() -> Result<(), String> {
                     "usage: cargo run -p moire-desktop --bin capture -- \
                      [--out-dir PATH] [--only scene[,scene...]]\n\
                      scenes: rust-desktop-2d, rust-desktop-3d, \
-                     rust-desktop-wireframe, rust-density-3d"
+                     rust-desktop-wireframe, rust-density-3d, \
+                     rust-graphene-pattern, rust-curved-3d"
                 );
                 return Ok(());
             }
@@ -228,6 +295,16 @@ fn main() -> Result<(), String> {
             name: "rust-density-3d",
             filename: "rust-density-3d.png",
             build: scene_rust_density_3d,
+        },
+        Scene {
+            name: "rust-graphene-pattern",
+            filename: "rust-graphene-pattern.png",
+            build: scene_rust_graphene_pattern,
+        },
+        Scene {
+            name: "rust-curved-3d",
+            filename: "rust-curved-3d.png",
+            build: scene_rust_curved_3d,
         },
     ];
 

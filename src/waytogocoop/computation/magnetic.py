@@ -14,7 +14,7 @@ FeTe/topological-insulator heterostructure the project was originally built
 around:
 
 - ``G_FACTOR_TSS`` ≈ 30 (topological surface state g-factor)
-- ``LAMBDA_L_FETE`` = 150 Å  (London penetration depth of FeTe)
+- ``LAMBDA_L_FETE`` = 5000 Å (~500 nm)  (London penetration depth of FeTe)
 - ``DEFAULT_COHERENCE_LENGTH`` = 20 Å  (FeTe BCS coherence length)
 
 For twisted bilayer graphene and other non-TI substrates these are not

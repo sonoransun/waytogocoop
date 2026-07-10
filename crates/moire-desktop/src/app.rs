@@ -137,6 +137,9 @@ pub struct MoireApp {
     /// BCS isotope exponent.
     #[serde(default = "default_isotope_alpha")]
     pub isotope_alpha: f64,
+    /// Whether the HIGHLY SPECULATIVE exotic-isotope mass ranges are active.
+    #[serde(default)]
+    pub exotic_mode: bool,
 
     // --- Magnetic field parameters ---
     /// Magnetic field configuration.
@@ -393,6 +396,7 @@ impl Default for MoireApp {
             sb_mass_override: None,
             c_mass_override: None,
             isotope_alpha: 0.4,
+            exotic_mode: false,
             magnetic_config: MagneticFieldConfig::default(),
             proximity_config: ProximityConfig::default(),
             g_factor: 30.0,

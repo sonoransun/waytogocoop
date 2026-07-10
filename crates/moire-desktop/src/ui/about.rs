@@ -33,7 +33,11 @@ pub fn show(ctx: &Context, open: &mut bool) {
 
             ui.add_space(8.0);
             ui.label(RichText::new("Speculative modules").strong());
-            ui.label("• Isotope effects on gap / coherence length");
+            ui.label(
+                "• Isotope effects on gap / coherence length — includes a \
+                 HIGHLY SPECULATIVE exotic/synthetic-isotope mode \
+                 (radioactive and hypothetical masses, what-if only)",
+            );
             ui.label("• Topological proximity & Majorana modes");
             ui.label("• Abrikosov vortex lattice + Zeeman/Pauli limits");
 

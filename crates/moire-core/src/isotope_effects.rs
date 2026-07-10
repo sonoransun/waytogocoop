@@ -81,6 +81,10 @@ pub struct IsotopeEffects {
     pub coherence_length_modified: f64,
     pub dw_factor_substrate: f64,
     pub dw_factor_overlayer: f64,
+    /// Isotope-shifted substrate Debye temperature (K): Θ_nat·√(M_nat/M_enr).
+    pub theta_d_substrate: f64,
+    /// Isotope-shifted overlayer Debye temperature (K).
+    pub theta_d_overlayer: f64,
     /// Fraction of Te that is ¹²⁵Te (I=1/2, the only spin-bearing Te isotope).
     pub te_125_spin_fraction: f64,
 }
@@ -112,6 +116,9 @@ fn elem_cohesive(sym: &str) -> f64 {
 }
 
 /// Zero-point lattice constant shift.
+///
+/// Heavier enrichment ⇒ contraction via reduced zero-point anharmonic
+/// expansion. The prefactor uses the natural Θ_D (leading order).
 fn lattice_shift(formula: &str, base_a: f64, config: &IsotopeConfig) -> (f64, f64) {
     let natural_config = IsotopeConfig::default();
     let m_natural = match formula_unit_avg_mass(formula, &natural_config) {
@@ -142,7 +149,7 @@ fn lattice_shift(formula: &str, base_a: f64, config: &IsotopeConfig) -> (f64, f6
     (base_a + delta_a, delta_a)
 }
 
-/// BCS isotope effect on superconducting gap.
+/// BCS isotope effect on superconducting gap: Δ ∝ (M_nat/M_enr)^α.
 fn gap_modification(
     delta_1: f64,
     delta_2: f64,
@@ -177,7 +184,22 @@ fn coherence_modification(xi_0: f64, delta_avg_orig: f64, d1_mod: f64, d2_mod: f
     xi_0 * (delta_avg_orig / delta_avg_mod)
 }
 
-/// Debye-Waller factor ratio (enriched vs natural).
+/// Debye-Waller factor ratio (enriched vs natural), zero-point model.
+///
+/// Zero-point mean-square displacement ⟨u²⟩_zp = 9ħ²/(4·M·k_B·Θ_D(M)) with
+/// the Debye temperature co-varying with isotope mass,
+/// Θ_D(M) = Θ_nat·√(M_nat/M). With the isotropic projection ⟨u_G²⟩ = ⟨u²⟩/3
+/// the per-component exponent is
+///   2W(M) = G² · (3ħ²/(4 k_B Θ_nat)) · 1/√(M·M_nat),
+/// so the enriched/natural ratio is
+///   DW_ratio = exp(−G²·C·(1/√(M_enr·M_nat) − 1/M_nat)),
+///   C = 3ħ²/(4 k_B Θ_nat), all SI (masses in kg).
+///
+/// Zero-point only — and that is the right model: the classical (high-T)
+/// thermal MSD 3k_BT/(Mω̄²) is mass-independent because Mω̄² does not depend
+/// on isotope mass, so the isotope contrast in the DW factor is purely a
+/// quantum zero-point effect. Heavier enrichment ⇒ ratio > 1 (less
+/// zero-point smearing, sharper potential); lighter ⇒ < 1.
 fn debye_waller_ratio(
     formula: &str,
     lattice_type: LatticeType,
@@ -198,11 +220,12 @@ fn debye_waller_ratio(
         return 1.0;
     }
 
-    let t_debye = weighted_property(formula, elem_debye);
-    // Mean-square displacement difference:
-    //   delta<u^2> = 3*hbar^2 / (4 * k_B * T_D) * (1/M_nat - 1/M_enr)
-    // DW_ratio = exp(-G^2 * delta<u^2>)
-    let c_val = 3.0 * HBAR_J_S * HBAR_J_S / (4.0 * KB_J_K * t_debye);
+    let t_debye_nat = weighted_property(formula, elem_debye);
+    if t_debye_nat <= 0.0 {
+        return 1.0;
+    }
+    // C = 3*hbar^2 / (4 * k_B * Theta_nat)
+    let c_val = 3.0 * HBAR_J_S * HBAR_J_S / (4.0 * KB_J_K * t_debye_nat);
 
     // G magnitude in 1/m
     let ang_to_m = 1e-10;
@@ -212,11 +235,29 @@ fn debye_waller_ratio(
     };
     let g_si = g_mag / ang_to_m;
 
-    let inv_mass_diff =
-        1.0 / (m_natural * AMU_TO_KG) - 1.0 / (m_enriched * AMU_TO_KG);
+    let m_nat_kg = m_natural * AMU_TO_KG;
+    let m_enr_kg = m_enriched * AMU_TO_KG;
+    let inv_mass_term = 1.0 / (m_enr_kg * m_nat_kg).sqrt() - 1.0 / m_nat_kg;
 
-    let exponent = (-g_si * g_si * c_val * inv_mass_diff).clamp(-100.0, 100.0);
+    let exponent = (-g_si * g_si * c_val * inv_mass_term).clamp(-100.0, 100.0);
     exponent.exp()
+}
+
+/// Isotope-shifted Debye temperature (K): Θ_enr = Θ_nat·√(M_nat/M_enr).
+///
+/// Θ_nat is the stoichiometry-weighted average Debye temperature and the M's
+/// are the formula-unit per-atom average masses.
+fn isotope_debye_temperature(formula: &str, config: &IsotopeConfig) -> f64 {
+    let t_debye_nat = weighted_property(formula, elem_debye);
+    let natural_config = IsotopeConfig::default();
+    let m_natural = formula_unit_avg_mass(formula, &natural_config);
+    let m_enriched = formula_unit_avg_mass(formula, config);
+    match (m_natural, m_enriched) {
+        (Some(m_nat), Some(m_enr)) if m_nat > 0.0 && m_enr > 0.0 => {
+            t_debye_nat * (m_nat / m_enr).sqrt()
+        }
+        _ => t_debye_nat,
+    }
 }
 
 /// Compute all speculative isotope effects for a substrate/overlayer pair.
@@ -249,6 +290,9 @@ pub fn compute_isotope_effects(cfg: &IsotopeEffectsConfig) -> IsotopeEffects {
         &cfg.isotope_config,
     );
 
+    let theta_d_sub = isotope_debye_temperature(cfg.substrate_formula, &cfg.isotope_config);
+    let theta_d_over = isotope_debye_temperature(cfg.overlayer_formula, &cfg.isotope_config);
+
     let spin_frac = te_125_spin_fraction(cfg.isotope_config.te_mass);
 
     IsotopeEffects {
@@ -261,6 +305,8 @@ pub fn compute_isotope_effects(cfg: &IsotopeEffectsConfig) -> IsotopeEffects {
         coherence_length_modified: xi_mod,
         dw_factor_substrate: dw_sub,
         dw_factor_overlayer: dw_over,
+        theta_d_substrate: theta_d_sub,
+        theta_d_overlayer: theta_d_over,
         te_125_spin_fraction: spin_frac,
     }
 }
@@ -377,5 +423,126 @@ mod tests {
         };
         let effects = compute_isotope_effects(&cfg);
         assert!(effects.coherence_length_modified < COHERENCE_LENGTH_DEFAULT);
+    }
+
+    /// Default config (FeTe substrate) with a single mass override.
+    fn effects_with(isotope_config: IsotopeConfig) -> IsotopeEffects {
+        compute_isotope_effects(&IsotopeEffectsConfig {
+            isotope_config,
+            ..Default::default()
+        })
+    }
+
+    // --- Debye-Waller (zero-point model) ---
+
+    #[test]
+    fn test_dw_heavier_enrichment_above_unity() {
+        // Pure 130Te (heavier than natural) ⇒ less zero-point smearing ⇒ > 1.
+        let effects = effects_with(IsotopeConfig {
+            te_mass: Some(129.906),
+            ..Default::default()
+        });
+        assert!(
+            effects.dw_factor_substrate > 1.0,
+            "heavier enrichment must give DW ratio > 1, got {}",
+            effects.dw_factor_substrate
+        );
+    }
+
+    #[test]
+    fn test_dw_lighter_enrichment_below_unity() {
+        // Pure 54Fe (lighter than natural) ⇒ more zero-point smearing ⇒ < 1.
+        let effects = effects_with(IsotopeConfig {
+            fe_mass: Some(53.9396),
+            ..Default::default()
+        });
+        assert!(
+            effects.dw_factor_substrate < 1.0,
+            "lighter enrichment must give DW ratio < 1, got {}",
+            effects.dw_factor_substrate
+        );
+    }
+
+    #[test]
+    fn test_dw_parity_anchor_130te_fete() {
+        // Cross-language parity anchor: FeTe (a = 3.82, square), pure 130Te,
+        // natural Fe. M_nat = 91.235683 amu, M_enr = 92.876590 amu,
+        // Θ_nat = 212.5 K, G = 2π/3.82 Å⁻¹ ⇒ DW ratio = 1.0000450.
+        let effects = effects_with(IsotopeConfig {
+            te_mass: Some(129.906),
+            ..Default::default()
+        });
+        assert!(
+            (effects.dw_factor_substrate - 1.0000450).abs() < 5e-6,
+            "DW parity anchor mismatch: got {}",
+            effects.dw_factor_substrate
+        );
+    }
+
+    // --- Isotope-shifted Debye temperature ---
+
+    #[test]
+    fn test_theta_d_natural() {
+        let effects = compute_isotope_effects(&IsotopeEffectsConfig::default());
+        // Natural FeTe: (260 + 165)/2 = 212.5 K exactly.
+        assert!((effects.theta_d_substrate - 212.5).abs() < 1e-9);
+        // Natural Sb2Te3: (2·210 + 3·165)/5 = 183.0 K exactly.
+        assert!((effects.theta_d_overlayer - 183.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_theta_d_130te_anchor() {
+        let effects = effects_with(IsotopeConfig {
+            te_mass: Some(129.906),
+            ..Default::default()
+        });
+        assert!(
+            (effects.theta_d_substrate - 210.61).abs() < 0.05,
+            "Θ_D anchor mismatch: got {}",
+            effects.theta_d_substrate
+        );
+    }
+
+    // --- Exotic-tier amplification and finiteness ---
+
+    #[test]
+    fn test_exotic_light_fe_amplifies_gap() {
+        // α = 0.4 (default): lighter mass ⇒ larger gap; hypothetical 45 amu
+        // Fe amplifies more than stable 54Fe, both above unity.
+        let ratio = |fe_mass: f64| {
+            let effects = effects_with(IsotopeConfig {
+                fe_mass: Some(fe_mass),
+                ..Default::default()
+            });
+            effects.delta_1_modified / DELTA_1_DEFAULT
+        };
+        let r_exotic = ratio(45.0);
+        let r_stable = ratio(53.9396);
+        assert!(
+            r_exotic > r_stable && r_stable > 1.0,
+            "expected exotic > stable > 1, got {} vs {}",
+            r_exotic,
+            r_stable
+        );
+    }
+
+    #[test]
+    fn test_exotic_extremes_finite() {
+        // Range extremes of the exotic tier stay finite (exponent clamp).
+        for (fe_mass, te_mass) in [(45.0, 105.0), (75.0, 145.0)] {
+            let effects = effects_with(IsotopeConfig {
+                fe_mass: Some(fe_mass),
+                te_mass: Some(te_mass),
+                ..Default::default()
+            });
+            assert!(effects.dw_factor_substrate.is_finite());
+            assert!(effects.dw_factor_substrate > 0.0);
+            assert!(effects.dw_factor_overlayer.is_finite());
+            assert!(effects.delta_1_modified.is_finite());
+            assert!(effects.delta_2_modified.is_finite());
+            assert!(effects.coherence_length_modified.is_finite());
+            assert!(effects.theta_d_substrate.is_finite());
+            assert!(effects.theta_d_substrate > 0.0);
+        }
     }
 }
