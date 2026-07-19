@@ -2098,6 +2098,7 @@ dependencies = [
  "png 0.17.16",
  "pollster 0.3.0",
  "serde",
+ "serde_json",
  "wgpu 22.1.0",
 ]
 

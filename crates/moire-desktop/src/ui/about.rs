@@ -30,6 +30,7 @@ pub fn show(ctx: &Context, open: &mut bool) {
             ui.label("• Moire patterns (plane-wave superposition)");
             ui.label("• Gap modulation via BCS proximity");
             ui.label("• FFT power spectrum + peak detection");
+            ui.label("• 3D proximity z-decay (z-slice + decay profile)");
 
             ui.add_space(8.0);
             ui.label(RichText::new("Speculative modules").strong());
@@ -38,7 +39,7 @@ pub fn show(ctx: &Context, open: &mut bool) {
                  HIGHLY SPECULATIVE exotic/synthetic-isotope mode \
                  (radioactive and hypothetical masses, what-if only)",
             );
-            ui.label("• Topological proximity & Majorana modes");
+            ui.label("• Majorana zero modes (Cooper 3D tab, vortex-bound)");
             ui.label("• Abrikosov vortex lattice + Zeeman/Pauli limits");
 
             ui.add_space(8.0);

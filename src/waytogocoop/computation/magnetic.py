@@ -39,6 +39,7 @@ from waytogocoop.config import (
     G_FACTOR_TSS,
     LAMBDA_L_FETE,
     MU_B_MEV_T,
+    NORM_FLOOR,
     PHI_0,
     ZERO_THRESHOLD,
 )
@@ -244,9 +245,13 @@ def pauli_limiting_field(delta_avg_meV: float) -> float:
     return delta_avg_meV / (np.sqrt(2.0) * MU_B_MEV_T)
 
 
-def compute_zeeman(config: MagneticFieldConfig, delta_avg_meV: float) -> ZeemanResult:
+def compute_zeeman(
+    config: MagneticFieldConfig,
+    delta_avg_meV: float,
+    g_factor: float = G_FACTOR_TSS,
+) -> ZeemanResult:
     """Compute full Zeeman result from field config."""
-    E_Z = zeeman_energy(config.Bx, config.By)
+    E_Z = zeeman_energy(config.Bx, config.By, g_factor)
     B_P = pauli_limiting_field(delta_avg_meV)
     B_par = np.hypot(config.Bx, config.By)
     ratio = B_par / B_P if np.isfinite(B_P) and B_P > 0 else 0.0
@@ -372,7 +377,7 @@ def moire_vortex_beating(
     # Normalise to [0, 1]
     pmin, pmax = pattern.min(), pattern.max()
     rng = pmax - pmin
-    if rng > 1.0e-15:
+    if rng > NORM_FLOOR:
         pattern = (pattern - pmin) / rng
     else:
         pattern = np.full_like(pattern, 0.5)

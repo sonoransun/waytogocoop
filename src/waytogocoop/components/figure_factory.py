@@ -25,6 +25,7 @@ from waytogocoop.components.colormaps import (
     LIGHTING_PRESET,
     get_plotly_colorscale,
 )
+from waytogocoop.config import K_F_TSS
 
 
 def _resolve_colorscale(name: str) -> list[list[object]]:
@@ -1191,4 +1192,193 @@ def create_commensuration_sweep(
     )
     fig.update_yaxes(title_text="Vortex period (Å)", secondary_y=False)
     fig.update_yaxes(title_text="a_v / L_m", secondary_y=True)
+    return fig
+
+
+def create_field_cpdm_sweep(
+    B_values: np.ndarray,
+    amplitudes: np.ndarray,
+    Bz_current: float,
+    Bc2: float,
+    title: str = "Field-Tunable CPDM (SPECULATIVE)",
+    dark: bool = True,
+) -> go.Figure:
+    """Line plot of the speculative field-tunable CPDM amplitude A_CPDM(B)."""
+    primary, _secondary, muted = _line_colors(dark)
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=B_values, y=amplitudes,
+            name="A_CPDM",
+            mode="lines",
+            line=dict(color=primary),
+            hovertemplate="B: %{x:.2f} T<br>A_CPDM: %{y:.3g}<extra></extra>",
+        )
+    )
+    fig.add_vline(
+        x=Bz_current,
+        line=dict(dash="dash", color=muted, width=1),
+        annotation_text="Bz",
+    )
+    fig.add_vline(
+        x=Bc2,
+        line=dict(dash="dot", color=muted, width=1),
+        annotation_text="Bc2",
+    )
+    fig.update_layout(
+        title=title,
+        xaxis_title="B (Tesla)",
+        yaxis_title="CPDM amplitude",
+        margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
+        hovermode="x unified",
+    )
+    return fig
+
+
+def create_pinning_energy_sweep(
+    B_values: np.ndarray,
+    pinning: np.ndarray,
+    Bz_current: float,
+    title: str = "Commensuration Pinning Energy (SPECULATIVE)",
+    dark: bool = True,
+) -> go.Figure:
+    """Line plot of the speculative vortex-moire commensuration pinning energy."""
+    primary, _secondary, muted = _line_colors(dark)
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=B_values, y=pinning,
+            name="E_pin",
+            mode="lines",
+            line=dict(color=primary),
+            hovertemplate="B: %{x:.2f} T<br>E_pin: %{y:.3g}<extra></extra>",
+        )
+    )
+    fig.add_hline(
+        y=0.0,
+        line=dict(dash="dot", color=muted, width=1),
+    )
+    fig.add_vline(
+        x=Bz_current,
+        line=dict(dash="dash", color=muted, width=1),
+        annotation_text="Bz",
+    )
+    fig.update_layout(
+        title=title,
+        xaxis_title="B (Tesla)",
+        yaxis_title="E_pin (arb. units)",
+        margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
+        hovermode="x unified",
+    )
+    return fig
+
+
+def create_topological_extras_sweep(
+    B_values: np.ndarray,
+    chern_values: np.ndarray,
+    polarization_values: np.ndarray,
+    title: str = "Chern Number & Magnetoelectric Polarization (SPECULATIVE)",
+    dark: bool = True,
+) -> go.Figure:
+    """Dual-axis plot: Chern number C(B) (step) and surface polarization P(B)."""
+    primary, secondary, muted = _line_colors(dark)
+    chern_values = np.asarray(chern_values, dtype=float)
+    B_values = np.asarray(B_values, dtype=float)
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(
+        go.Scatter(
+            x=B_values, y=chern_values,
+            name="Chern C",
+            mode="lines",
+            line=dict(color=primary, shape="hv"),
+            hovertemplate="B: %{x:.2f} T<br>C: %{y:.1f}<extra></extra>",
+        ),
+        secondary_y=False,
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=B_values, y=polarization_values,
+            name="P (C/m²)",
+            mode="lines",
+            line=dict(color=secondary),
+            hovertemplate="B: %{x:.2f} T<br>P: %{y:.3g} C/m²<extra></extra>",
+        ),
+        secondary_y=True,
+    )
+
+    # Mark the field where the Chern number flips sign (topological onset).
+    neg = np.where(chern_values < 0)[0]
+    pos = np.where(chern_values > 0)[0]
+    if len(neg) and len(pos):
+        B_star = B_values[pos[0]]
+        fig.add_vline(
+            x=B_star,
+            line=dict(dash="dash", color=muted, width=1),
+            annotation_text="C flips",
+        )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="B (Tesla)",
+        margin=dict(l=60, r=60, t=50, b=50),
+        template=_template(dark),
+        hovermode="x unified",
+    )
+    fig.update_yaxes(title_text="Chern number C", secondary_y=False)
+    fig.update_yaxes(title_text="Polarization P (C/m²)", secondary_y=True)
+    return fig
+
+
+def create_dirac_cone_plot(
+    k_values: np.ndarray,
+    E_upper: np.ndarray,
+    induced_gap_meV: float,
+    title: str = "TI Surface Dirac Cone",
+    dark: bool = True,
+) -> go.Figure:
+    """Plot the ±E(k) Dirac branches with the induced proximity gap marked."""
+    primary, secondary, muted = _line_colors(dark)
+    E_upper = np.asarray(E_upper, dtype=float)
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=k_values, y=E_upper,
+            name="+E(k)",
+            mode="lines",
+            line=dict(color=primary),
+            hovertemplate="k: %{x:.3f} 1/Å<br>E: %{y:.2f} meV<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=k_values, y=-E_upper,
+            name="−E(k)",
+            mode="lines",
+            line=dict(color=secondary),
+            hovertemplate="k: %{x:.3f} 1/Å<br>E: %{y:.2f} meV<extra></extra>",
+        )
+    )
+    for sign in (1.0, -1.0):
+        fig.add_hline(
+            y=sign * induced_gap_meV,
+            line=dict(dash="dash", color=muted, width=1),
+            annotation_text="induced Δ" if sign > 0 else None,
+        )
+    for sign in (1.0, -1.0):
+        fig.add_vline(
+            x=sign * K_F_TSS,
+            line=dict(dash="dot", color=muted, width=1),
+            annotation_text="k_F" if sign > 0 else None,
+        )
+    fig.update_layout(
+        title=title,
+        xaxis_title="k (1/Å)",
+        yaxis_title="E (meV)",
+        margin=dict(l=60, r=20, t=50, b=50),
+        template=_template(dark),
+    )
     return fig

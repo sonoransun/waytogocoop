@@ -1,6 +1,6 @@
 use egui::Ui;
 
-use crate::app::MoireApp;
+use crate::app::{MagneticView, MoireApp};
 
 /// Render the magnetic field control panel. Returns true if any parameter changed.
 pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
@@ -64,30 +64,12 @@ pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
 
     ui.add_space(8.0);
 
-    // --- Proximity / topological parameters ---
-    egui::CollapsingHeader::new("Proximity / Topological")
+    // --- Topological parameters ---
+    // Proximity xi / interface transparency now live in the Cooper 3D panel
+    // (they configure the z-decay tab, not the vortex compute).
+    egui::CollapsingHeader::new("Topological")
         .default_open(false)
         .show(ui, |ui| {
-            ui.label("Proximity xi (A):");
-            if ui
-                .add(egui::Slider::new(
-                    &mut app.proximity_config.xi_prox,
-                    10.0..=500.0,
-                ))
-                .changed()
-            {
-                changed = true;
-            }
-            ui.label("Interface transparency:");
-            if ui
-                .add(
-                    egui::Slider::new(&mut app.proximity_config.interface_transparency, 0.1..=1.0)
-                        .step_by(0.05),
-                )
-                .changed()
-            {
-                changed = true;
-            }
             ui.label("g-factor:");
             if ui
                 .add(egui::Slider::new(&mut app.g_factor, 1.0..=50.0))
@@ -99,12 +81,29 @@ pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
 
     ui.add_space(8.0);
 
+    // --- View selector ---
+    ui.label("View:");
+    egui::ComboBox::from_id_salt("magnetic_view_combo")
+        .selected_text(magnetic_view_label(app.magnetic_view))
+        .show_ui(ui, |ui| {
+            for view in [
+                MagneticView::CombinedGap,
+                MagneticView::Susceptibility,
+                MagneticView::ScreeningCurrent,
+            ] {
+                if ui
+                    .selectable_value(&mut app.magnetic_view, view, magnetic_view_label(view))
+                    .changed()
+                {
+                    changed = true;
+                }
+            }
+        });
+
+    ui.add_space(8.0);
+
     // --- Display options ---
     ui.checkbox(&mut app.show_vortices, "Show vortex cores");
-    ui.checkbox(
-        &mut app.show_majorana,
-        "Show Majorana density (speculative)",
-    );
 
     // --- Summary readout ---
     if let Some(ref vr) = app.vortex_result {
@@ -128,4 +127,12 @@ pub fn show_magnetic_panel(ui: &mut Ui, app: &mut MoireApp) -> bool {
     }
 
     changed
+}
+
+fn magnetic_view_label(view: MagneticView) -> &'static str {
+    match view {
+        MagneticView::CombinedGap => "Combined gap",
+        MagneticView::Susceptibility => "Susceptibility χ",
+        MagneticView::ScreeningCurrent => "Screening |j|",
+    }
 }

@@ -146,6 +146,21 @@ class TestZeeman:
         assert result.pauli_limit_field > 0
         assert result.depairing_ratio >= 0
 
+    def test_zeeman_scales_with_g_factor(self):
+        config = MagneticFieldConfig(Bx=1.0, By=0.0, Bz=0.0)
+        e_30 = compute_zeeman(config, 3.0, g_factor=30.0).zeeman_energy
+        e_60 = compute_zeeman(config, 3.0, g_factor=60.0).zeeman_energy
+        assert e_60 == pytest.approx(2.0 * e_30, rel=1e-12)
+
+    def test_compute_zeeman_g_factor_threaded(self):
+        """Parity anchor: E_Z(g=2, B_par=1 T) = 2 * 5.788e-2 = 0.11576 meV.
+
+        Twin of moire-core magnetic.rs::test_compute_zeeman_g_factor_threaded.
+        """
+        config = MagneticFieldConfig(Bx=1.0, By=0.0, Bz=0.0)
+        result = compute_zeeman(config, 3.0, g_factor=2.0)
+        assert result.zeeman_energy == pytest.approx(0.11576, abs=1e-10)
+
 
 class TestScreeningCurrents:
     def test_no_vortices_zero_current(self):

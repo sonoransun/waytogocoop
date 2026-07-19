@@ -13,7 +13,9 @@ from waytogocoop.components.material_selector import create_material_selector
 from waytogocoop.components.parameter_panel import create_parameter_panel
 from waytogocoop.computation.fourier import fft_2d, identify_peaks
 from waytogocoop.computation.moire import generate_moire_pattern
+from waytogocoop.config import DEFAULT_FFT_THRESHOLD_FRACTION
 from waytogocoop.materials.database import get_material
+from waytogocoop.state import register_url_sync
 
 dash.register_page(
     __name__,
@@ -23,6 +25,7 @@ dash.register_page(
 )
 
 _PREFIX = "fourier"
+_URL_ID = f"{_PREFIX}-url"
 
 _VIEWER_BINDINGS = [
     (f"{_PREFIX}-substrate-dropdown", "value", "substrate"),
@@ -34,6 +37,7 @@ _VIEWER_BINDINGS = [
 
 layout = dbc.Container(
     [
+        dcc.Location(id=_URL_ID, refresh=False),
         html.Br(),
         html.H2("Fourier Analysis"),
         html.Hr(),
@@ -44,6 +48,24 @@ layout = dbc.Container(
                     [
                         create_material_selector(_PREFIX),
                         create_parameter_panel(_PREFIX),
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.H5("Peak Detection", className="card-title"),
+                                    dbc.Label("Threshold (fraction of max power)"),
+                                    dcc.Slider(
+                                        id=f"{_PREFIX}-peak-threshold",
+                                        min=0.05,
+                                        max=0.95,
+                                        step=0.05,
+                                        value=DEFAULT_FFT_THRESHOLD_FRACTION,
+                                        marks={0.05: "0.05", 0.3: "0.3", 0.6: "0.6", 0.95: "0.95"},
+                                        tooltip={"placement": "bottom", "always_visible": True},
+                                    ),
+                                ]
+                            ),
+                            className="mb-3",
+                        ),
                     ],
                     xs=12, md=4, lg=3,
                 ),
@@ -91,6 +113,19 @@ layout = dbc.Container(
 )
 
 
+register_url_sync(
+    _URL_ID,
+    [
+        (f"{_PREFIX}-substrate-dropdown", "value", "sub"),
+        (f"{_PREFIX}-overlayer-dropdown", "value", "over"),
+        (f"{_PREFIX}-twist-slider", "value", "tw"),
+        (f"{_PREFIX}-grid-size", "value", "gs"),
+        (f"{_PREFIX}-physical-extent", "value", "ext"),
+        (f"{_PREFIX}-peak-threshold", "value", "th"),
+    ],
+)
+
+
 @callback(
     Output(f"{_PREFIX}-fft-graph", "figure"),
     Output(f"{_PREFIX}-peaks-table", "data"),
@@ -99,6 +134,7 @@ layout = dbc.Container(
     Input(f"{_PREFIX}-twist-slider", "value"),
     Input(f"{_PREFIX}-grid-size", "value"),
     Input(f"{_PREFIX}-physical-extent", "value"),
+    Input(f"{_PREFIX}-peak-threshold", "value"),
     Input("theme-store", "data"),
 )
 def _update_fourier(
@@ -107,6 +143,7 @@ def _update_fourier(
     twist_angle: float,
     grid_size: int,
     physical_extent: float,
+    threshold_fraction: float,
     theme: str,
 ):
     try:
@@ -117,6 +154,11 @@ def _update_fourier(
         grid_size = int(grid_size) if grid_size is not None else 200
         physical_extent = float(physical_extent) if physical_extent is not None else 100.0
         twist_angle = float(twist_angle) if twist_angle is not None else 0.0
+        threshold = (
+            float(threshold_fraction)
+            if threshold_fraction is not None
+            else DEFAULT_FFT_THRESHOLD_FRACTION
+        )
 
         result = generate_moire_pattern(
             substrate_a=substrate.a,
@@ -143,6 +185,7 @@ def _update_fourier(
             fft_result["power_spectrum"],
             fft_result["kx"],
             fft_result["ky"],
+            threshold_fraction=threshold,
         )
 
         peaks_data = [

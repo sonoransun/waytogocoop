@@ -26,7 +26,7 @@ static MATERIALS: &[Material] = &[
         formula: "FeTe",
         lattice_type: LatticeType::Square,
         a: 3.82,
-        c: 6.25,
+        c: 6.27,
         space_group: "P4/nmm",
         role: "substrate",
     },
@@ -220,5 +220,26 @@ mod tests {
     #[test]
     fn test_by_name_not_found() {
         assert!(by_name("Unobtanium").is_none());
+    }
+
+    /// Pins (a, c) for every material against the Python database
+    /// (tests/test_materials.py::TestMaterialRegistry::test_lattice_constants_pinned).
+    /// FeTe c = 6.27 per docs/materials.md and the cited P4/nmm structure.
+    #[test]
+    fn test_lattice_constants_all_materials() {
+        let expected: [(&str, f64, f64); 7] = [
+            ("FeTe", 3.82, 6.27),
+            ("Sb2Te3", 4.264, 30.458),
+            ("Bi2Te3", 4.386, 30.497),
+            ("Sb2Te", 4.272, 17.633),
+            ("Graphene", 2.46, 3.35),
+            ("Bilayer Graphene (AB)", 2.46, 6.70),
+            ("Trilayer Graphene (ABA)", 2.46, 10.05),
+        ];
+        for (name, a, c) in expected {
+            let m = by_name(name).unwrap_or_else(|| panic!("missing material {name}"));
+            assert!((m.a - a).abs() < 1e-10, "{name}: a = {} != {a}", m.a);
+            assert!((m.c - c).abs() < 1e-10, "{name}: c = {} != {c}", m.c);
+        }
     }
 }

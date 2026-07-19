@@ -17,6 +17,7 @@ from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.computation.superconducting import cpdm_amplitude, gap_modulation
 from waytogocoop.config import DELTA_AMPLITUDE, DELTA_AVG
 from waytogocoop.materials.database import get_material
+from waytogocoop.state import register_url_sync
 
 dash.register_page(
     __name__,
@@ -26,6 +27,7 @@ dash.register_page(
 )
 
 _PREFIX = "comparison"
+_URL_ID = f"{_PREFIX}-url"
 
 # Fixed overlayer formulas to display (all three overlayers on FeTe)
 _OVERLAYER_FORMULAS = ["Sb2Te3", "Bi2Te3", "Sb2Te"]
@@ -54,6 +56,7 @@ def _make_column(idx: int, formula: str) -> dbc.Col:
 
 layout = dbc.Container(
     [
+        dcc.Location(id=_URL_ID, refresh=False),
         html.Br(),
         html.H2("Substrate Comparison"),
         html.P(
@@ -148,6 +151,17 @@ layout = dbc.Container(
     ],
     fluid=True,
     className="p-4",
+)
+
+
+register_url_sync(
+    _URL_ID,
+    [
+        (f"{_PREFIX}-view-mode", "value", "vm"),
+        (f"{_PREFIX}-twist-slider", "value", "tw"),
+        (f"{_PREFIX}-grid-size", "value", "gs"),
+        (f"{_PREFIX}-physical-extent", "value", "ext"),
+    ],
 )
 
 

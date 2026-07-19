@@ -1,8 +1,10 @@
 pub mod about;
+pub mod cooper_panel;
 pub mod graphene_panel;
 pub mod info_panel;
 pub mod isotope_panel;
 pub mod magnetic_panel;
 pub mod menu;
+pub mod phase_window;
 pub mod sidebar;
 pub mod viewport;

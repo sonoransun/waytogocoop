@@ -21,6 +21,7 @@ from waytogocoop.components.controls import loading_spinner
 from waytogocoop.components.figure_factory import (
     create_3d_isosurface,
     create_3d_volume,
+    create_dirac_cone_plot,
     create_gap_heatmap,
     create_z_decay_profile,
 )
@@ -30,6 +31,7 @@ from waytogocoop.computation.moire import generate_moire_pattern
 from waytogocoop.computation.superconducting import gap_modulation
 from waytogocoop.computation.topological import (
     ProximityConfig,
+    dirac_dispersion,
     gap_3d,
 )
 from waytogocoop.config import DELTA_AMPLITUDE, DELTA_AVG
@@ -158,6 +160,11 @@ layout = dbc.Container(
                             "Computing decay profile…",
                         ),
                         html.Hr(),
+                        loading_spinner(
+                            dcc.Graph(id=f"{_PREFIX}-dirac-graph"),
+                            "Computing Dirac dispersion…",
+                        ),
+                        html.Hr(),
                         html.Div(id=f"{_PREFIX}-info"),
                     ],
                     xs=12, md=8, lg=9,
@@ -209,6 +216,7 @@ def _advance_phase(n, phase, iso_range):
 @callback(
     Output(f"{_PREFIX}-main-graph", "figure"),
     Output(f"{_PREFIX}-decay-graph", "figure"),
+    Output(f"{_PREFIX}-dirac-graph", "figure"),
     Output(f"{_PREFIX}-info", "children"),
     Input(f"{_PREFIX}-substrate-dropdown", "value"),
     Input(f"{_PREFIX}-overlayer-dropdown", "value"),
@@ -271,6 +279,12 @@ def update_proximity(
         decay_fig = create_z_decay_profile(
             prox_result.z_coords, prox_result.decay_profile, dark=dark
         )
+
+        # TI surface Dirac cone with the proximity-induced gap marked
+        k_dirac = np.linspace(-0.15, 0.15, 301)
+        E_dirac = dirac_dispersion(k_dirac)
+        induced_gap = DELTA_AVG * transparency
+        dirac_fig = create_dirac_cone_plot(k_dirac, E_dirac, induced_gap, dark=dark)
 
         # Clamp z-slice index
         z_idx = min(max(int(z_slice_idx), 0), n_z - 1)
@@ -355,13 +369,13 @@ def update_proximity(
             className="mb-3",
         )
 
-        return main_fig, decay_fig, info
+        return main_fig, decay_fig, dirac_fig, info
     except Exception as e:
         import traceback
         traceback.print_exc()
         error_fig = go.Figure()
         error_fig.update_layout(title=f"Computation error: {e}")
-        return error_fig, error_fig, html.P(str(e), style={"color": "red"})
+        return error_fig, error_fig, error_fig, html.P(str(e), style={"color": "red"})
 
 
 # --- URL state sync (shareable ?q=<base64>) -------------------------------

@@ -8,6 +8,7 @@
 
 use eframe::egui;
 use moire_core::bm_model::{BMConfig, BandStructure, DosResult};
+use moire_core::colormap::ColormapName;
 use moire_core::curvature::{CurvatureConfig, CurvatureGeometry, CurvatureResult};
 use moire_core::density::{DensityConfig, DensityResult};
 use moire_core::graphene::{
@@ -22,10 +23,25 @@ use moire_core::moire::{MoireConfig, MoireResult};
 use moire_core::topological::ProximityConfig;
 
 use crate::render;
+use crate::render::renderer3d::Renderer3D;
 use crate::ui;
 
 /// Default BCS coherence length for FeTe (Angstrom).
 const DEFAULT_COHERENCE_LENGTH: f64 = 20.0;
+
+/// Default Majorana localization length (Angstrom); mirrors Python
+/// `XI_MAJORANA_DEFAULT` in config.py.
+const DEFAULT_MAJORANA_XI: f64 = 50.0;
+/// Default TI surface Fermi wavevector (1/Angstrom); mirrors Python `K_F_TSS`.
+const DEFAULT_KF: f64 = 0.1;
+
+/// London penetration depth for FeTe (Angstrom); mirrors Python `LAMBDA_L_FETE`.
+const DEFAULT_LAMBDA_L: f64 = 5000.0;
+
+/// FFT peak-detection threshold, as a fraction of the (log-normalized) peak.
+const FFT_PEAK_THRESHOLD: f64 = 0.5;
+/// Maximum FFT peaks retained for the table (matches the web page).
+const FFT_MAX_PEAKS: usize = 20;
 
 /// k-points per segment of the K -> Gamma -> M -> K' path (Bands view).
 const BM_N_K_PER_SEGMENT: usize = 12;
@@ -40,8 +56,17 @@ const DOS_BROADENING_MEV: f64 = 2.0;
 
 /// Owned scalar field + resolution + colormap backing a view texture.
 type ViewScalar = (Vec<f64>, usize, fn(f64) -> [u8; 4]);
-/// Borrowed variant of [`ViewScalar`].
-type ViewScalarRef<'a> = (&'a [f64], usize, fn(f64) -> [u8; 4]);
+
+/// Per-tab data feeding one 3D surface frame. `heights` drives vertex
+/// displacement; `colors` (when `Some`) drives the colormap independently —
+/// the curved-sheet path where geometry and color come from different fields.
+/// `None` colors by height.
+struct SurfaceScalar {
+    heights: Vec<f64>,
+    colors: Option<Vec<f64>>,
+    n: usize,
+    colormap: fn(f64) -> [u8; 4],
+}
 
 /// Normalize a slice of f64 values to [0, 1] range.
 /// Returns None if the range is too small (< 1e-15).
@@ -53,6 +78,21 @@ fn normalize_to_unit_range(data: &[f64]) -> Option<Vec<f64>> {
         return None;
     }
     Some(data.iter().map(|&v| (v - min_val) / range).collect())
+}
+
+/// Global value range (meV) of the separable 3D gap field `gap_2d * decay[z]`.
+/// Because the field is a product, the extremes are among the four products of
+/// the gap and decay-profile extremes. Used to normalize z-slices against the
+/// whole volume so deeper slices visibly dim instead of renormalizing per slice.
+fn cooper_global_range(combined: &[f64], decay: &[f64]) -> (f64, f64) {
+    let g_min = combined.iter().copied().fold(f64::INFINITY, f64::min);
+    let g_max = combined.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let d_min = decay.iter().copied().fold(f64::INFINITY, f64::min);
+    let d_max = decay.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let products = [g_min * d_min, g_min * d_max, g_max * d_min, g_max * d_max];
+    let lo = products.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = products.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    (lo, hi)
 }
 
 /// Active visualization tab.
@@ -85,6 +125,34 @@ pub enum GrapheneView {
     Fourier,
     Bands,
     Dos,
+}
+
+/// Which scalar field or plot the Cooper 3D / proximity tab displays.
+/// `DecayProfile` renders as an egui_plot line chart rather than a texture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum CooperView {
+    /// Gap at the first interface layer (z >= 0): T * Delta(r).
+    #[default]
+    InterfaceGap,
+    /// gap_2d * decay[z_slice_index], normalized against the global 3D range.
+    ZSlice,
+    /// f(z) decay profile as a line plot.
+    DecayProfile,
+    /// SPECULATIVE vortex-bound Majorana probability density at the z-slice.
+    Majorana,
+}
+
+/// Which scalar field the Magnetic tab displays. Susceptibility and screening
+/// currents are 2D magnitude maps (no 3D cones, unlike the web page).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum MagneticView {
+    /// Gap suppressed by the vortex lattice, Δ(r) · S(r).
+    #[default]
+    CombinedGap,
+    /// SPECULATIVE local magnetic susceptibility χ(r), mapped to [0, 1].
+    Susceptibility,
+    /// Meissner screening supercurrent magnitude |j|(r), peak-normalized.
+    ScreeningCurrent,
 }
 
 impl Default for Tab {
@@ -215,6 +283,31 @@ pub struct MoireApp {
     #[serde(default)]
     pub supermoire_interface_twist: f64,
 
+    // --- Cooper 3D / proximity ---
+    /// Which scalar field or plot the Cooper 3D tab displays.
+    #[serde(default)]
+    pub cooper_view: CooperView,
+
+    /// Global colormap override. `None` = Auto (each view keeps its semantic
+    /// palette: viridis unsigned, coolwarm signed, inferno FFT, plasma χ/|j|).
+    #[serde(default)]
+    pub colormap_override: Option<ColormapName>,
+
+    /// Which scalar field the Magnetic tab displays.
+    #[serde(default)]
+    pub magnetic_view: MagneticView,
+
+    // --- Topological phase diagram (speculative) ---
+    /// Max perpendicular field B on the phase-diagram B axis (Tesla).
+    #[serde(default = "default_phase_b_max")]
+    pub phase_b_max: f64,
+    /// Max gap Δ on the phase-diagram Δ axis (meV).
+    #[serde(default = "default_phase_delta_max")]
+    pub phase_delta_max: f64,
+    /// Chemical potential μ used by the Fu-Kane phase criterion (meV).
+    #[serde(default)]
+    pub phase_mu: f64,
+
     // --- Runtime state (not serialized) ---
     /// Currently selected tab.
     #[serde(skip)]
@@ -234,6 +327,9 @@ pub struct MoireApp {
     /// FFT power spectrum data.
     #[serde(skip)]
     pub fft_data: Option<Vec<f64>>,
+    /// Detected FFT peaks (top `FFT_MAX_PEAKS`, amplitude-descending).
+    #[serde(skip)]
+    pub fft_peaks: Option<Vec<moire_core::fft::FftPeak>>,
     /// Texture for the moire pattern.
     #[serde(skip)]
     pub pattern_texture: Option<egui::TextureHandle>,
@@ -249,9 +345,23 @@ pub struct MoireApp {
     /// Rendered 3D surface texture.
     #[serde(skip)]
     pub surface_texture: Option<egui::TextureHandle>,
+    /// Active 3D renderer backend. Lazily initialized to the software
+    /// rasterizer; a GPU backend can be swapped in behind the `gpu` feature
+    /// without touching the per-tab surface pipeline.
+    #[serde(skip)]
+    pub renderer: Option<Box<dyn render::renderer3d::Renderer3D>>,
     /// Whether the comparison window is open.
     #[serde(skip)]
     pub show_comparison: bool,
+    /// Whether the topological phase-diagram window is open.
+    #[serde(skip)]
+    pub show_phase_diagram: bool,
+    /// Texture for the phase-diagram image.
+    #[serde(skip)]
+    pub phase_texture: Option<egui::TextureHandle>,
+    /// Whether the phase-diagram texture needs refresh.
+    #[serde(skip)]
+    pub phase_needs_refresh: bool,
     /// Textures for substrate comparison (6: 3 moire + 3 density).
     #[serde(skip)]
     pub comparison_textures: Option<Vec<egui::TextureHandle>>,
@@ -273,6 +383,10 @@ pub struct MoireApp {
     /// Texture for the magnetic field visualization.
     #[serde(skip)]
     pub magnetic_texture: Option<egui::TextureHandle>,
+    /// Screening-current magnitude |j|(r), peak-normalized; computed lazily
+    /// only while the ScreeningCurrent view is active.
+    #[serde(skip)]
+    pub screening_field: Option<Vec<f64>>,
     /// Z-slice index for proximity 3D view.
     #[serde(skip)]
     pub z_slice_index: usize,
@@ -312,6 +426,33 @@ pub struct MoireApp {
     /// (effective twist, valley) the cached BM results were computed for.
     #[serde(skip)]
     pub bm_cache_key: Option<(f64, i32)>,
+
+    // --- Cooper 3D runtime state (not serialized) ---
+    /// Combined 2D gap incl. vortex suppression (meV), the z=0 base field.
+    #[serde(skip)]
+    pub cooper_gap: Option<Vec<f64>>,
+    /// z-coordinate grid (Angstrom) for the proximity volume.
+    #[serde(skip)]
+    pub cooper_z_coords: Option<Vec<f64>>,
+    /// 1D proximity decay profile f(z).
+    #[serde(skip)]
+    pub cooper_decay: Option<Vec<f64>>,
+    /// Texture for the active Cooper view.
+    #[serde(skip)]
+    pub cooper_texture: Option<egui::TextureHandle>,
+    /// Cached 3D Majorana probability volume (row-major nz*n*n), computed
+    /// lazily and invalidated on each magnetic recompute.
+    #[serde(skip)]
+    pub majorana_density: Option<Vec<f64>>,
+    /// Whether the Cooper stage needs recompute.
+    #[serde(skip)]
+    pub needs_cooper_recompute: bool,
+    /// Whether the z-slice sweep animation is playing.
+    #[serde(skip)]
+    pub cooper_playing: bool,
+    /// Time (seconds) of the last z-sweep advance.
+    #[serde(skip)]
+    pub cooper_last_tick: f64,
 }
 
 fn default_dark_mode() -> bool {
@@ -344,6 +485,14 @@ fn default_graphene_filling() -> f64 {
 
 fn default_valley() -> i32 {
     1
+}
+
+fn default_phase_b_max() -> f64 {
+    100.0
+}
+
+fn default_phase_delta_max() -> f64 {
+    10.0
 }
 
 // Custom Serialize/Deserialize for DensityConfig so the outer derive works.
@@ -419,6 +568,12 @@ impl Default for MoireApp {
             graphene_warp: false,
             supermoire_overlayer: None,
             supermoire_interface_twist: 0.0,
+            cooper_view: CooperView::default(),
+            colormap_override: None,
+            magnetic_view: MagneticView::default(),
+            phase_b_max: 100.0,
+            phase_delta_max: 10.0,
+            phase_mu: 0.0,
             active_tab: Tab::Pattern,
             needs_recompute: true,
             needs_surface_rerender: true,
@@ -428,9 +583,14 @@ impl Default for MoireApp {
             pattern_texture: None,
             density_texture: None,
             fft_texture: None,
+            fft_peaks: None,
             camera: render::surface3d::Camera3D::default(),
             surface_texture: None,
+            renderer: None,
             show_comparison: false,
+            show_phase_diagram: false,
+            phase_texture: None,
+            phase_needs_refresh: false,
             comparison_textures: None,
             comparison_needs_refresh: false,
             isotope_effects: None,
@@ -438,6 +598,7 @@ impl Default for MoireApp {
             zeeman_result: None,
             needs_magnetic_recompute: true,
             magnetic_texture: None,
+            screening_field: None,
             z_slice_index: 0,
             show_about: false,
             last_screenshot_status: None,
@@ -451,6 +612,14 @@ impl Default for MoireApp {
             band_structure: None,
             dos_result: None,
             bm_cache_key: None,
+            cooper_gap: None,
+            cooper_z_coords: None,
+            cooper_decay: None,
+            cooper_texture: None,
+            majorana_density: None,
+            needs_cooper_recompute: true,
+            cooper_playing: false,
+            cooper_last_tick: 0.0,
         }
     }
 }
@@ -590,7 +759,7 @@ impl MoireApp {
             "moire_pattern",
             &moire.pattern,
             moire.resolution,
-            moire_core::colormap::viridis,
+            self.cmap(moire_core::colormap::viridis),
         ));
 
         // Normalize density for colormap
@@ -602,7 +771,7 @@ impl MoireApp {
             "density_map",
             &density_norm,
             density.resolution,
-            moire_core::colormap::coolwarm,
+            self.cmap(moire_core::colormap::coolwarm),
         ));
 
         self.fft_texture = Some(render::pattern::create_texture(
@@ -610,8 +779,17 @@ impl MoireApp {
             "fft_spectrum",
             &fft_data,
             moire.resolution,
-            moire_core::colormap::inferno,
+            self.cmap(moire_core::colormap::inferno),
         ));
+
+        // Detect FFT peaks for the Fourier-tab table. The spectrum is
+        // log-normalized to [0, 1], so the threshold is a fraction of its peak.
+        let dx = moire.physical_extent / (moire.resolution.saturating_sub(1).max(1)) as f64;
+        let k = moire_core::fft::fft_frequencies(moire.resolution, dx);
+        let mut peaks =
+            moire_core::fft::identify_peaks(&fft_data, moire.resolution, &k, &k, FFT_PEAK_THRESHOLD);
+        peaks.truncate(FFT_MAX_PEAKS);
+        self.fft_peaks = Some(peaks);
 
         self.fft_data = Some(fft_data);
         self.moire_result = Some(moire);
@@ -671,7 +849,6 @@ impl MoireApp {
     /// without touching on-screen textures.
     fn capture_current_view(&self) -> Option<egui::ColorImage> {
         use moire_core::colormap;
-        use render::surface3d::{render_surface_3d_colored, render_surface_3d_opts};
 
         let opts = self.surface_opts();
         let bg = if self.dark_mode {
@@ -683,83 +860,47 @@ impl MoireApp {
         const CAPTURE_H: usize = 1024;
 
         if self.view_mode == ViewMode::Surface3D {
-            let (data, n, colormap): ViewScalar = match self.active_tab {
-                Tab::Pattern => {
-                    let m = self.moire_result.as_ref()?;
-                    (m.pattern.clone(), m.resolution, colormap::viridis)
-                }
-                Tab::Density | Tab::CooperSurface3D => {
-                    let d = self.density_result.as_ref()?;
-                    let norm = normalize_to_unit_range(&d.gap_field)?;
-                    (norm, d.resolution, colormap::coolwarm)
-                }
-                Tab::Fourier => {
-                    let f = self.fft_data.as_ref()?;
-                    let m = self.moire_result.as_ref()?;
-                    (f.clone(), m.resolution, colormap::inferno)
-                }
-                Tab::MagneticField => {
-                    let d = self.density_result.as_ref()?;
-                    let vr = self.vortex_result.as_ref()?;
-                    let combined = moire_core::magnetic::combined_gap_with_vortices(
-                        &d.gap_field,
-                        &vr.suppression_field,
-                    );
-                    let norm = normalize_to_unit_range(&combined)?;
-                    (norm, d.resolution, colormap::coolwarm)
-                }
-                Tab::Graphene => {
-                    let (colors, cmap) = self.graphene_view_scalar()?;
-                    let n = self.graphene_result.as_ref()?.resolution;
-                    if self.curvature_config.geometry != CurvatureGeometry::Flat {
-                        if let Some(ref c) = self.curvature_result {
-                            if let Some(heights) = normalize_to_unit_range(&c.height) {
-                                return Some(render_surface_3d_colored(
-                                    &heights, &colors, n, CAPTURE_W, CAPTURE_H,
-                                    &self.camera, cmap, bg, &opts,
-                                ));
-                            }
-                        }
-                    }
-                    (colors, n, cmap)
-                }
-            };
-            return Some(render_surface_3d_opts(
-                &data,
-                n,
-                CAPTURE_W,
-                CAPTURE_H,
-                &self.camera,
-                colormap,
-                bg,
-                &opts,
-            ));
+            let scalar = self.surface_scalar()?;
+            // A one-shot software render at capture resolution; the persistent
+            // `self.renderer` is not borrowed here so `&self` is preserved.
+            let mut renderer = render::renderer3d::SoftwareRenderer;
+            return Some(renderer.render(render::renderer3d::FrameInputs {
+                data: &scalar.heights,
+                n: scalar.n,
+                size: [CAPTURE_W, CAPTURE_H],
+                camera: &self.camera,
+                colormap: scalar.colormap,
+                background: bg,
+                opts: &opts,
+                clip_z: self.clip_z_enabled.then_some(self.clip_z),
+                color_data: scalar.colors.as_deref(),
+            }));
         }
 
         let (data_vec, n, colormap): ViewScalar = match self.active_tab {
             Tab::Pattern => {
                 let m = self.moire_result.as_ref()?;
-                (m.pattern.clone(), m.resolution, colormap::viridis)
+                (m.pattern.clone(), m.resolution, self.cmap(colormap::viridis))
             }
-            Tab::Density | Tab::CooperSurface3D => {
+            Tab::Density => {
                 let d = self.density_result.as_ref()?;
                 let norm = normalize_to_unit_range(&d.gap_field)?;
-                (norm, d.resolution, colormap::coolwarm)
+                (norm, d.resolution, self.cmap(colormap::coolwarm))
+            }
+            Tab::CooperSurface3D => {
+                let (data, cmap) = self.cooper_view_scalar()?;
+                let n = self.density_result.as_ref()?.resolution;
+                (data, n, cmap)
             }
             Tab::Fourier => {
                 let f = self.fft_data.as_ref()?;
                 let m = self.moire_result.as_ref()?;
-                (f.clone(), m.resolution, colormap::inferno)
+                (f.clone(), m.resolution, self.cmap(colormap::inferno))
             }
             Tab::MagneticField => {
-                let d = self.density_result.as_ref()?;
-                let vr = self.vortex_result.as_ref()?;
-                let combined = moire_core::magnetic::combined_gap_with_vortices(
-                    &d.gap_field,
-                    &vr.suppression_field,
-                );
-                let norm = normalize_to_unit_range(&combined)?;
-                (norm, d.resolution, colormap::coolwarm)
+                let (data, cmap) = self.magnetic_view_scalar()?;
+                let n = self.density_result.as_ref()?.resolution;
+                (data, n, cmap)
             }
             Tab::Graphene => {
                 let (data, cmap) = self.graphene_view_scalar()?;
@@ -788,10 +929,12 @@ impl MoireApp {
     /// Updates `last_screenshot_status` with the outcome.
     pub fn save_screenshot(&mut self) {
         let Some(image) = self.capture_current_view() else {
-            let msg = if self.active_tab == Tab::Graphene
-                && matches!(self.graphene_view, GrapheneView::Bands | GrapheneView::Dos)
-            {
-                "Screenshot skipped: band/DOS plots are not captured"
+            let is_plot_view = (self.active_tab == Tab::Graphene
+                && matches!(self.graphene_view, GrapheneView::Bands | GrapheneView::Dos))
+                || (self.active_tab == Tab::CooperSurface3D
+                    && self.cooper_view == CooperView::DecayProfile);
+            let msg = if is_plot_view {
+                "Screenshot skipped: band/DOS/decay plots are not captured"
             } else {
                 "Screenshot skipped: nothing rendered yet"
             };
@@ -809,6 +952,15 @@ impl MoireApp {
         }
     }
 
+    /// Resolve a view's semantic colormap against the global override. `None`
+    /// override (Auto) keeps the semantic palette; `Some(name)` forces every
+    /// view — and its colorbar — to that palette.
+    pub fn cmap(&self, semantic: fn(f64) -> [u8; 4]) -> fn(f64) -> [u8; 4] {
+        self.colormap_override
+            .map(ColormapName::sample)
+            .unwrap_or(semantic)
+    }
+
     /// Options bundle that captures the current user toggles for 3D overlays.
     fn surface_opts(&self) -> render::surface3d::SurfaceRenderOpts {
         render::surface3d::SurfaceRenderOpts {
@@ -819,7 +971,97 @@ impl MoireApp {
         }
     }
 
-    /// Re-render the 3D surface texture from cached data.
+    /// Height / color / colormap for the active tab's 3D surface. `None` when
+    /// the current view has no colormapped texture (e.g. Graphene Bands/Dos,
+    /// Cooper Decay-profile) or its data is not yet computed. Shared by the
+    /// on-screen re-render and the high-res screenshot capture so both stay in
+    /// lockstep.
+    fn surface_scalar(&self) -> Option<SurfaceScalar> {
+        use moire_core::colormap;
+        match self.active_tab {
+            Tab::Pattern => {
+                let m = self.moire_result.as_ref()?;
+                Some(SurfaceScalar {
+                    heights: m.pattern.clone(),
+                    colors: None,
+                    n: m.resolution,
+                    colormap: self.cmap(colormap::viridis),
+                })
+            }
+            Tab::Density => {
+                let d = self.density_result.as_ref()?;
+                let norm = normalize_to_unit_range(&d.gap_field)?;
+                Some(SurfaceScalar {
+                    heights: norm,
+                    colors: None,
+                    n: d.resolution,
+                    colormap: self.cmap(colormap::coolwarm),
+                })
+            }
+            Tab::CooperSurface3D => {
+                // The z-slice / interface / Majorana scalar is already in
+                // [0, 1]; height and color are the same field. DecayProfile
+                // returns None (it renders as a line plot).
+                let (data, cmap) = self.cooper_view_scalar()?;
+                let n = self.density_result.as_ref()?.resolution;
+                Some(SurfaceScalar {
+                    heights: data,
+                    colors: None,
+                    n,
+                    colormap: cmap,
+                })
+            }
+            Tab::Fourier => {
+                let f = self.fft_data.as_ref()?;
+                let m = self.moire_result.as_ref()?;
+                Some(SurfaceScalar {
+                    heights: f.clone(),
+                    colors: None,
+                    n: m.resolution,
+                    colormap: self.cmap(colormap::inferno),
+                })
+            }
+            Tab::MagneticField => {
+                // The 3D surface follows the active magnetic view (combined gap,
+                // χ, or |j| as height); the picker recolors it.
+                let (data, cmap) = self.magnetic_view_scalar()?;
+                let n = self.density_result.as_ref()?.resolution;
+                Some(SurfaceScalar {
+                    heights: data,
+                    colors: None,
+                    n,
+                    colormap: cmap,
+                })
+            }
+            Tab::Graphene => {
+                let (colors, cmap) = self.graphene_view_scalar()?;
+                let n = self.graphene_result.as_ref()?.resolution;
+                // Curved sheets displace by the height field and color by the
+                // selected view scalar; flat sheets color by height directly.
+                if self.curvature_config.geometry != CurvatureGeometry::Flat {
+                    if let Some(ref c) = self.curvature_result {
+                        if let Some(heights) = normalize_to_unit_range(&c.height) {
+                            return Some(SurfaceScalar {
+                                heights,
+                                colors: Some(colors),
+                                n,
+                                colormap: cmap,
+                            });
+                        }
+                    }
+                }
+                Some(SurfaceScalar {
+                    heights: colors,
+                    colors: None,
+                    n,
+                    colormap: cmap,
+                })
+            }
+        }
+    }
+
+    /// Re-render the 3D surface texture from cached data through the active
+    /// [`render::renderer3d::Renderer3D`] backend.
     fn rerender_surface(&mut self, ctx: &egui::Context) {
         let surface_bg = if self.dark_mode {
             egui::Color32::from_rgb(30, 30, 35)
@@ -827,147 +1069,25 @@ impl MoireApp {
             egui::Color32::from_rgb(240, 240, 245)
         };
         let opts = self.surface_opts();
-
-        let (data, n, colormap): ViewScalarRef = match self.active_tab {
-            Tab::Pattern => {
-                if let Some(ref m) = self.moire_result {
-                    (&m.pattern, m.resolution, moire_core::colormap::viridis)
-                } else {
-                    return;
-                }
-            }
-            Tab::Density | Tab::CooperSurface3D => {
-                if let Some(ref d) = self.density_result {
-                    // Check if normalizable; actual rendering handled below
-                    if normalize_to_unit_range(&d.gap_field).is_none() {
-                        return;
-                    }
-                    // We need owned data for density normalization — handle below
-                    (&[], 0, moire_core::colormap::coolwarm)
-                } else {
-                    return;
-                }
-            }
-            Tab::Fourier => {
-                if let Some(ref f) = self.fft_data {
-                    if let Some(ref m) = self.moire_result {
-                        (f.as_slice(), m.resolution, moire_core::colormap::inferno)
-                    } else {
-                        return;
-                    }
-                } else {
-                    return;
-                }
-            }
-            Tab::MagneticField => {
-                // Use suppression-modulated density for 3D surface
-                if let Some(ref vr) = self.vortex_result {
-                    if let Some(ref d) = self.density_result {
-                        let combined = moire_core::magnetic::combined_gap_with_vortices(
-                            &d.gap_field,
-                            &vr.suppression_field,
-                        );
-                        if let Some(norm) = normalize_to_unit_range(&combined) {
-                            let img = render::surface3d::render_surface_3d_opts(
-                                &norm,
-                                d.resolution,
-                                512,
-                                512,
-                                &self.camera,
-                                moire_core::colormap::coolwarm,
-                                surface_bg,
-                                &opts,
-                            );
-                            self.surface_texture = Some(ctx.load_texture(
-                                "surface_3d",
-                                img,
-                                egui::TextureOptions::LINEAR,
-                            ));
-                        }
-                        return;
-                    }
-                }
-                return;
-            }
-            Tab::Graphene => {
-                if let Some((colors, cmap)) = self.graphene_view_scalar() {
-                    let Some(n) = self.graphene_result.as_ref().map(|g| g.resolution) else {
-                        return;
-                    };
-                    let curved_heights = if self.curvature_config.geometry
-                        != CurvatureGeometry::Flat
-                    {
-                        self.curvature_result
-                            .as_ref()
-                            .and_then(|c| normalize_to_unit_range(&c.height))
-                    } else {
-                        None
-                    };
-                    let img = match curved_heights {
-                        Some(heights) => render::surface3d::render_surface_3d_colored(
-                            &heights,
-                            &colors,
-                            n,
-                            512,
-                            512,
-                            &self.camera,
-                            cmap,
-                            surface_bg,
-                            &opts,
-                        ),
-                        None => render::surface3d::render_surface_3d_opts(
-                            &colors,
-                            n,
-                            512,
-                            512,
-                            &self.camera,
-                            cmap,
-                            surface_bg,
-                            &opts,
-                        ),
-                    };
-                    self.surface_texture =
-                        Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
-                }
-                return;
-            }
+        let Some(scalar) = self.surface_scalar() else {
+            return;
         };
+        let clip_z = self.clip_z_enabled.then_some(self.clip_z);
 
-        // Special handling for density (needs normalization)
-        if self.active_tab == Tab::Density || self.active_tab == Tab::CooperSurface3D {
-            if let Some(ref d) = self.density_result {
-                if let Some(norm) = normalize_to_unit_range(&d.gap_field) {
-                    let img = render::surface3d::render_surface_3d_opts(
-                        &norm,
-                        d.resolution,
-                        512,
-                        512,
-                        &self.camera,
-                        moire_core::colormap::coolwarm,
-                        surface_bg,
-                        &opts,
-                    );
-                    self.surface_texture =
-                        Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
-                }
-            }
-            return;
-        }
-
-        if n == 0 {
-            return;
-        }
-
-        let img = render::surface3d::render_surface_3d_opts(
-            data,
-            n,
-            512,
-            512,
-            &self.camera,
-            colormap,
-            surface_bg,
-            &opts,
-        );
+        let renderer = self
+            .renderer
+            .get_or_insert_with(|| Box::new(render::renderer3d::SoftwareRenderer));
+        let img = renderer.render(render::renderer3d::FrameInputs {
+            data: &scalar.heights,
+            n: scalar.n,
+            size: [512, 512],
+            camera: &self.camera,
+            colormap: scalar.colormap,
+            background: surface_bg,
+            opts: &opts,
+            clip_z,
+            color_data: scalar.colors.as_deref(),
+        });
         self.surface_texture =
             Some(ctx.load_texture("surface_3d", img, egui::TextureOptions::LINEAR));
     }
@@ -1000,34 +1120,40 @@ impl MoireApp {
             extent,
             DEFAULT_COHERENCE_LENGTH, // coherence length
         );
+        let positions = vortex.vortex_positions.clone();
+        // Set early so `magnetic_view_scalar` can read the suppression field.
+        self.vortex_result = Some(vortex);
 
-        // Combine gap with vortex suppression
-        if let Some(ref density) = self.density_result {
-            let combined = moire_core::magnetic::combined_gap_with_vortices(
-                &density.gap_field,
-                &vortex.suppression_field,
-            );
+        // Screening currents are O(N² · n_vortices); compute the magnitude only
+        // while its view is active and cache it (invalidated on every recompute).
+        self.screening_field = if self.magnetic_view == MagneticView::ScreeningCurrent {
+            let (jx, jy) =
+                moire_core::magnetic::screening_currents(resolution, extent, &positions, DEFAULT_LAMBDA_L);
+            Some(
+                jx.iter()
+                    .zip(&jy)
+                    .map(|(&x, &y)| (x * x + y * y).sqrt())
+                    .collect(),
+            )
+        } else {
+            None
+        };
 
-            // Normalize for colormap
-            let norm: Vec<f64> =
-                normalize_to_unit_range(&combined).unwrap_or_else(|| vec![0.5; combined.len()]);
-
-            // Build ColorImage from colormapped data
-            let pixels: Vec<egui::Color32> = norm
+        // Build the active-view texture.
+        if let Some((data, cmap)) = self.magnetic_view_scalar() {
+            let pixels: Vec<egui::Color32> = data
                 .iter()
                 .map(|&v| {
-                    let [r, g, b, a] = moire_core::colormap::coolwarm(v);
+                    let [r, g, b, a] = cmap(v);
                     egui::Color32::from_rgba_premultiplied(r, g, b, a)
                 })
                 .collect();
-
             let mut img = egui::ColorImage {
                 size: [resolution, resolution],
                 pixels,
             };
-
-            // Overlay vortex markers if enabled
-            if self.show_vortices && !vortex.vortex_positions.is_empty() {
+            // Vortex core markers overlay every magnetic view when enabled.
+            if self.show_vortices && !positions.is_empty() {
                 let marker_color = if self.dark_mode {
                     [255, 255, 255, 255]
                 } else {
@@ -1035,25 +1161,203 @@ impl MoireApp {
                 };
                 render::overlay::overlay_cross_markers(
                     &mut img,
-                    &vortex.vortex_positions,
+                    &positions,
                     extent,
                     marker_color,
                     3,
                 );
             }
-
             self.magnetic_texture =
                 Some(ctx.load_texture("magnetic_overlay", img, egui::TextureOptions::LINEAR));
         }
 
-        // Compute Zeeman
+        // Compute Zeeman (uses the app's g-factor, wired in Track 1).
         let delta_avg = (self.density_config.delta_1 + self.density_config.delta_2) / 2.0;
         self.zeeman_result = Some(moire_core::magnetic::compute_zeeman(
             &self.magnetic_config,
             delta_avg,
+            self.g_factor,
         ));
 
-        self.vortex_result = Some(vortex);
+        // The Cooper 3D field is built on the vortex suppression, so force it
+        // to rebuild and drop the now-stale Majorana volume cache.
+        self.needs_cooper_recompute = true;
+        self.majorana_density = None;
+        // Keep the 3D surface in step with the active magnetic view (mirrors
+        // the other recompute stages).
+        self.needs_surface_rerender = true;
+    }
+
+    /// Scalar field for the active magnetic view, normalized to [0, 1], plus
+    /// its colormap. Mirrors `graphene_view_scalar` / `cooper_view_scalar`.
+    #[allow(clippy::type_complexity)]
+    fn magnetic_view_scalar(&self) -> Option<(Vec<f64>, fn(f64) -> [u8; 4])> {
+        let d = self.density_result.as_ref()?;
+        let vr = self.vortex_result.as_ref()?;
+        let combined =
+            moire_core::magnetic::combined_gap_with_vortices(&d.gap_field, &vr.suppression_field);
+        match self.magnetic_view {
+            MagneticView::CombinedGap => {
+                let norm = normalize_to_unit_range(&combined)
+                    .unwrap_or_else(|| vec![0.5; combined.len()]);
+                Some((norm, self.cmap(moire_core::colormap::coolwarm)))
+            }
+            MagneticView::Susceptibility => {
+                // χ ∈ [-1, 0]; shift to [0, 1] for the plasma map.
+                let chi = moire_core::magnetic::local_susceptibility(&combined);
+                let data = chi.iter().map(|&c| (c + 1.0).clamp(0.0, 1.0)).collect();
+                Some((data, self.cmap(moire_core::colormap::plasma)))
+            }
+            MagneticView::ScreeningCurrent => {
+                // Already peak-normalized to [0, 1] in recompute_magnetic.
+                let field = self.screening_field.as_ref()?;
+                Some((field.clone(), self.cmap(moire_core::colormap::plasma)))
+            }
+        }
+    }
+
+    /// Clear all Cooper-derived caches and textures (used when inputs are
+    /// missing or the proximity decay errors out).
+    fn clear_cooper_state(&mut self) {
+        self.cooper_gap = None;
+        self.cooper_z_coords = None;
+        self.cooper_decay = None;
+        self.cooper_texture = None;
+        self.majorana_density = None;
+    }
+
+    /// Build the Cooper 3D / proximity state from the current density + vortex
+    /// suppression. The full nz*N*N volume is never materialized: the field is
+    /// separable (`gap_2d[ixy] * decay[iz]`), so any z-slice is one multiply
+    /// pass and the global value range comes from the gap/decay extremes. The
+    /// speculative Majorana volume is the exception — it is cached lazily and
+    /// only when its view or toggle is active.
+    fn recompute_cooper(&mut self, ctx: &egui::Context) {
+        // Combine gap with vortex suppression while only borrowing self
+        // immutably; the result is owned so the borrows end before we mutate.
+        let prepared = self
+            .density_result
+            .as_ref()
+            .zip(self.vortex_result.as_ref())
+            .map(|(density, vortex)| {
+                let combined = moire_core::magnetic::combined_gap_with_vortices(
+                    &density.gap_field,
+                    &vortex.suppression_field,
+                );
+                (combined, density.resolution, vortex.vortex_positions.clone())
+            });
+        let Some((combined, resolution, vortex_positions)) = prepared else {
+            self.clear_cooper_state();
+            return;
+        };
+
+        let extent = self
+            .moire_result
+            .as_ref()
+            .map(|m| m.physical_extent)
+            .unwrap_or(self.physical_extent);
+
+        let z_coords = moire_core::topological::z_grid(&self.proximity_config);
+        let decay = match moire_core::topological::proximity_decay_profile(
+            &z_coords,
+            self.proximity_config.xi_prox,
+            self.proximity_config.interface_transparency,
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                // Slider ranges keep the inputs valid, so this is defensive.
+                eprintln!("Cooper proximity decay error: {e}");
+                self.clear_cooper_state();
+                return;
+            }
+        };
+
+        let n_z = z_coords.len().max(1);
+        self.z_slice_index = self.z_slice_index.min(n_z - 1);
+
+        // Majorana is speculative and expensive: compute the full 3D volume
+        // once (cached until the next magnetic recompute) and only when its
+        // view or toggle asks for it. An empty vortex list yields all zeros.
+        if (self.show_majorana || self.cooper_view == CooperView::Majorana)
+            && self.majorana_density.is_none()
+        {
+            match moire_core::topological::majorana_probability_density_3d(
+                resolution,
+                extent,
+                &z_coords,
+                &vortex_positions,
+                DEFAULT_MAJORANA_XI,
+                DEFAULT_KF,
+                self.proximity_config.xi_prox,
+            ) {
+                Ok(vol) => self.majorana_density = Some(vol),
+                Err(e) => eprintln!("Cooper Majorana error: {e}"),
+            }
+        }
+
+        self.cooper_gap = Some(combined);
+        self.cooper_z_coords = Some(z_coords);
+        self.cooper_decay = Some(decay);
+
+        if let Some((data, cmap)) = self.cooper_view_scalar() {
+            self.cooper_texture = Some(render::pattern::create_texture(
+                ctx,
+                "cooper_view",
+                &data,
+                resolution,
+                cmap,
+            ));
+        } else {
+            // DecayProfile renders as a line plot, not a texture.
+            self.cooper_texture = None;
+        }
+        self.needs_surface_rerender = true;
+    }
+
+    /// Scalar field for the active Cooper view, normalized to [0, 1], plus its
+    /// colormap. Gap views (`InterfaceGap`, `ZSlice`) normalize against the
+    /// global 3D range so slices dim with depth; `Majorana` returns the cached
+    /// volume's z-slice (already [0, 1]); `DecayProfile` returns `None`.
+    #[allow(clippy::type_complexity)]
+    fn cooper_view_scalar(&self) -> Option<(Vec<f64>, fn(f64) -> [u8; 4])> {
+        let z_coords = self.cooper_z_coords.as_ref()?;
+        match self.cooper_view {
+            CooperView::InterfaceGap | CooperView::ZSlice => {
+                let combined = self.cooper_gap.as_ref()?;
+                let decay = self.cooper_decay.as_ref()?;
+                let iz = match self.cooper_view {
+                    CooperView::ZSlice => self.z_slice_index.min(z_coords.len().saturating_sub(1)),
+                    // Interface layer: first z >= 0.
+                    _ => z_coords.iter().position(|&z| z >= 0.0).unwrap_or(0),
+                };
+                let f = decay.get(iz).copied().unwrap_or(0.0);
+                let (lo, hi) = cooper_global_range(combined, decay);
+                let range = if (hi - lo).abs() < 1e-15 { 1.0 } else { hi - lo };
+                let data = combined
+                    .iter()
+                    .map(|&g| (((g * f) - lo) / range).clamp(0.0, 1.0))
+                    .collect();
+                Some((data, self.cmap(moire_core::colormap::coolwarm)))
+            }
+            CooperView::Majorana => {
+                let vol = self.majorana_density.as_ref()?;
+                let n2 = self.cooper_gap.as_ref()?.len();
+                let iz = self.z_slice_index.min(z_coords.len().saturating_sub(1));
+                let start = iz * n2;
+                let slice = vol.get(start..start + n2)?;
+                Some((slice.to_vec(), self.cmap(moire_core::colormap::viridis)))
+            }
+            CooperView::DecayProfile => None,
+        }
+    }
+
+    /// Global Delta(z) value range (meV) across the full 3D proximity volume,
+    /// used to normalize z-slices and label the colorbar. `None` until the
+    /// Cooper stage has run.
+    pub fn cooper_value_range(&self) -> Option<(f64, f64)> {
+        let combined = self.cooper_gap.as_ref()?;
+        let decay = self.cooper_decay.as_ref()?;
+        Some(cooper_global_range(combined, decay))
     }
 
     /// Run the curvature + graphene stack (or supermoire) + BM computation
@@ -1248,13 +1552,13 @@ impl MoireApp {
         match self.graphene_view {
             GrapheneView::Pattern => {
                 let g = self.graphene_result.as_ref()?;
-                Some((g.pattern.clone(), moire_core::colormap::viridis))
+                Some((g.pattern.clone(), self.cmap(moire_core::colormap::viridis)))
             }
             GrapheneView::GapMap => {
                 let gap = self.graphene_gap.as_ref()?;
                 let norm = normalize_to_unit_range(gap)
                     .unwrap_or_else(|| vec![0.5; gap.len()]);
-                Some((norm, moire_core::colormap::coolwarm))
+                Some((norm, self.cmap(moire_core::colormap::coolwarm)))
             }
             GrapheneView::PseudoField => {
                 let c = self.curvature_result.as_ref()?;
@@ -1266,7 +1570,7 @@ impl MoireApp {
                         .map(|&b| 0.5 + 0.5 * b / c.max_abs_field)
                         .collect()
                 };
-                Some((data, moire_core::colormap::coolwarm))
+                Some((data, self.cmap(moire_core::colormap::coolwarm)))
             }
             GrapheneView::Strain => {
                 let c = self.curvature_result.as_ref()?;
@@ -1278,12 +1582,12 @@ impl MoireApp {
                     .map(|((&xx, &yy), &xy)| (xx * xx + yy * yy + 2.0 * xy * xy).sqrt())
                     .collect();
                 let norm = normalize_to_unit_range(&mag).unwrap_or_else(|| vec![0.0; mag.len()]);
-                Some((norm, moire_core::colormap::viridis))
+                Some((norm, self.cmap(moire_core::colormap::viridis)))
             }
             // Already log-scaled to [0, 1]; same colormap as the Fourier tab.
             GrapheneView::Fourier => {
                 let f = self.graphene_fft.as_ref()?;
-                Some((f.clone(), moire_core::colormap::inferno))
+                Some((f.clone(), self.cmap(moire_core::colormap::inferno)))
             }
             // Bands and DOS render as egui_plot lines, not textures, so the
             // texture / 3D-surface / screenshot paths all skip gracefully.
@@ -1302,6 +1606,8 @@ impl MoireApp {
         let overlayers = materials::overlayers();
         let mut textures = Vec::with_capacity(6);
         let comp_res = 128_usize;
+        let moire_cmap = self.cmap(moire_core::colormap::viridis);
+        let density_cmap = self.cmap(moire_core::colormap::coolwarm);
 
         for mat in overlayers {
             let config = MoireConfig {
@@ -1331,7 +1637,7 @@ impl MoireApp {
                     256,
                     256,
                     &self.camera,
-                    moire_core::colormap::viridis,
+                    moire_cmap,
                     surface_bg,
                     &comp_opts,
                 );
@@ -1342,7 +1648,7 @@ impl MoireApp {
                     "comp_moire",
                     &moire.pattern,
                     comp_res,
-                    moire_core::colormap::viridis,
+                    moire_cmap,
                 ));
             }
 
@@ -1366,7 +1672,7 @@ impl MoireApp {
                     256,
                     256,
                     &self.camera,
-                    moire_core::colormap::coolwarm,
+                    density_cmap,
                     surface_bg,
                     &comp_opts,
                 );
@@ -1377,7 +1683,7 @@ impl MoireApp {
                     "comp_density",
                     &d_norm,
                     comp_res,
-                    moire_core::colormap::coolwarm,
+                    density_cmap,
                 ));
             }
         }
@@ -1401,6 +1707,28 @@ impl eframe::App for MoireApp {
             self.apply_menu_action(act, ctx);
         }
 
+        // Z-sweep animation: advance the Cooper z-slice ~3 Hz while playing.
+        // The desktop has no isosurface, so the honest analogue of the web's
+        // iso-range sweep is stepping the z-slice (one multiply pass + texture).
+        if self.cooper_playing
+            && self.active_tab == Tab::CooperSurface3D
+            && self.cooper_view == CooperView::ZSlice
+        {
+            let n_z = self
+                .cooper_z_coords
+                .as_ref()
+                .map(|z| z.len())
+                .unwrap_or(self.proximity_config.n_z_layers)
+                .max(1);
+            let now = ctx.input(|i| i.time);
+            if now - self.cooper_last_tick > 0.35 {
+                self.z_slice_index = (self.z_slice_index + 1) % n_z;
+                self.cooper_last_tick = now;
+                self.needs_cooper_recompute = true;
+            }
+            ctx.request_repaint_after(std::time::Duration::from_millis(350));
+        }
+
         if self.needs_recompute {
             self.recompute(ctx);
             self.needs_magnetic_recompute = true;
@@ -1416,6 +1744,13 @@ impl eframe::App for MoireApp {
         if self.needs_graphene_recompute {
             self.recompute_graphene(ctx);
             self.needs_graphene_recompute = false;
+        }
+
+        // Cooper depends on the vortex suppression, so it runs after magnetic
+        // (which sets `needs_cooper_recompute`).
+        if self.needs_cooper_recompute {
+            self.recompute_cooper(ctx);
+            self.needs_cooper_recompute = false;
         }
 
         if self.needs_surface_rerender && self.view_mode == ViewMode::Surface3D {
@@ -1504,5 +1839,437 @@ impl eframe::App for MoireApp {
                 });
             self.show_comparison = open;
         }
+
+        // Phase-diagram window (mirrors the comparison-window block; the module
+        // owns its refresh + open-state handling).
+        if self.show_phase_diagram {
+            ui::phase_window::show(ctx, self);
+        }
+    }
+}
+
+#[cfg(test)]
+// Test setup favors readable field-by-field mutation over struct-update syntax,
+// especially for nested config fields (e.g. `app.magnetic_config.bz`).
+#[allow(clippy::field_reassign_with_default)]
+mod tests {
+    use super::*;
+
+    /// Build a default app at a small resolution and run the full 2D compute
+    /// pipeline against a headless `egui::Context`. `egui::Context::default()`
+    /// allocates textures into the CPU-side texture manager, so no display or
+    /// GPU is required (see `bin/capture.rs` for the headless precedent).
+    /// Resolution 64 keeps each test well under a second.
+    fn pipeline_app(resolution: usize) -> (MoireApp, egui::Context) {
+        let mut app = MoireApp::default();
+        app.resolution = resolution;
+        let ctx = egui::Context::default();
+        app.recompute(&ctx);
+        app.recompute_magnetic(&ctx);
+        app.recompute_graphene(&ctx);
+        app.recompute_cooper(&ctx);
+        (app, ctx)
+    }
+
+    #[test]
+    fn test_recompute_populates_core_results() {
+        let (app, _ctx) = pipeline_app(64);
+        let n2 = 64 * 64;
+
+        let moire = app.moire_result.as_ref().expect("moire result");
+        assert_eq!(moire.pattern.len(), n2);
+        let density = app.density_result.as_ref().expect("density result");
+        assert_eq!(density.gap_field.len(), n2);
+        let fft = app.fft_data.as_ref().expect("fft data");
+        assert_eq!(fft.len(), n2);
+
+        assert!(app.pattern_texture.is_some());
+        assert!(app.density_texture.is_some());
+        assert!(app.fft_texture.is_some());
+    }
+
+    #[test]
+    fn test_recompute_magnetic_with_field() {
+        let mut app = MoireApp::default();
+        app.resolution = 64;
+        app.magnetic_config.bz = 5.0;
+        let ctx = egui::Context::default();
+        app.recompute(&ctx);
+        app.recompute_magnetic(&ctx);
+
+        let vr = app.vortex_result.as_ref().expect("vortex result");
+        assert!(
+            !vr.vortex_positions.is_empty(),
+            "Bz = 5 T should nucleate vortices"
+        );
+        assert_eq!(vr.suppression_field.len(), 64 * 64);
+        assert!(app.zeeman_result.is_some());
+        assert!(app.magnetic_texture.is_some());
+    }
+
+    #[test]
+    fn test_recompute_graphene_populates() {
+        let (app, _ctx) = pipeline_app(64);
+        assert!(app.graphene_result.is_some());
+        assert!(app.curvature_result.is_some());
+        assert!(app.graphene_gap.is_some());
+        assert!(app.graphene_texture.is_some());
+    }
+
+    #[test]
+    fn test_persisted_state_backcompat() {
+        // Simulate loading state saved before Track 2: serialize a default app,
+        // drop the fields Track 2 added, and confirm it still deserializes with
+        // those fields at their serde defaults. Guards the `#[serde(default)]`
+        // discipline for every persisted field this work added.
+        let app = MoireApp::default();
+        let mut value = serde_json::to_value(&app).expect("serialize");
+        let obj = value.as_object_mut().expect("object");
+        for key in [
+            "cooper_view",
+            "colormap_override",
+            "magnetic_view",
+            "phase_b_max",
+            "phase_delta_max",
+            "phase_mu",
+        ] {
+            assert!(obj.remove(key).is_some(), "{key} was not serialized");
+        }
+        let restored: MoireApp = serde_json::from_value(value).expect("deserialize old blob");
+        assert_eq!(restored.cooper_view, CooperView::default());
+        assert_eq!(restored.colormap_override, None);
+        assert_eq!(restored.magnetic_view, MagneticView::default());
+        assert_eq!(restored.phase_b_max, 100.0);
+        assert_eq!(restored.phase_delta_max, 10.0);
+        assert_eq!(restored.phase_mu, 0.0);
+    }
+
+    #[test]
+    fn test_capture_current_view_every_tab() {
+        let (mut app, _ctx) = pipeline_app(64);
+        let all_tabs = [
+            Tab::Pattern,
+            Tab::Density,
+            Tab::Fourier,
+            Tab::MagneticField,
+            Tab::CooperSurface3D,
+            Tab::Graphene,
+        ];
+        // With the default (non-plot) graphene/cooper views, every tab in both
+        // view modes produces a capturable image.
+        for &tab in &all_tabs {
+            app.active_tab = tab;
+            for vm in [ViewMode::Flat2D, ViewMode::Surface3D] {
+                app.view_mode = vm;
+                assert!(
+                    app.capture_current_view().is_some(),
+                    "{tab:?}/{vm:?} should capture"
+                );
+            }
+        }
+
+        // Plot-only views (Bands/Dos/DecayProfile) have no capturable texture.
+        app.active_tab = Tab::Graphene;
+        for gv in [GrapheneView::Bands, GrapheneView::Dos] {
+            app.graphene_view = gv;
+            for vm in [ViewMode::Flat2D, ViewMode::Surface3D] {
+                app.view_mode = vm;
+                assert!(
+                    app.capture_current_view().is_none(),
+                    "Graphene {gv:?}/{vm:?} should not capture"
+                );
+            }
+        }
+        app.graphene_view = GrapheneView::Pattern;
+
+        app.active_tab = Tab::CooperSurface3D;
+        app.cooper_view = CooperView::DecayProfile;
+        for vm in [ViewMode::Flat2D, ViewMode::Surface3D] {
+            app.view_mode = vm;
+            assert!(
+                app.capture_current_view().is_none(),
+                "Cooper DecayProfile/{vm:?} should not capture"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rerender_surface_all_tabs() {
+        let (mut app, ctx) = pipeline_app(64);
+        app.view_mode = ViewMode::Surface3D;
+        for tab in [
+            Tab::Pattern,
+            Tab::Density,
+            Tab::Fourier,
+            Tab::MagneticField,
+            Tab::CooperSurface3D,
+            Tab::Graphene,
+        ] {
+            app.active_tab = tab;
+            app.surface_texture = None;
+            app.rerender_surface(&ctx);
+            assert!(
+                app.surface_texture.is_some(),
+                "no surface texture rendered for {tab:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_recompute_cooper_populates() {
+        let (app, _ctx) = pipeline_app(64);
+        assert!(app.cooper_gap.is_some());
+        assert!(app.cooper_z_coords.is_some());
+        assert!(app.cooper_decay.is_some());
+        // Default view is InterfaceGap, which builds a texture.
+        assert!(app.cooper_texture.is_some());
+        let n_z = app.cooper_z_coords.as_ref().unwrap().len();
+        assert_eq!(n_z, app.proximity_config.n_z_layers);
+        assert_eq!(app.cooper_decay.as_ref().unwrap().len(), n_z);
+        assert_eq!(app.cooper_gap.as_ref().unwrap().len(), 64 * 64);
+    }
+
+    #[test]
+    fn test_cooper_slice_equals_gap_times_decay() {
+        // Cross-validate the lightweight separable slice path against the core
+        // volume path `compute_gap_3d`, term by term.
+        let (app, _ctx) = pipeline_app(32);
+        let combined = app.cooper_gap.as_ref().unwrap();
+        let decay = app.cooper_decay.as_ref().unwrap();
+        let vol =
+            moire_core::topological::compute_gap_3d(combined, 32, &app.proximity_config).unwrap();
+        let n2 = 32 * 32;
+        for iz in [0usize, decay.len() / 2, decay.len() - 1] {
+            let f = decay[iz];
+            for ixy in (0..n2).step_by(97) {
+                let lightweight = combined[ixy] * f;
+                let volume = vol.gap_3d[iz * n2 + ixy];
+                assert!(
+                    (lightweight - volume).abs() < 1e-12,
+                    "mismatch iz={iz} ixy={ixy}: {lightweight} vs {volume}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_cooper_view_scalar_all_views() {
+        let mut app = MoireApp::default();
+        app.resolution = 32;
+        app.magnetic_config.bz = 5.0; // nucleate vortices for a non-trivial Majorana
+        app.show_majorana = true; // populate the Majorana cache
+        let ctx = egui::Context::default();
+        app.recompute(&ctx);
+        app.recompute_magnetic(&ctx);
+        app.recompute_cooper(&ctx);
+
+        let n2 = 32 * 32;
+        for view in [
+            CooperView::InterfaceGap,
+            CooperView::ZSlice,
+            CooperView::Majorana,
+        ] {
+            app.cooper_view = view;
+            let (data, _cmap) = app.cooper_view_scalar().expect("scalar for view");
+            assert_eq!(data.len(), n2, "wrong length for {view:?}");
+            for &v in &data {
+                assert!((0.0..=1.0).contains(&v), "value {v} out of [0,1] for {view:?}");
+            }
+        }
+
+        app.cooper_view = CooperView::DecayProfile;
+        assert!(app.cooper_view_scalar().is_none());
+    }
+
+    #[test]
+    fn test_majorana_gated() {
+        let mut app = MoireApp::default();
+        app.resolution = 32;
+        app.magnetic_config.bz = 5.0;
+        let ctx = egui::Context::default();
+        app.recompute(&ctx);
+        app.recompute_magnetic(&ctx);
+
+        // Default view = InterfaceGap, show_majorana = false → no volume.
+        app.recompute_cooper(&ctx);
+        assert!(
+            app.majorana_density.is_none(),
+            "Majorana computed while gated off"
+        );
+
+        // Enabling the toggle populates the cache on the next Cooper pass.
+        app.show_majorana = true;
+        app.needs_cooper_recompute = true;
+        app.recompute_cooper(&ctx);
+        assert!(
+            app.majorana_density.is_some(),
+            "Majorana not computed when enabled"
+        );
+    }
+
+    #[test]
+    fn test_fft_peaks_populated_and_sorted() {
+        let (app, _ctx) = pipeline_app(128);
+        let peaks = app.fft_peaks.as_ref().expect("fft peaks");
+        assert!(!peaks.is_empty(), "expected at least one FFT peak");
+        assert!(peaks.len() <= FFT_MAX_PEAKS);
+        for w in peaks.windows(2) {
+            assert!(
+                w[0].amplitude >= w[1].amplitude,
+                "peaks not amplitude-descending"
+            );
+        }
+    }
+
+    #[test]
+    fn test_fft_peak_wavelength_matches_lattice() {
+        // Physics/wiring anchor: the FFT of the product pattern is dominated by
+        // the constituent reciprocal-lattice vectors, so some detected peak's
+        // wavelength (2π/|k|, using `fft_frequencies`) lands within ~20% of a
+        // constituent lattice constant. A wrong frequency scale would break it.
+        //
+        // (The moire beat period is NOT the strongest peak for this pattern —
+        // the atomic-lattice harmonics dominate — so we anchor on the lattice
+        // constants, not the moire period.)
+        let (app, _ctx) = pipeline_app(128);
+        let peaks = app.fft_peaks.as_ref().expect("fft peaks");
+        let a_sub = app.substrate_material().a;
+        let a_over = app.overlayer_material().a;
+        let matched = peaks.iter().any(|p| {
+            let k_mag = (p.kx * p.kx + p.ky * p.ky).sqrt();
+            if k_mag <= 1e-9 {
+                return false;
+            }
+            let lambda = 2.0 * std::f64::consts::PI / k_mag;
+            [a_sub, a_over]
+                .iter()
+                .any(|&a| (lambda - a).abs() / a < 0.2)
+        });
+        assert!(
+            matched,
+            "no FFT peak within 20% of a_sub={a_sub:.3} or a_over={a_over:.3}"
+        );
+    }
+
+    #[test]
+    fn test_phase_refresh_builds_texture() {
+        let mut app = MoireApp::default();
+        let ctx = egui::Context::default();
+        app.phase_b_max = 100.0;
+        app.phase_delta_max = 10.0;
+        app.phase_mu = 0.0;
+        crate::ui::phase_window::refresh_phase(&ctx, &mut app);
+        let tex = app.phase_texture.as_ref().expect("phase texture");
+        assert_eq!(tex.size(), [160, 160]);
+    }
+
+    #[test]
+    fn test_magnetic_view_scalar_all_views() {
+        let mut app = MoireApp::default();
+        app.resolution = 32;
+        app.magnetic_config.bz = 5.0;
+        let ctx = egui::Context::default();
+        app.recompute(&ctx);
+        let n2 = 32 * 32;
+        for view in [
+            MagneticView::CombinedGap,
+            MagneticView::Susceptibility,
+            MagneticView::ScreeningCurrent,
+        ] {
+            app.magnetic_view = view;
+            app.recompute_magnetic(&ctx);
+            let (data, _cmap) = app.magnetic_view_scalar().expect("scalar for view");
+            assert_eq!(data.len(), n2, "wrong length for {view:?}");
+            for &v in &data {
+                assert!((0.0..=1.0).contains(&v), "value {v} out of [0,1] for {view:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_screening_populated_when_selected() {
+        let mut app = MoireApp::default();
+        app.resolution = 32;
+        app.magnetic_config.bz = 5.0;
+        let ctx = egui::Context::default();
+        app.recompute(&ctx);
+
+        // Not selected → the expensive screening field stays uncomputed.
+        app.magnetic_view = MagneticView::CombinedGap;
+        app.recompute_magnetic(&ctx);
+        assert!(app.screening_field.is_none());
+
+        // Selected → cache populated, peak-normalized to [0, 1].
+        app.magnetic_view = MagneticView::ScreeningCurrent;
+        app.recompute_magnetic(&ctx);
+        let sf = app.screening_field.as_ref().expect("screening field");
+        assert_eq!(sf.len(), 32 * 32);
+        let max = sf.iter().copied().fold(0.0_f64, f64::max);
+        assert!(max > 0.0 && max <= 1.0 + 1e-9, "screening max = {max}");
+    }
+
+    #[test]
+    fn test_zeeman_uses_app_g_factor() {
+        let mut app = MoireApp::default();
+        app.resolution = 32;
+        app.magnetic_config.bx = 1.0; // in-plane field → nonzero Zeeman
+        let ctx = egui::Context::default();
+        app.recompute(&ctx);
+
+        app.g_factor = 10.0;
+        app.recompute_magnetic(&ctx);
+        let e1 = app.zeeman_result.as_ref().unwrap().zeeman_energy;
+        app.g_factor = 20.0;
+        app.recompute_magnetic(&ctx);
+        let e2 = app.zeeman_result.as_ref().unwrap().zeeman_energy;
+
+        assert!(e1 > 0.0, "expected nonzero Zeeman, got {e1}");
+        assert!((e2 - 2.0 * e1).abs() < 1e-9, "E_Z not linear in g: e1={e1}, e2={e2}");
+    }
+
+    #[test]
+    fn test_cmap_resolver_auto_and_override() {
+        let mut app = MoireApp::default();
+        let viridis = moire_core::colormap::viridis as fn(f64) -> [u8; 4];
+        let plasma = moire_core::colormap::plasma as fn(f64) -> [u8; 4];
+
+        // Auto: the semantic palette passes through unchanged.
+        app.colormap_override = None;
+        assert_eq!(app.cmap(viridis) as usize, viridis as usize);
+
+        // Override: every semantic maps to the chosen palette.
+        app.colormap_override = Some(ColormapName::Plasma);
+        for semantic in [
+            viridis,
+            moire_core::colormap::coolwarm as fn(f64) -> [u8; 4],
+            moire_core::colormap::inferno as fn(f64) -> [u8; 4],
+        ] {
+            assert_eq!(app.cmap(semantic) as usize, plasma as usize);
+        }
+    }
+
+    #[test]
+    fn test_z_slice_clamped() {
+        let mut app = MoireApp::default();
+        app.resolution = 32;
+        let ctx = egui::Context::default();
+        app.recompute(&ctx);
+        app.recompute_magnetic(&ctx);
+        app.recompute_cooper(&ctx);
+
+        // Push the index out of range, then shrink the z layering.
+        app.z_slice_index = 9999;
+        app.proximity_config.n_z_layers = 8;
+        app.needs_cooper_recompute = true;
+        app.recompute_cooper(&ctx);
+
+        let new_n_z = app.cooper_z_coords.as_ref().unwrap().len();
+        assert_eq!(new_n_z, 8);
+        assert!(
+            app.z_slice_index < new_n_z,
+            "z_slice_index {} not clamped to {}",
+            app.z_slice_index,
+            new_n_z
+        );
     }
 }

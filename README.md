@@ -1289,7 +1289,7 @@ waytogocoop/
         graphene.rs                 # Stacking phases, heterostrain, supermoire, magic angles
         curvature.rs                # Height fields, Monge strain, pseudo-field
         bm_model.rs                 # Bistritzer-MacDonald bands and DOS
-        colormap.rs                 # viridis/inferno/coolwarm LUTs
+        colormap.rs                 # viridis/inferno/coolwarm/plasma LUTs
         bin/dump_lut.rs             # Regenerates components/colormaps_data.json
     moire-desktop/                  # Rust egui desktop app
       src/

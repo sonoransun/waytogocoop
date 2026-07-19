@@ -89,6 +89,28 @@ class TestMaterialRegistry:
         with pytest.raises(AttributeError):
             fete.a = 999.0  # type: ignore[misc]
 
+    @pytest.mark.parametrize(
+        ("key", "expected_a", "expected_c"),
+        [
+            ("FeTe", 3.82, 6.27),
+            ("Sb2Te3", 4.264, 30.458),
+            ("Bi2Te3", 4.386, 30.497),
+            ("Sb2Te", 4.272, 17.633),
+            ("Graphene", 2.46, 3.35),
+            ("Graphene-AB", 2.46, 6.70),
+            ("Graphene-ABA", 2.46, 10.05),
+        ],
+    )
+    def test_lattice_constants_pinned(self, key, expected_a, expected_c):
+        """Pin (a, c) for every material against the Rust database.
+
+        Twin of moire-core materials.rs::test_lattice_constants_all_materials.
+        FeTe c = 6.27 per docs/materials.md and the cited P4/nmm structure.
+        """
+        material = get_material(key)
+        assert material.a == pytest.approx(expected_a, abs=1e-12)
+        assert material.c == pytest.approx(expected_c, abs=1e-12)
+
 
 # -----------------------------------------------------------------------
 # Lattice generation

@@ -117,20 +117,24 @@ pub struct CooperSurface3D {
 ///
 /// z < 0 (inside SC): f = 1.0
 /// z ≥ 0 (interface + TI): f = T * exp(-z / xi_prox)
+///
+/// Errors on non-positive `xi_prox` or `interface_transparency` outside
+/// (0, 1], matching the Python implementation's `ValueError` contract.
 pub fn proximity_decay_profile(
     z_coords: &[f64],
     xi_prox: f64,
     interface_transparency: f64,
-) -> Vec<f64> {
+) -> Result<Vec<f64>, String> {
     if xi_prox <= 0.0 {
-        // Step function: 1.0 for z < 0 (inside SC), 0.0 for z >= 0
-        return z_coords
-            .iter()
-            .map(|&z| if z < 0.0 { 1.0 } else { 0.0 })
-            .collect();
+        return Err(format!("xi_prox must be positive, got {xi_prox}"));
+    }
+    if !(interface_transparency > 0.0 && interface_transparency <= 1.0) {
+        return Err(format!(
+            "interface_transparency must be in (0, 1], got {interface_transparency}"
+        ));
     }
 
-    z_coords
+    Ok(z_coords
         .iter()
         .map(|&z| {
             if z < 0.0 {
@@ -139,6 +143,23 @@ pub fn proximity_decay_profile(
                 interface_transparency * (-z / xi_prox).exp()
             }
         })
+        .collect())
+}
+
+/// z-coordinate grid for a proximity configuration.
+///
+/// Linear spacing over [z_min, z_max] with `n_z_layers` points; the bounds
+/// auto-swap if `z_min > z_max`. Shared by `compute_gap_3d` and callers that
+/// evaluate slices without materializing the 3D volume.
+pub fn z_grid(config: &ProximityConfig) -> Vec<f64> {
+    let n_z = config.n_z_layers;
+    let (z_lo, z_hi) = if config.z_min > config.z_max {
+        (config.z_max, config.z_min)
+    } else {
+        (config.z_min, config.z_max)
+    };
+    (0..n_z)
+        .map(|i| z_lo + (z_hi - z_lo) * i as f64 / (n_z - 1).max(1) as f64)
         .collect()
 }
 
@@ -149,22 +170,13 @@ pub fn compute_gap_3d(
     gap_2d: &[f64],
     resolution: usize,
     config: &ProximityConfig,
-) -> ProximityResult {
+) -> Result<ProximityResult, String> {
     let n_z = config.n_z_layers;
     let n_xy = resolution * resolution;
 
-    // Auto-swap if z_min > z_max
-    let (z_lo, z_hi) = if config.z_min > config.z_max {
-        (config.z_max, config.z_min)
-    } else {
-        (config.z_min, config.z_max)
-    };
-
-    let z_coords: Vec<f64> = (0..n_z)
-        .map(|i| z_lo + (z_hi - z_lo) * i as f64 / (n_z - 1).max(1) as f64)
-        .collect();
-
-    let profile = proximity_decay_profile(&z_coords, config.xi_prox, config.interface_transparency);
+    let z_coords = z_grid(config);
+    let profile =
+        proximity_decay_profile(&z_coords, config.xi_prox, config.interface_transparency)?;
 
     let mut gap_3d = Vec::with_capacity(n_z * n_xy);
     for iz in 0..n_z {
@@ -174,13 +186,13 @@ pub fn compute_gap_3d(
         }
     }
 
-    ProximityResult {
+    Ok(ProximityResult {
         gap_3d,
         z_coords,
         decay_profile: profile,
         resolution,
         n_z,
-    }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -208,14 +220,14 @@ pub fn compute_cooper_surface_3d(
     vortex_period: f64,
     suppression: Option<&[f64]>,
     proximity_config: &ProximityConfig,
-) -> CooperSurface3D {
+) -> Result<CooperSurface3D, String> {
     // Apply suppression
     let effective_gap: Vec<f64> = match suppression {
         Some(s) => gap_2d.iter().zip(s.iter()).map(|(&g, &s)| g * s).collect(),
         None => gap_2d.to_vec(),
     };
 
-    let result = compute_gap_3d(&effective_gap, resolution, proximity_config);
+    let result = compute_gap_3d(&effective_gap, resolution, proximity_config)?;
 
     // Build coordinate arrays
     let n = resolution;
@@ -224,7 +236,7 @@ pub fn compute_cooper_surface_3d(
         .collect();
     let y_coords = x_coords.clone();
 
-    CooperSurface3D {
+    Ok(CooperSurface3D {
         field_3d: result.gap_3d,
         x_coords,
         y_coords,
@@ -232,7 +244,7 @@ pub fn compute_cooper_surface_3d(
         moire_period,
         vortex_period,
         resolution,
-    }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +335,65 @@ pub fn majorana_probability_density(
     }
 }
 
+/// **SPECULATIVE**: 3D Majorana zero mode probability density.
+///
+/// Extends `majorana_probability_density` (in-plane envelope × Bessel
+/// oscillation) into z by multiplying with `exp(-2|z|/xi_prox)` anchored at
+/// the interface (z = 0); the factor of 2 matches the probability density
+/// (|psi|^2 inherits twice the wavefunction decay rate). The volume is
+/// renormalised so its peak is 1; with no vortices it is all zeros.
+///
+/// Returns row-major nz * n * n (z outermost). Port of the Python
+/// `majorana_probability_density_3d` (computation/topological.py).
+pub fn majorana_probability_density_3d(
+    resolution: usize,
+    physical_extent: f64,
+    z_coords: &[f64],
+    vortex_positions: &[[f64; 2]],
+    xi_m: f64,
+    k_f: f64,
+    xi_prox: f64,
+) -> Result<Vec<f64>, String> {
+    // The Python twin validates xi_prox here and xi_M / k_F inside the 2D
+    // call; validate all three so the error contract matches.
+    if xi_prox <= 0.0 {
+        return Err(format!("xi_prox must be positive, got {xi_prox}"));
+    }
+    if xi_m <= 0.0 {
+        return Err(format!("xi_M must be positive, got {xi_m}"));
+    }
+    if k_f <= 0.0 {
+        return Err(format!("k_F must be positive, got {k_f}"));
+    }
+
+    let planar = majorana_probability_density(
+        resolution,
+        physical_extent,
+        vortex_positions,
+        xi_m,
+        k_f,
+    );
+    let n_xy = resolution * resolution;
+
+    let mut density_3d = Vec::with_capacity(z_coords.len() * n_xy);
+    for &z in z_coords {
+        let envelope_z = (-2.0 * z.abs() / xi_prox).exp();
+        for &p in &planar.probability_density {
+            density_3d.push(envelope_z * p);
+        }
+    }
+
+    // Renormalise the volume to peak 1.
+    let peak = density_3d.iter().copied().fold(0.0_f64, f64::max);
+    if peak > 1e-30 {
+        for v in density_3d.iter_mut() {
+            *v /= peak;
+        }
+    }
+
+    Ok(density_3d)
+}
+
 // ---------------------------------------------------------------------------
 // SPECULATIVE — topological phase boundary
 // ---------------------------------------------------------------------------
@@ -389,7 +460,7 @@ mod tests {
     #[test]
     fn test_proximity_bulk_sc_unity() {
         let z = vec![-50.0, -10.0, -1.0];
-        let profile = proximity_decay_profile(&z, 100.0, 0.8);
+        let profile = proximity_decay_profile(&z, 100.0, 0.8).unwrap();
         for &f in &profile {
             assert!((f - 1.0).abs() < 1e-10);
         }
@@ -398,14 +469,14 @@ mod tests {
     #[test]
     fn test_proximity_interface_transparency() {
         let z = vec![0.0];
-        let profile = proximity_decay_profile(&z, 100.0, 0.8);
+        let profile = proximity_decay_profile(&z, 100.0, 0.8).unwrap();
         assert!((profile[0] - 0.8).abs() < 1e-10);
     }
 
     #[test]
     fn test_proximity_monotonic_decay() {
         let z: Vec<f64> = (0..100).map(|i| i as f64 * 3.0).collect();
-        let profile = proximity_decay_profile(&z, 100.0, 0.8);
+        let profile = proximity_decay_profile(&z, 100.0, 0.8).unwrap();
         for w in profile.windows(2) {
             assert!(w[1] <= w[0] + 1e-15, "not monotonic: {} > {}", w[1], w[0]);
         }
@@ -418,10 +489,25 @@ mod tests {
             n_z_layers: 10,
             ..Default::default()
         };
-        let result = compute_gap_3d(&gap_2d, 4, &config);
+        let result = compute_gap_3d(&gap_2d, 4, &config).unwrap();
         assert_eq!(result.gap_3d.len(), 10 * 16);
         assert_eq!(result.z_coords.len(), 10);
         assert_eq!(result.decay_profile.len(), 10);
+    }
+
+    #[test]
+    fn test_z_grid_matches_gap_3d_coords() {
+        let config = ProximityConfig {
+            n_z_layers: 12,
+            z_min: 200.0, // deliberately swapped bounds
+            z_max: -40.0,
+            ..Default::default()
+        };
+        let grid = z_grid(&config);
+        let result = compute_gap_3d(&vec![1.0; 9], 3, &config).unwrap();
+        assert_eq!(grid, result.z_coords);
+        assert!((grid[0] - (-40.0)).abs() < 1e-12);
+        assert!((grid[11] - 200.0).abs() < 1e-12);
     }
 
     #[test]
@@ -492,15 +578,105 @@ mod tests {
         assert!(p > 0.0);
     }
 
+    // Strict-input contract, mirroring the Python ValueError behavior
+    // (tests/test_topological.py pins the same cases).
+
     #[test]
-    fn test_proximity_zero_xi_step_function() {
-        let z = vec![-10.0, -1.0, 0.0, 1.0, 10.0];
-        let result = proximity_decay_profile(&z, 0.0, 1.0);
-        assert!((result[0] - 1.0).abs() < 1e-10); // z < 0 => 1.0
-        assert!((result[1] - 1.0).abs() < 1e-10);
-        assert!(result[2].abs() < 1e-10); // z >= 0 => 0.0
-        assert!(result[3].abs() < 1e-10);
-        assert!(result[4].abs() < 1e-10);
+    fn test_proximity_zero_xi_errors() {
+        let z = vec![-10.0, 0.0, 10.0];
+        let err = proximity_decay_profile(&z, 0.0, 1.0).unwrap_err();
+        assert!(err.contains("xi_prox"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn test_proximity_negative_xi_errors() {
+        let z = vec![0.0];
+        assert!(proximity_decay_profile(&z, -5.0, 0.8).is_err());
+    }
+
+    #[test]
+    fn test_proximity_transparency_zero_errors() {
+        let z = vec![0.0];
+        let err = proximity_decay_profile(&z, 100.0, 0.0).unwrap_err();
+        assert!(err.contains("interface_transparency"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn test_proximity_transparency_above_one_errors() {
+        let z = vec![0.0];
+        assert!(proximity_decay_profile(&z, 100.0, 1.5).is_err());
+    }
+
+    #[test]
+    fn test_gap_3d_invalid_config_errors() {
+        let config = ProximityConfig {
+            xi_prox: 0.0,
+            ..Default::default()
+        };
+        assert!(compute_gap_3d(&vec![1.0; 4], 2, &config).is_err());
+        assert!(
+            compute_cooper_surface_3d(&vec![1.0; 4], 2, 100.0, 36.7, f64::INFINITY, None, &config)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_majorana_3d_shape() {
+        let z = vec![-50.0, 0.0, 50.0, 100.0, 150.0];
+        let d = majorana_probability_density_3d(
+            8, 200.0, &z, &[[0.0, 0.0]], DEFAULT_XI_M, DEFAULT_KF, 100.0,
+        )
+        .unwrap();
+        assert_eq!(d.len(), 5 * 64);
+    }
+
+    #[test]
+    fn test_majorana_3d_no_vortices_zero() {
+        let z = vec![0.0, 50.0];
+        let d = majorana_probability_density_3d(8, 200.0, &z, &[], DEFAULT_XI_M, DEFAULT_KF, 100.0)
+            .unwrap();
+        for &v in &d {
+            assert!(v.abs() < 1e-15);
+        }
+    }
+
+    #[test]
+    fn test_majorana_3d_invalid_inputs_error() {
+        let z = vec![0.0];
+        let v = [[0.0, 0.0]];
+        assert!(majorana_probability_density_3d(8, 200.0, &z, &v, 50.0, 0.1, 0.0).is_err());
+        assert!(majorana_probability_density_3d(8, 200.0, &z, &v, 0.0, 0.1, 100.0).is_err());
+        assert!(majorana_probability_density_3d(8, 200.0, &z, &v, 50.0, 0.0, 100.0).is_err());
+    }
+
+    /// Parity anchor with the Python implementation
+    /// (tests/test_topological.py::TestMajorana3D::test_majorana_3d_parity_anchor).
+    ///
+    /// Single vortex at the origin makes the probe analytic:
+    /// probe(z=100, x=50, y=0) = exp(-2*50/50) * J0(0.1*50)^2 * exp(-2*100/100)
+    ///                         / peak(=exp(0)*J0(0)^2*exp(0)=1)
+    /// but the x=50 in-plane factor is shared, so the value reduces to
+    /// exp(-4) * J0(5)^2 = 5.776864813575e-4.
+    #[test]
+    fn test_majorana_3d_parity_anchor() {
+        let n = 21;
+        let extent = 200.0;
+        let z = vec![-50.0, 0.0, 50.0, 100.0, 150.0];
+        let d = majorana_probability_density_3d(
+            n, extent, &z, &[[0.0, 0.0]], 50.0, 0.1, 100.0,
+        )
+        .unwrap();
+        // Volume peak = 1 at (iz=1: z=0, iy=10, ix=10) — interface, vortex core.
+        let peak = d[n * n + 10 * n + 10];
+        assert!((peak - 1.0).abs() < 1e-12, "peak = {peak}");
+        // Probe at (iz=3: z=100, iy=10, ix=15: x=+50).
+        // In-plane: r=50 -> exp(-2*50/50)*J0(5)^2; z: exp(-2*100/100).
+        // Combined relative to peak: exp(-2)*J0(5)^2*exp(-2) = exp(-4)*J0(5)^2.
+        let probe = d[3 * n * n + 10 * n + 15];
+        assert!(
+            (probe - 5.776864813575e-4).abs() < 1e-6,
+            "probe = {probe:e}"
+        );
     }
 
     #[test]

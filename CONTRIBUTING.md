@@ -120,8 +120,8 @@ link that navigates to `/viewer?q=<base64>` with the current material pair.
 
 ## Testing
 
-- Python: `pytest tests/ -q` — ~215 tests (includes `tests/test_topological_3d.py` cross-stack LUT parity + Majorana 3D density).
-- Rust:   `cargo test` — 128 core + 11 desktop tests on default features. Add `--features gpu` for +10 tests (camera view-proj math, mesh normals, readback row-alignment, and both WGSL shaders parsed via naga with no GPU required).
+- Python: `pytest tests/ -q` — the full suite (includes `tests/test_topological_3d.py` cross-stack LUT parity + Majorana 3D density).
+- Rust:   `cargo test` — core + desktop suites on default features. Add `--features gpu` for the GPU tests (camera view-proj math, mesh normals, readback row-alignment, and both WGSL shaders parsed via naga with no GPU required).
 - Visual: run each app locally, or regenerate the deterministic screenshot set via the two capture scripts described above.
 - Cross-stack parity: the endpoint colors of every shared colormap are asserted in `tests/test_topological_3d.py::TestColormapLutParity`. If that test fails after editing `crates/moire-core/src/colormap.rs`, regenerate `colormaps_data.json` with `cargo run -p moire-core --bin dump_lut`.
 
@@ -138,12 +138,10 @@ When the live desktop app is running, **Ctrl+S** still writes a timestamped PNG 
 
 ## Future work
 
-- **wgpu 3D renderer wire-through** — the GPU pipeline is scaffolded: the `Renderer3D` trait in `render/renderer3d.rs` is satisfied by both the existing CPU path (`SoftwareRenderer`) and the new `render::gpu::GpuRenderer` behind the opt-in `gpu` cargo feature. The WGSL surface shader implements Lambert + Blinn-Phong specular + Fresnel-Schlick and samples the shared colormap LUT (`crates/moire-core/src/colormap.rs::colormap_lut`, regenerated to `colormaps_data.json` via `cargo run -p moire-core --bin dump_lut`). The volumetric raymarch shader (`gpu/shaders/volume.wgsl`) is a stub for the future `CooperSurface3D` tab. Remaining: (1) in `app::rerender_surface`, dispatch through `Renderer3D` instead of calling `render_surface_3d_opts` directly; (2) drive the `GpuRenderer` from `eframe::CreationContext::wgpu_render_state` behind `#[cfg(feature = "gpu")]`; (3) flip `default` in `moire-desktop/Cargo.toml` from `[]` to `["gpu"]` once CI has a working Vulkan/Metal/DX12 runner. Release-binary size grows ~15 MB with `--features gpu`; note this in release notes when the default flips.
-- **Animated iso sweep on proximity_3d** — Dash side already ships `⏸/▶` + `dcc.Interval`; the Rust desktop should match by reusing the same state machine with a 2 Hz animation tick.
+- **wgpu 3D renderer wire-through** — the GPU pipeline is scaffolded: the `Renderer3D` trait in `render/renderer3d.rs` is satisfied by both the existing CPU path (`SoftwareRenderer`) and the new `render::gpu::GpuRenderer` behind the opt-in `gpu` cargo feature. The WGSL surface shader implements Lambert + Blinn-Phong specular + Fresnel-Schlick and samples the shared colormap LUT (`crates/moire-core/src/colormap.rs::colormap_lut`, regenerated to `colormaps_data.json` via `cargo run -p moire-core --bin dump_lut`). The volumetric raymarch shader (`gpu/shaders/volume.wgsl`) is a stub for a future volumetric Cooper 3D view. Step (1) is DONE: `app::rerender_surface` and `capture_current_view` dispatch through `Renderer3D`/`FrameInputs` (with `color_data` covering the curved-sheet colored path) instead of calling `render_surface_3d_opts` directly. Remaining: (2) drive the `GpuRenderer` from `eframe::CreationContext::wgpu_render_state` behind `#[cfg(feature = "gpu")]` — this also wants a `colormap_name: ColormapName` on `FrameInputs` for the LUT upload (deliberately not added yet; the CPU path resolves colormaps as fn pointers); (3) flip `default` in `moire-desktop/Cargo.toml` from `[]` to `["gpu"]` once CI has a working Vulkan/Metal/DX12 runner. Release-binary size grows ~15 MB with `--features gpu`; note this in release notes when the default flips.
 - **CSV / JSON export** on data-heavy pages (Fourier peaks, parameter
   sweep). Pattern: add a dbc.Button that triggers a `dcc.Download` with the
   serialized dataset.
-- **More URL-sync coverage** — `state.py` infrastructure is in place; `moire_viewer` and `proximity_3d` are wired. Extend to `magnetic_field`, `fourier_analysis`, `parameter_sweep`, `phase_diagram`, `substrate_comparison`.
 
 ## Code style
 

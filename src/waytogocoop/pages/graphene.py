@@ -51,7 +51,7 @@ from waytogocoop.computation.graphene import (
     magic_angle_deg,
 )
 from waytogocoop.computation.superconducting import cpdm_amplitude, gap_modulation
-from waytogocoop.config import XI_TBG
+from waytogocoop.config import RIPPLE_HEIGHT_DEFAULT, XI_TBG
 from waytogocoop.materials.database import get_material
 from waytogocoop.state import register_url_sync
 
@@ -119,7 +119,7 @@ _PRESETS = {
         "twist": 1.08,
         "filling": 2.4,
         "curvature": "sinusoidal_ripple",
-        "amp": 2,
+        "amp": RIPPLE_HEIGHT_DEFAULT,
         "feature": 100,
         "phi": 30,
         "grid_size": 200,

@@ -11,8 +11,11 @@ from dash import Input, Output, State, callback, dcc, html
 from waytogocoop.components.figure_factory import (
     create_3d_cone_field,
     create_3d_majorana_isosurface,
+    create_field_cpdm_sweep,
     create_gap_heatmap,
     create_majorana_density_map,
+    create_moire_heatmap,
+    create_pinning_energy_sweep,
     create_susceptibility_heatmap,
     create_vortex_overlay_heatmap,
 )
@@ -23,10 +26,13 @@ from waytogocoop.computation.magnetic import (
     MagneticFieldConfig,
     combined_gap_with_vortices,
     commensuration_field,
+    commensuration_pinning_energy,
     compute_zeeman,
+    field_tunable_cpdm,
     flux_per_moire_cell,
     generate_vortex_positions,
     local_susceptibility,
+    moire_vortex_beating,
     screening_currents,
     vortex_lattice_period,
     vortex_suppression_field,
@@ -37,8 +43,14 @@ from waytogocoop.computation.topological import (
     majorana_probability_density,
     majorana_probability_density_3d,
 )
-from waytogocoop.config import DEFAULT_COHERENCE_LENGTH, DELTA_AMPLITUDE, DELTA_AVG
+from waytogocoop.config import (
+    BC2_FETE,
+    DEFAULT_COHERENCE_LENGTH,
+    DELTA_AMPLITUDE,
+    DELTA_AVG,
+)
 from waytogocoop.materials.database import get_material
+from waytogocoop.state import register_url_sync
 
 dash.register_page(
     __name__,
@@ -48,9 +60,11 @@ dash.register_page(
 )
 
 _PREFIX = "mag"
+_URL_ID = f"{_PREFIX}-url"
 
 layout = dbc.Container(
     [
+        dcc.Location(id=_URL_ID, refresh=False),
         html.Br(),
         html.H2("Magnetic Field Effects"),
         html.Hr(),
@@ -71,6 +85,20 @@ layout = dbc.Container(
                         dcc.Loading(dcc.Graph(id=f"{_PREFIX}-main-graph")),
                         html.Hr(),
                         html.Div(id=f"{_PREFIX}-info-panel"),
+                        html.Hr(),
+                        html.H4("Field Response (SPECULATIVE)"),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dcc.Loading(dcc.Graph(id=f"{_PREFIX}-cpdm-sweep-graph")),
+                                    md=6,
+                                ),
+                                dbc.Col(
+                                    dcc.Loading(dcc.Graph(id=f"{_PREFIX}-pinning-graph")),
+                                    md=6,
+                                ),
+                            ]
+                        ),
                     ],
                     xs=12, md=8, lg=9,
                 ),
@@ -78,6 +106,25 @@ layout = dbc.Container(
         ),
     ],
     fluid=True,
+)
+
+
+register_url_sync(
+    _URL_ID,
+    [
+        (f"{_PREFIX}-substrate-dropdown", "value", "sub"),
+        (f"{_PREFIX}-overlayer-dropdown", "value", "over"),
+        (f"{_PREFIX}-twist-slider", "value", "tw"),
+        (f"{_PREFIX}-grid-size", "value", "gs"),
+        (f"{_PREFIX}-physical-extent", "value", "ext"),
+        (f"{_PREFIX}-bz", "value", "bz"),
+        (f"{_PREFIX}-bx", "value", "bx"),
+        (f"{_PREFIX}-by", "value", "by"),
+        (f"{_PREFIX}-viz-mode", "value", "vm"),
+        (f"{_PREFIX}-xi-prox", "value", "xi"),
+        (f"{_PREFIX}-g-factor", "value", "g"),
+        (f"{_PREFIX}-bc2", "value", "bc2"),
+    ],
 )
 
 
@@ -109,6 +156,8 @@ def _toggle_prox(n_clicks, is_open):
     Output(f"{_PREFIX}-main-graph", "figure"),
     Output(f"{_PREFIX}-info-panel", "children"),
     Output(f"{_PREFIX}-mag-info", "children"),
+    Output(f"{_PREFIX}-cpdm-sweep-graph", "figure"),
+    Output(f"{_PREFIX}-pinning-graph", "figure"),
     Input(f"{_PREFIX}-substrate-dropdown", "value"),
     Input(f"{_PREFIX}-overlayer-dropdown", "value"),
     Input(f"{_PREFIX}-twist-slider", "value"),
@@ -120,11 +169,12 @@ def _toggle_prox(n_clicks, is_open):
     Input(f"{_PREFIX}-viz-mode", "value"),
     Input(f"{_PREFIX}-xi-prox", "value"),
     Input(f"{_PREFIX}-g-factor", "value"),
+    Input(f"{_PREFIX}-bc2", "value"),
     Input("theme-store", "data"),
 )
 def update_magnetic(
     substrate_key, overlayer_key, twist, grid_size, extent,
-    Bz, Bx, By, viz_mode, xi_prox, g_factor, theme,
+    Bz, Bx, By, viz_mode, xi_prox, g_factor, bc2, theme,
 ):
     try:
         dark = theme == "dark"
@@ -137,6 +187,7 @@ def update_magnetic(
         By = float(By) if By is not None else 0.0
         xi_prox = float(xi_prox) if xi_prox is not None else 100.0
         g_factor = float(g_factor) if g_factor is not None else 30.0
+        bc2 = float(bc2) if bc2 is not None else BC2_FETE
 
         # Generate moire pattern
         result = generate_moire_pattern(
@@ -162,7 +213,15 @@ def update_magnetic(
         combined_gap = combined_gap_with_vortices(gap_field, suppression)
         flux = flux_per_moire_cell(Bz, moire_period)
         comm_B = commensuration_field(moire_period)
-        zeeman = compute_zeeman(config, DELTA_AVG)
+        zeeman = compute_zeeman(config, DELTA_AVG, g_factor=g_factor)
+
+        # SPECULATIVE field-response scalars (info card + beating view)
+        a_cpdm_bz = field_tunable_cpdm(moire_period, DEFAULT_COHERENCE_LENGTH, Bz, bc2)
+        e_pin_bz = commensuration_pinning_energy(moire_period, a_v)
+        if np.isfinite(a_v) and a_v > 0 and abs(moire_period - a_v) > 1.0e-9:
+            L_beat = moire_period * a_v / abs(moire_period - a_v)
+        else:
+            L_beat = float("inf")
 
         # Build figure based on viz_mode
         if viz_mode == "vortex":
@@ -191,8 +250,42 @@ def update_magnetic(
                 x, y, z3d, vortex_pos, xi_prox=xi_prox,
             )
             fig = create_3d_majorana_isosurface(x, y, z3d, density_3d, vortex_pos, dark=dark)
+        elif viz_mode == "beating":
+            if not np.isfinite(a_v):
+                # vortex_lattice_period(0) is inf → beating would be NaN.
+                fig = go.Figure()
+                fig.add_annotation(
+                    text="No vortices at Bz = 0 — beating undefined (SPECULATIVE)",
+                    showarrow=False, xref="paper", yref="paper", x=0.5, y=0.5,
+                )
+                fig.update_layout(
+                    title="No vortices at Bz = 0 - beating undefined (SPECULATIVE)",
+                    template="plotly_dark" if dark else "plotly_white",
+                )
+            else:
+                beating = moire_vortex_beating(moire_period, a_v, x, y)
+                if np.isfinite(L_beat):
+                    beat_title = (
+                        f"Moire-Vortex Beating (SPECULATIVE) - L_beat = {L_beat:.0f} A"
+                    )
+                else:
+                    beat_title = "Moire-Vortex Beating (SPECULATIVE) - commensurate"
+                fig = create_moire_heatmap(x, y, beating, title=beat_title, dark=dark)
         else:
             fig = create_vortex_overlay_heatmap(x, y, gap_field, vortex_pos, dark=dark)
+
+        # SPECULATIVE field-response sweeps (always computed; cheap scalar loops)
+        B_sweep = np.linspace(0.05, bc2, 200)
+        cpdm_vals = np.array([
+            field_tunable_cpdm(moire_period, DEFAULT_COHERENCE_LENGTH, b, bc2)
+            for b in B_sweep
+        ])
+        a_v_sweep = np.array([vortex_lattice_period(b) for b in B_sweep])
+        pinning = np.array([
+            commensuration_pinning_energy(moire_period, av) for av in a_v_sweep
+        ])
+        cpdm_fig = create_field_cpdm_sweep(B_sweep, cpdm_vals, Bz, bc2, dark=dark)
+        pinning_fig = create_pinning_energy_sweep(B_sweep, pinning, Bz, dark=dark)
 
         # Info panel
         comm_ratio = a_v / moire_period if np.isfinite(a_v) and moire_period > 0 else float("inf")
@@ -214,6 +307,14 @@ def update_magnetic(
                     html.P(f"Zeeman energy: {zeeman.zeeman_energy:.4f} meV"),
                     html.P(f"Pauli limit: {zeeman.pauli_limit_field:.1f} T"),
                     html.P(f"Depairing ratio: {zeeman.depairing_ratio:.4f}"),
+                    html.Hr(),
+                    html.P(f"A_CPDM(Bz): {a_cpdm_bz:.4f} (speculative)"),
+                    html.P(f"E_pin(Bz): {e_pin_bz:.4f} (speculative)"),
+                    html.P(
+                        f"L_beat: {L_beat:.1f} A (speculative)"
+                        if np.isfinite(L_beat)
+                        else "L_beat: N/A (speculative)"
+                    ),
                 ]
             ),
             className="mb-3",
@@ -225,11 +326,11 @@ def update_magnetic(
             if np.isfinite(a_v) else "No vortices"
         )
 
-        return fig, info, sidebar_info
+        return fig, info, sidebar_info, cpdm_fig, pinning_fig
     except Exception as e:
         import traceback
         traceback.print_exc()
         error_fig = go.Figure()
         error_fig.update_layout(title=f"Computation error: {e}")
         err_msg = html.P(str(e), style={"color": "red"})
-        return error_fig, err_msg, err_msg
+        return error_fig, err_msg, err_msg, error_fig, error_fig

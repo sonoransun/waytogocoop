@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use egui::{Color32, Pos2, Rect, Ui};
 use egui_plot::{GridInput, GridMark, Line, LineStyle, Plot, VLine};
 
-use crate::app::{GrapheneView, MoireApp, Tab, ViewMode};
+use crate::app::{CooperView, GrapheneView, MagneticView, MoireApp, Tab, ViewMode};
 use crate::render::axes::{self, AxesSpec, ColorbarSpec};
 
 /// Camera rotation sensitivity (radians per pixel of drag).
@@ -60,6 +60,13 @@ pub fn show_viewport(ui: &mut Ui, app: &mut MoireApp) {
         }
     }
 
+    // The Cooper decay profile is a line chart too; route it past both texture
+    // paths so the 2D/3D toggle is inert.
+    if app.active_tab == Tab::CooperSurface3D && app.cooper_view == CooperView::DecayProfile {
+        show_decay_plot(ui, app);
+        return;
+    }
+
     match app.view_mode {
         ViewMode::Flat2D => show_flat_2d(ui, app),
         ViewMode::Surface3D => show_surface_3d(ui, app),
@@ -112,18 +119,40 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
             y_range: (-half, half),
             x_label: "x (Å)",
             y_label: "y (Å)",
-            colormap: moire_core::colormap::viridis,
+            colormap: app.cmap(moire_core::colormap::viridis),
             value_range: (0.0, 1.0),
             value_label: "intensity",
         },
-        Tab::Density | Tab::CooperSurface3D => ViewMeta {
+        Tab::Density => ViewMeta {
             x_range: (-half, half),
             y_range: (-half, half),
             x_label: "x (Å)",
             y_label: "y (Å)",
-            colormap: moire_core::colormap::coolwarm,
+            colormap: app.cmap(moire_core::colormap::coolwarm),
             value_range: density_range(),
             value_label: "Δ (meV)",
+        },
+        Tab::CooperSurface3D => match app.cooper_view {
+            CooperView::Majorana => ViewMeta {
+                x_range: (-half, half),
+                y_range: (-half, half),
+                x_label: "x (Å)",
+                y_label: "y (Å)",
+                colormap: app.cmap(moire_core::colormap::viridis),
+                value_range: (0.0, 1.0),
+                value_label: "|ψ|² (norm)",
+            },
+            // Gap views (InterfaceGap / ZSlice); DecayProfile is routed to a
+            // plot before reaching here.
+            _ => ViewMeta {
+                x_range: (-half, half),
+                y_range: (-half, half),
+                x_label: "x (Å)",
+                y_label: "y (Å)",
+                colormap: app.cmap(moire_core::colormap::coolwarm),
+                value_range: app.cooper_value_range().unwrap_or((0.0, 1.0)),
+                value_label: "Δ(z) (meV)",
+            },
         },
         Tab::Fourier => {
             let k_nyq = if extent > 0.0 {
@@ -136,19 +165,39 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
                 y_range: (-k_nyq, k_nyq),
                 x_label: "kx (1/Å)",
                 y_label: "ky (1/Å)",
-                colormap: moire_core::colormap::inferno,
+                colormap: app.cmap(moire_core::colormap::inferno),
                 value_range: (0.0, 1.0),
                 value_label: "log₁₀(|F|²) norm",
             }
         }
-        Tab::MagneticField => ViewMeta {
-            x_range: (-half, half),
-            y_range: (-half, half),
-            x_label: "x (Å)",
-            y_label: "y (Å)",
-            colormap: moire_core::colormap::coolwarm,
-            value_range: density_range(),
-            value_label: "Δ (meV)",
+        Tab::MagneticField => match app.magnetic_view {
+            MagneticView::Susceptibility => ViewMeta {
+                x_range: (-half, half),
+                y_range: (-half, half),
+                x_label: "x (Å)",
+                y_label: "y (Å)",
+                colormap: app.cmap(moire_core::colormap::plasma),
+                value_range: (-1.0, 0.0),
+                value_label: "χ (norm)",
+            },
+            MagneticView::ScreeningCurrent => ViewMeta {
+                x_range: (-half, half),
+                y_range: (-half, half),
+                x_label: "x (Å)",
+                y_label: "y (Å)",
+                colormap: app.cmap(moire_core::colormap::plasma),
+                value_range: (0.0, 1.0),
+                value_label: "|j| / j_max",
+            },
+            MagneticView::CombinedGap => ViewMeta {
+                x_range: (-half, half),
+                y_range: (-half, half),
+                x_label: "x (Å)",
+                y_label: "y (Å)",
+                colormap: app.cmap(moire_core::colormap::coolwarm),
+                value_range: density_range(),
+                value_label: "Δ (meV)",
+            },
         },
         Tab::Graphene => {
             // Fourier lives in k-space; Bands / Dos bypass the texture
@@ -170,7 +219,7 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
                         y_range: (-k_nyq, k_nyq),
                         x_label: "kx (1/Å)",
                         y_label: "ky (1/Å)",
-                        colormap: moire_core::colormap::inferno,
+                        colormap: app.cmap(moire_core::colormap::inferno),
                         value_range: (0.0, 1.0),
                         value_label: "log₁₀(|F|²) norm",
                     });
@@ -187,7 +236,7 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
                         y_range: (-BAND_PLOT_WINDOW_MEV, BAND_PLOT_WINDOW_MEV),
                         x_label: "k-path (1/Å)",
                         y_label: "E (meV)",
-                        colormap: moire_core::colormap::viridis,
+                        colormap: app.cmap(moire_core::colormap::viridis),
                         value_range: (-BAND_PLOT_WINDOW_MEV, BAND_PLOT_WINDOW_MEV),
                         value_label: "E (meV)",
                     });
@@ -209,7 +258,7 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
                         y_range: (0.0, d_max),
                         x_label: "E (meV)",
                         y_label: "DOS",
-                        colormap: moire_core::colormap::viridis,
+                        colormap: app.cmap(moire_core::colormap::viridis),
                         value_range: (0.0, d_max),
                         value_label: "DOS (meV⁻¹ k⁻¹)",
                     });
@@ -226,7 +275,7 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
             let (colormap, value_range, value_label): (fn(f64) -> [u8; 4], (f64, f64), &'static str) =
                 match app.graphene_view {
                 GrapheneView::Pattern => {
-                    (moire_core::colormap::viridis, (0.0, 1.0), "intensity")
+                    (app.cmap(moire_core::colormap::viridis), (0.0, 1.0), "intensity")
                 }
                 GrapheneView::GapMap => {
                     let range = app
@@ -242,7 +291,7 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
                             }
                         })
                         .unwrap_or((0.0, 1.0));
-                    (moire_core::colormap::coolwarm, range, "Δ (meV)")
+                    (app.cmap(moire_core::colormap::coolwarm), range, "Δ (meV)")
                 }
                 GrapheneView::PseudoField => {
                     let b_max = app
@@ -251,7 +300,7 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
                         .map(|c| c.max_abs_field)
                         .filter(|&m| m > 1e-15)
                         .unwrap_or(1.0);
-                    (moire_core::colormap::coolwarm, (-b_max, b_max), "B_ps (T)")
+                    (app.cmap(moire_core::colormap::coolwarm), (-b_max, b_max), "B_ps (T)")
                 }
                 GrapheneView::Strain => {
                     let s_max = app
@@ -269,7 +318,7 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
                         })
                         .filter(|&m| m > 0.0)
                         .unwrap_or(1.0);
-                    (moire_core::colormap::viridis, (0.0, s_max), "|ε|")
+                    (app.cmap(moire_core::colormap::viridis), (0.0, s_max), "|ε|")
                 }
                 // Handled by the early returns above.
                 GrapheneView::Fourier | GrapheneView::Bands | GrapheneView::Dos => {
@@ -295,14 +344,43 @@ fn show_flat_2d(ui: &mut Ui, app: &MoireApp) {
         Tab::Density => app.density_texture.as_ref(),
         Tab::Fourier => app.fft_texture.as_ref(),
         Tab::MagneticField => app.magnetic_texture.as_ref(),
-        Tab::CooperSurface3D => app.density_texture.as_ref(),
+        Tab::CooperSurface3D => app.cooper_texture.as_ref(),
         Tab::Graphene => app.graphene_texture.as_ref(),
     };
 
-    let available = ui.available_rect_before_wrap();
-    let (image_rect, colorbar_rect) = axes::layout(available);
-    ui.allocate_rect(available, egui::Sense::hover());
+    // The Fourier tab tucks a collapsible peak table below the spectrum. Only
+    // shrink the image when the table is open, so the spectrum stays near
+    // full-height by default.
+    if app.active_tab == Tab::Fourier {
+        let full = ui.available_rect_before_wrap();
+        let header_id = ui.make_persistent_id("fft_peaks_header");
+        let state = egui::collapsing_header::CollapsingState::load_with_default_open(
+            ui.ctx(),
+            header_id,
+            false,
+        );
+        let table_reserve = if state.is_open() {
+            (full.height() * 0.4).clamp(160.0, 300.0)
+        } else {
+            30.0
+        };
+        let image_h = (full.height() - table_reserve).max(120.0);
+        let image_area = Rect::from_min_size(full.min, egui::vec2(full.width(), image_h));
+        ui.allocate_rect(image_area, egui::Sense::hover());
+        paint_texture_view(ui, app, texture, image_area);
+        show_fft_peak_table(ui, app, state, table_reserve);
+        return;
+    }
 
+    let available = ui.available_rect_before_wrap();
+    ui.allocate_rect(available, egui::Sense::hover());
+    paint_texture_view(ui, app, texture, available);
+}
+
+/// Paint a texture view (image + axes + colorbar) into `area`, or a centered
+/// "Computing..." placeholder when the texture is missing.
+fn paint_texture_view(ui: &Ui, app: &MoireApp, texture: Option<&egui::TextureHandle>, area: Rect) {
+    let (image_rect, colorbar_rect) = axes::layout(area);
     let Some(meta) = view_meta(app) else {
         return;
     };
@@ -336,6 +414,81 @@ fn show_flat_2d(ui: &mut Ui, app: &MoireApp) {
             ui.visuals().text_color(),
         );
     }
+}
+
+/// Collapsible table of the strongest FFT peaks (kx, ky, |k|, wavelength,
+/// amplitude). Scrolls internally so it never overflows its reserved band.
+fn show_fft_peak_table(
+    ui: &mut Ui,
+    app: &MoireApp,
+    state: egui::collapsing_header::CollapsingState,
+    reserve: f32,
+) {
+    state
+        .show_header(ui, |ui| {
+            ui.strong("FFT peaks (top 20)");
+        })
+        .body(|ui| {
+            let peaks = app.fft_peaks.as_deref().unwrap_or(&[]);
+            if peaks.is_empty() {
+                ui.weak("No peaks above threshold.");
+                return;
+            }
+            egui::ScrollArea::vertical()
+                .max_height((reserve - 28.0).max(60.0))
+                .show(ui, |ui| {
+                    render_fft_table(ui, peaks);
+                });
+        });
+}
+
+fn render_fft_table(ui: &mut Ui, peaks: &[moire_core::fft::FftPeak]) {
+    use egui_extras::{Column, TableBuilder};
+
+    TableBuilder::new(ui)
+        .striped(true)
+        .columns(Column::auto(), 4)
+        .column(Column::remainder())
+        .header(18.0, |mut header| {
+            for label in [
+                "kx (1/Å)",
+                "ky (1/Å)",
+                "|k| (1/Å)",
+                "λ = 2π/|k| (Å)",
+                "amplitude",
+            ] {
+                header.col(|ui| {
+                    ui.strong(label);
+                });
+            }
+        })
+        .body(|mut body| {
+            for p in peaks {
+                let k_mag = (p.kx * p.kx + p.ky * p.ky).sqrt();
+                let lambda = if k_mag > 1e-12 {
+                    2.0 * std::f64::consts::PI / k_mag
+                } else {
+                    f64::INFINITY
+                };
+                body.row(16.0, |mut row| {
+                    row.col(|ui| {
+                        ui.monospace(format!("{:.4}", p.kx));
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:.4}", p.ky));
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{k_mag:.4}"));
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{lambda:.1}"));
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:.4}", p.amplitude));
+                    });
+                });
+            }
+        });
 }
 
 fn show_surface_3d(ui: &mut Ui, app: &mut MoireApp) {
@@ -519,6 +672,43 @@ fn show_dos_plot(ui: &mut Ui, app: &MoireApp) {
             plot_ui.vline(
                 VLine::new(0.0)
                     .color(zero_color)
+                    .style(LineStyle::dashed_loose()),
+            );
+            plot_ui.line(Line::new(points).color(FLAT_BAND_COLOR).width(2.0));
+        });
+}
+
+/// Draw the proximity decay profile f(z): unity inside the superconductor
+/// (z < 0), exponential decay into the TI beyond the interface. Dashed
+/// verticals mark the interface (z = 0) and the coherence length xi_prox.
+fn show_decay_plot(ui: &mut Ui, app: &MoireApp) {
+    let (Some(z_coords), Some(decay)) =
+        (app.cooper_z_coords.as_ref(), app.cooper_decay.as_ref())
+    else {
+        show_computing_message(ui, "Computing proximity decay...");
+        return;
+    };
+    let points: Vec<[f64; 2]> = z_coords
+        .iter()
+        .zip(decay.iter())
+        .map(|(&z, &f)| [z, f])
+        .collect();
+    let ref_color = muted_line_color(app.dark_mode);
+    let xi = app.proximity_config.xi_prox;
+
+    Plot::new("cooper_decay")
+        .x_axis_label("z (Å)")
+        .y_axis_label("f(z)")
+        .include_y(0.0)
+        .show(ui, |plot_ui| {
+            plot_ui.vline(
+                VLine::new(0.0)
+                    .color(ref_color)
+                    .style(LineStyle::dashed_loose()),
+            );
+            plot_ui.vline(
+                VLine::new(xi)
+                    .color(ref_color)
                     .style(LineStyle::dashed_loose()),
             );
             plot_ui.line(Line::new(points).color(FLAT_BAND_COLOR).width(2.0));

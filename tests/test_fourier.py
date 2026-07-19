@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import inspect
+
 import numpy as np
 import pytest
 
 from waytogocoop.computation.fourier import fft_2d, identify_peaks
+from waytogocoop.config import DEFAULT_FFT_THRESHOLD_FRACTION
 
 
 class TestFFT2D:
@@ -225,3 +228,13 @@ class TestFourierValidation:
     def test_identify_peaks_invalid_threshold_above_one_raises(self):
         with pytest.raises(ValueError):
             identify_peaks(np.ones((10, 10)), np.ones(10), np.ones(10), threshold_fraction=1.5)
+
+    def test_default_threshold_comes_from_config(self):
+        """identify_peaks must default to the config constant, not a literal."""
+        signature = inspect.signature(identify_peaks)
+        default = signature.parameters["threshold_fraction"].default
+        assert default == DEFAULT_FFT_THRESHOLD_FRACTION
+
+    def test_default_threshold_value_pinned(self):
+        """The Fourier page's rendered output depends on this default."""
+        assert pytest.approx(0.3) == DEFAULT_FFT_THRESHOLD_FRACTION

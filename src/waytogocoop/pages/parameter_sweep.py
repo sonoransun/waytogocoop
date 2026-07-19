@@ -6,13 +6,14 @@ import dash
 import dash_bootstrap_components as dbc
 import numpy as np
 import plotly.graph_objects as go
-from dash import Input, Output, State, callback, dcc, html
+from dash import Input, Output, callback, dcc, html
 
 from waytogocoop.components.controls import loading_spinner
 from waytogocoop.components.figure_factory import create_sweep_plot
 from waytogocoop.computation.moire import moire_periodicity_1d, moire_periodicity_with_twist
 from waytogocoop.computation.superconducting import cpdm_amplitude
 from waytogocoop.materials.database import get_material
+from waytogocoop.state import register_url_sync
 
 dash.register_page(
     __name__, path="/sweep", name="Parameter Sweep", title="Good Job Coop! - Sweep"
@@ -20,6 +21,7 @@ dash.register_page(
 
 layout = dbc.Container(
     [
+        dcc.Location(id="sweep-url", refresh=False),
         html.Br(),
         html.H2("Parameter Sweep"),
         html.Hr(),
@@ -110,15 +112,29 @@ layout = dbc.Container(
 )
 
 
+register_url_sync(
+    "sweep-url",
+    [
+        ("sweep-param-dropdown", "value", "param"),
+        ("sweep-substrate-a", "value", "sub_a"),
+        ("sweep-range-start", "value", "start"),
+        ("sweep-range-end", "value", "end"),
+        ("sweep-num-points", "value", "n"),
+    ],
+)
+
+
 @callback(
     Output("sweep-graph", "figure"),
     Output("sweep-material-markers", "children"),
     Input("sweep-run-button", "n_clicks"),
-    State("sweep-param-dropdown", "value"),
-    State("sweep-substrate-a", "value"),
-    State("sweep-range-start", "value"),
-    State("sweep-range-end", "value"),
-    State("sweep-num-points", "value"),
+    # The five controls are Inputs (not States) so a decoded ?q= URL
+    # re-fires the sweep; the Run button remains a manual re-trigger.
+    Input("sweep-param-dropdown", "value"),
+    Input("sweep-substrate-a", "value"),
+    Input("sweep-range-start", "value"),
+    Input("sweep-range-end", "value"),
+    Input("sweep-num-points", "value"),
     Input("theme-store", "data"),
     prevent_initial_call=False,
 )

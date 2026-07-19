@@ -182,7 +182,9 @@ pub fn plasma(t: f64) -> [u8; 4] {
 }
 
 /// Canonical colormap names used across stacks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum ColormapName {
     Viridis,
     Inferno,
@@ -208,6 +210,13 @@ impl ColormapName {
         ColormapName::Coolwarm,
         ColormapName::Plasma,
     ];
+
+    /// The sampling function for this palette — the public counterpart of the
+    /// private `sample_fn`, for callers (e.g. a UI colormap override) that hold
+    /// a `ColormapName` and need the `fn(f64) -> [u8; 4]`.
+    pub fn sample(self) -> fn(f64) -> [u8; 4] {
+        sample_fn(self)
+    }
 }
 
 fn sample_fn(name: ColormapName) -> fn(f64) -> [u8; 4] {
@@ -340,6 +349,19 @@ mod tests {
         // Every stride-4 alpha must be 255.
         for i in 0..256 {
             assert_eq!(lut[i * 4 + 3], 255);
+        }
+    }
+
+    #[test]
+    fn test_sample_matches_named_fns() {
+        // The public resolver must return the same pointer as the free fns.
+        for (name, expected) in [
+            (ColormapName::Viridis, viridis as fn(f64) -> [u8; 4]),
+            (ColormapName::Inferno, inferno as fn(f64) -> [u8; 4]),
+            (ColormapName::Coolwarm, coolwarm as fn(f64) -> [u8; 4]),
+            (ColormapName::Plasma, plasma as fn(f64) -> [u8; 4]),
+        ] {
+            assert_eq!(name.sample() as usize, expected as usize, "{name:?}");
         }
     }
 

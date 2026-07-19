@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.ndimage import maximum_filter
 
-from waytogocoop.config import PEAK_POWER_FLOOR
+from waytogocoop.config import DEFAULT_FFT_THRESHOLD_FRACTION, PEAK_POWER_FLOOR
 
 _MIN_NEIGHBOURHOOD_SIZE = 5
 _NEIGHBOURHOOD_DIVISOR = 20
@@ -55,7 +55,7 @@ def identify_peaks(
     power_spectrum: np.ndarray,
     kx: np.ndarray,
     ky: np.ndarray,
-    threshold_fraction: float = 0.3,
+    threshold_fraction: float = DEFAULT_FFT_THRESHOLD_FRACTION,
 ) -> list[dict]:
     """Identify peaks in a 2D power spectrum above a threshold.
 

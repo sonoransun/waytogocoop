@@ -19,7 +19,8 @@ const PHI_0: f64 = 2.0678e-15;
 const MU_B_MEV_T: f64 = 5.788e-2;
 /// Angstrom → metre.
 const ANG_TO_M: f64 = 1e-10;
-/// Default g-factor for topological surface states.
+/// Default g-factor for topological surface states (used in tests).
+#[cfg(test)]
 const DEFAULT_G_FACTOR: f64 = 30.0;
 /// Upper critical field for FeTe in Tesla (used in tests).
 #[cfg(test)]
@@ -239,8 +240,12 @@ pub fn pauli_limiting_field(delta_avg_mev: f64) -> f64 {
 }
 
 /// Compute full Zeeman result.
-pub fn compute_zeeman(config: &MagneticFieldConfig, delta_avg_mev: f64) -> ZeemanResult {
-    let e_z = zeeman_energy(config.bx, config.by, DEFAULT_G_FACTOR);
+pub fn compute_zeeman(
+    config: &MagneticFieldConfig,
+    delta_avg_mev: f64,
+    g_factor: f64,
+) -> ZeemanResult {
+    let e_z = zeeman_energy(config.bx, config.by, g_factor);
     let b_p = pauli_limiting_field(delta_avg_mev);
     let b_par = (config.bx * config.bx + config.by * config.by).sqrt();
     let ratio = if b_p.is_finite() && b_p > 0.0 {
@@ -544,6 +549,21 @@ mod tests {
     #[test]
     fn test_zeeman_zero_field() {
         assert_eq!(zeeman_energy(0.0, 0.0, DEFAULT_G_FACTOR), 0.0);
+    }
+
+    /// Parity anchor: E_Z(g=2, B_par=1 T) = 2 * 5.788e-2 = 0.11576 meV.
+    /// Twin of tests/test_magnetic.py::TestZeeman::test_compute_zeeman_g_factor_threaded.
+    #[test]
+    fn test_compute_zeeman_g_factor_threaded() {
+        let config = MagneticFieldConfig {
+            bx: 1.0,
+            by: 0.0,
+            bz: 0.0,
+        };
+        let result = compute_zeeman(&config, 3.0, 2.0);
+        assert!((result.zeeman_energy - 0.11576).abs() < 1e-10);
+        let doubled = compute_zeeman(&config, 3.0, 4.0);
+        assert!((doubled.zeeman_energy - 2.0 * result.zeeman_energy).abs() < 1e-12);
     }
 
     #[test]

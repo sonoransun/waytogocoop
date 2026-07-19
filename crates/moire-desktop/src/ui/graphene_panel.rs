@@ -74,6 +74,7 @@ const PRESETS: [GraphenePreset; 7] = [
     GraphenePreset {
         name: "Armchair ripple",
         geometry: CurvatureGeometry::SinusoidalRipple,
+        // Python twin: config.RIPPLE_HEIGHT_DEFAULT (Meyer et al. intrinsic ripples).
         amplitude: 2.0,
         view: GrapheneView::PseudoField,
         ..BASE_PRESET

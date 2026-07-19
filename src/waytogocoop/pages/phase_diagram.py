@@ -11,13 +11,19 @@ from dash import Input, Output, callback, dcc, html
 from waytogocoop.components.figure_factory import (
     create_commensuration_sweep,
     create_phase_colormap,
+    create_topological_extras_sweep,
 )
 from waytogocoop.components.material_selector import create_material_selector
 from waytogocoop.computation.magnetic import vortex_lattice_period
 from waytogocoop.computation.moire import moire_periodicity_1d
-from waytogocoop.computation.topological import phase_diagram_sweep
-from waytogocoop.config import DELTA_AVG, G_FACTOR_TSS
+from waytogocoop.computation.topological import (
+    chern_number_estimate,
+    phase_diagram_sweep,
+    topological_magnetoelectric_polarization,
+)
+from waytogocoop.config import DELTA_AVG, G_FACTOR_TSS, MU_B_EV_T
 from waytogocoop.materials.database import get_material
+from waytogocoop.state import register_url_sync
 
 dash.register_page(
     __name__,
@@ -27,9 +33,11 @@ dash.register_page(
 )
 
 _PREFIX = "phase"
+_URL_ID = f"{_PREFIX}-url"
 
 layout = dbc.Container(
     [
+        dcc.Location(id=_URL_ID, refresh=False),
         html.Br(),
         html.H2("Topological Phase Diagram (SPECULATIVE)"),
         dbc.Alert(
@@ -143,6 +151,8 @@ layout = dbc.Container(
                         dcc.Loading(dcc.Graph(id=f"{_PREFIX}-phase-graph")),
                         html.Hr(),
                         dcc.Loading(dcc.Graph(id=f"{_PREFIX}-comm-graph")),
+                        html.Hr(),
+                        dcc.Loading(dcc.Graph(id=f"{_PREFIX}-extras-graph")),
                     ],
                     xs=12, md=8, lg=9,
                 ),
@@ -153,9 +163,26 @@ layout = dbc.Container(
 )
 
 
+register_url_sync(
+    _URL_ID,
+    [
+        (f"{_PREFIX}-substrate-dropdown", "value", "sub"),
+        (f"{_PREFIX}-overlayer-dropdown", "value", "over"),
+        (f"{_PREFIX}-b-min", "value", "bmin"),
+        (f"{_PREFIX}-b-max", "value", "bmax"),
+        (f"{_PREFIX}-d-min", "value", "dmin"),
+        (f"{_PREFIX}-d-max", "value", "dmax"),
+        (f"{_PREFIX}-mu", "value", "mu"),
+        (f"{_PREFIX}-g-factor", "value", "g"),
+        (f"{_PREFIX}-resolution", "value", "res"),
+    ],
+)
+
+
 @callback(
     Output(f"{_PREFIX}-phase-graph", "figure"),
     Output(f"{_PREFIX}-comm-graph", "figure"),
+    Output(f"{_PREFIX}-extras-graph", "figure"),
     Input(f"{_PREFIX}-substrate-dropdown", "value"),
     Input(f"{_PREFIX}-overlayer-dropdown", "value"),
     Input(f"{_PREFIX}-b-min", "value"),
@@ -215,10 +242,17 @@ def update_phase(
             dark=dark,
         )
 
-        return phase_fig, comm_fig
+        # Chern number + magnetoelectric polarization vs B (SPECULATIVE)
+        B_line = np.linspace(b_min, b_max, 200)
+        E_Z = g_factor * MU_B_EV_T * B_line * 1.0e3  # eV → meV
+        chern = np.array([chern_number_estimate(DELTA_AVG, ez, mu) for ez in E_Z])
+        pol = np.array([topological_magnetoelectric_polarization(b) for b in B_line])
+        extras_fig = create_topological_extras_sweep(B_line, chern, pol, dark=dark)
+
+        return phase_fig, comm_fig, extras_fig
     except Exception as e:
         import traceback
         traceback.print_exc()
         error_fig = go.Figure()
         error_fig.update_layout(title=f"Computation error: {e}")
-        return error_fig, error_fig
+        return error_fig, error_fig, error_fig

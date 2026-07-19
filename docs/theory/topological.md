@@ -64,7 +64,7 @@ Model defaults (see `ProximityConfig` in `src/waytogocoop/computation/topologica
 | Proximity length xi_prox | 100 A | literature range 50–200 A (5–20 nm penetration) for proximity into TIs; model default, not a measured value for this heterostructure |
 | z grid | 50 slices, -50 A to +300 A | negative z = inside FeTe, positive z = into the TI |
 
-Implemented as `proximity_decay_profile` (`src/waytogocoop/computation/topological.py`; Rust: `crates/moire-core/src/topological.rs`). One behavioral divergence worth knowing: the Python version raises `ValueError` for `xi_prox <= 0` or `T` outside (0, 1], while the Rust version treats `xi_prox <= 0` as a hard step function (gap = 1 inside the superconductor, 0 everywhere in the TI).
+Implemented as `proximity_decay_profile` (`src/waytogocoop/computation/topological.py`; Rust: `crates/moire-core/src/topological.rs`). Both implementations reject invalid inputs — `xi_prox <= 0` or `T` outside (0, 1] — with a `ValueError` in Python and an `Err(String)` in Rust (propagated through `compute_gap_3d` and `compute_cooper_surface_3d`); the error cases are pinned by tests on both sides.
 
 ### 3D gap construction
 
@@ -175,11 +175,11 @@ returned in C/m² by `topological_magnetoelectric_polarization`. This is a bulk 
 
 Where these surface in the UIs:
 
-- `src/waytogocoop/pages/proximity_3d.py` (`/proximity3d`) — isosurface and z-slice views built on `gap_3d`.
-- `src/waytogocoop/pages/phase_diagram.py` (`/phase`) — `phase_diagram_sweep` with sliders for B range, Delta range, mu, and g.
+- `src/waytogocoop/pages/proximity_3d.py` (`/proximity3d`) — isosurface and z-slice views built on `gap_3d`, plus a TI surface Dirac cone plot from `dirac_dispersion` with the proximity-induced gap marked.
+- `src/waytogocoop/pages/phase_diagram.py` (`/phase`) — `phase_diagram_sweep` with sliders for B range, Delta range, mu, and g, plus a dual-axis extras figure driven by `chern_number_estimate` and `topological_magnetoelectric_polarization`.
 - `src/waytogocoop/pages/magnetic_field.py` (`/magnetic`) — Majorana 2D/3D overlays on the vortex lattice.
 - Rust desktop: the Majorana overlay is wired through `crates/moire-desktop/src/app.rs` and `ui/magnetic_panel.rs`.
-- `chern_number_estimate` and `topological_magnetoelectric_polarization` are currently library-level in both languages (computed and tested, not yet wired to a page or panel).
+- `chern_number_estimate` and `topological_magnetoelectric_polarization` drive the `/phase` extras figure and `dirac_dispersion` the `/proximity3d` cone plot on the web; all three remain library-level on the Rust desktop (computed and tested, not yet wired to a panel).
 
 Minor cross-language differences: the `xi_prox <= 0` handling noted above, and the Rust Bessel $J_0$ is an Abramowitz & Stegun polynomial approximation (accurate to about $10^{-6}$) versus SciPy's `j0` in Python.
 

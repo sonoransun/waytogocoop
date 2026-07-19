@@ -5,6 +5,8 @@ from __future__ import annotations
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 
+from waytogocoop.config import BC2_FETE
+
 
 def create_magnetic_panel(id_prefix: str) -> dbc.Card:
     """Return a Card with magnetic field and proximity controls.
@@ -33,6 +35,18 @@ def create_magnetic_panel(id_prefix: str) -> dbc.Card:
                     step=0.1,
                     value=0.5,
                     marks={0: "0", 5: "5", 10: "10", 15: "15", 20: "20"},
+                    tooltip={"placement": "bottom", "always_visible": True},
+                ),
+                html.Br(),
+                # --- Upper critical field Bc2 (speculative field-response models) ---
+                dbc.Label("Upper critical field Bc2 (Tesla)"),
+                dcc.Slider(
+                    id=f"{id_prefix}-bc2",
+                    min=1,
+                    max=100,
+                    step=1,
+                    value=int(BC2_FETE),
+                    marks={1: "1", 47: "47", 100: "100"},
                     tooltip={"placement": "bottom", "always_visible": True},
                 ),
                 html.Br(),
@@ -129,6 +143,7 @@ def create_magnetic_panel(id_prefix: str) -> dbc.Card:
                         {"label": "Susceptibility (speculative)", "value": "chi"},
                         {"label": "Majorana 2D (speculative)", "value": "majorana"},
                         {"label": "Majorana 3D (speculative)", "value": "majorana3d"},
+                        {"label": "Moire-Vortex Beating (speculative)", "value": "beating"},
                     ],
                     value="vortex",
                     className="mb-2",

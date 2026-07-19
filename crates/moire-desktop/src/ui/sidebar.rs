@@ -1,4 +1,5 @@
 use egui::Ui;
+use moire_core::colormap::ColormapName;
 use moire_core::materials;
 
 use crate::app::MoireApp;
@@ -134,6 +135,41 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
         app.needs_surface_rerender = true;
     }
 
+    // --- Colormap override ---
+    // Auto keeps each view's semantic palette; a pick forces all views (and
+    // their colorbars) to one map. Cascades: needs_recompute rebuilds the base
+    // + magnetic + cooper textures; the other two flags cover the comparison
+    // window and the live 3D surface.
+    ui.horizontal(|ui| {
+        ui.label("Colormap:");
+        let current = app.colormap_override.map(ColormapName::as_str).unwrap_or("Auto");
+        let mut changed_cmap = false;
+        egui::ComboBox::from_id_salt("colormap_combo")
+            .selected_text(current)
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_label(app.colormap_override.is_none(), "Auto")
+                    .clicked()
+                    && app.colormap_override.is_some()
+                {
+                    app.colormap_override = None;
+                    changed_cmap = true;
+                }
+                for name in ColormapName::ALL {
+                    let selected = app.colormap_override == Some(name);
+                    if ui.selectable_label(selected, name.as_str()).clicked() && !selected {
+                        app.colormap_override = Some(name);
+                        changed_cmap = true;
+                    }
+                }
+            });
+        if changed_cmap {
+            app.needs_recompute = true;
+            app.comparison_needs_refresh = true;
+            app.needs_surface_rerender = true;
+        }
+    });
+
     // --- Clipping plane ---
     // In normalised surface coords: the mesh spans z in [0, 0.3] (software
     // rasterizer convention) so clip_z = 1.0 means "disabled" for most
@@ -211,6 +247,15 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
     ui.separator();
     ui.add_space(8.0);
 
+    // --- Cooper 3D / Proximity ---
+    if super::cooper_panel::show_cooper_panel(ui, app) {
+        app.needs_cooper_recompute = true;
+    }
+
+    ui.add_space(16.0);
+    ui.separator();
+    ui.add_space(8.0);
+
     // --- Graphene Stack ---
     if super::graphene_panel::show_graphene_panel(ui, app) {
         app.needs_graphene_recompute = true;
@@ -230,5 +275,9 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
     if ui.button("Compare All Substrates").clicked() {
         app.show_comparison = true;
         app.comparison_needs_refresh = true;
+    }
+    if ui.button("Phase Diagram (speculative)").clicked() {
+        app.show_phase_diagram = true;
+        app.phase_needs_refresh = true;
     }
 }

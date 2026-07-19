@@ -7,7 +7,6 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 HBAR_EV_S: float = 6.582119569e-16          # hbar in eV*s
 KB_EV_K: float = 8.617333262e-5             # Boltzmann constant in eV/K
-ELECTRON_MASS_KG: float = 9.1093837015e-31  # free electron mass
 
 # ---------------------------------------------------------------------------
 # Superconducting gap parameters (meV)
@@ -75,11 +74,6 @@ BC2_FETE: float = 47.0                 # Upper critical field Hc2 for FeTe (Tesl
 ANGSTROM_TO_M: float = 1.0e-10         # Angstrom → metre conversion
 
 # ---------------------------------------------------------------------------
-# Conversion helpers
-# ---------------------------------------------------------------------------
-ANGSTROM_TO_NM: float = 0.1
-
-# ---------------------------------------------------------------------------
 # Numerical thresholds
 # ---------------------------------------------------------------------------
 ZERO_THRESHOLD: float = 1e-12          # Float-equality-to-zero checks
@@ -125,8 +119,7 @@ BUMP_HEIGHT_DEFAULT: float = 5.0  # Angstrom
 BUMP_SIGMA_DEFAULT: float = 50.0  # Angstrom
 RIPPLE_HEIGHT_DEFAULT: float = 2.0        # Angstrom — intrinsic ripples (Meyer et al.,
 RIPPLE_WAVELENGTH_DEFAULT: float = 100.0  # Angstrom    Nature 446, 60 (2007))
-BEND_RADIUS_DEFAULT: float = 1000.0  # Angstrom
-CAP_RADIUS_DEFAULT: float = 2000.0   # Angstrom
+BEND_RADIUS_DEFAULT: float = 1000.0  # Angstrom — shared by cylindrical bend and spherical cap
 
 # ---------------------------------------------------------------------------
 # Bistritzer-MacDonald / v2 graphene parameters

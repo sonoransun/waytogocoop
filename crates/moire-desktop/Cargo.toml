@@ -28,3 +28,7 @@ bytemuck = { version = "1", features = ["derive"], optional = true }
 pollster = { version = "0.3", optional = true }
 # naga is used at test time to validate WGSL compiles headlessly.
 naga = { version = "22", features = ["wgsl-in"], optional = true }
+
+[dev-dependencies]
+# Used by the persisted-state backcompat test to strip fields from a saved blob.
+serde_json = "1"

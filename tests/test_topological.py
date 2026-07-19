@@ -12,6 +12,7 @@ from waytogocoop.computation.topological import (
     dirac_dispersion,
     gap_3d,
     majorana_probability_density,
+    majorana_probability_density_3d,
     phase_diagram_sweep,
     proximity_decay_profile,
     topological_magnetoelectric_polarization,
@@ -144,6 +145,48 @@ class TestMajorana:
         pos = np.array([[0.0, 0.0]])
         result = majorana_probability_density(x, x, pos, xi_M=75.0)
         assert result.localization_length == 75.0
+
+
+@pytest.mark.speculative
+class TestMajorana3D:
+    """SPECULATIVE — 3D extension of the Majorana envelope model."""
+
+    def test_shape(self):
+        x = np.linspace(-100, 100, 8)
+        z = np.linspace(-50, 150, 5)
+        pos = np.array([[0.0, 0.0]])
+        density = majorana_probability_density_3d(x, x, z, pos)
+        assert density.shape == (5, 8, 8)
+
+    def test_no_vortices_all_zero(self):
+        x = np.linspace(-100, 100, 8)
+        z = np.linspace(0, 100, 3)
+        pos = np.empty((0, 2))
+        density = majorana_probability_density_3d(x, x, z, pos)
+        np.testing.assert_allclose(density, 0.0)
+
+    def test_invalid_xi_prox_raises(self):
+        x = np.linspace(-100, 100, 8)
+        z = np.linspace(0, 100, 3)
+        pos = np.array([[0.0, 0.0]])
+        with pytest.raises(ValueError):
+            majorana_probability_density_3d(x, x, z, pos, xi_prox=0.0)
+
+    def test_majorana_3d_parity_anchor(self):
+        """Parity anchor with the Rust implementation.
+
+        Twin of moire-core topological.rs::test_majorana_3d_parity_anchor.
+        Single vortex at origin: probe(z=100, x=+50, y=0) relative to the
+        interface-core peak is exp(-2)*J0(5)^2*exp(-2) = exp(-4)*J0(5)^2.
+        """
+        x = np.linspace(-100, 100, 21)
+        z = np.array([-50.0, 0.0, 50.0, 100.0, 150.0])
+        pos = np.array([[0.0, 0.0]])
+        density = majorana_probability_density_3d(
+            x, x, z, pos, xi_M=50.0, k_F=0.1, xi_prox=100.0
+        )
+        assert density[1, 10, 10] == pytest.approx(1.0, abs=1e-12)
+        assert density[3, 10, 15] == pytest.approx(5.776864813575e-4, abs=1e-6)
 
 
 @pytest.mark.speculative

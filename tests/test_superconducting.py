@@ -35,6 +35,25 @@ class TestGapModulation:
         gap = gap_modulation(pattern, 3.0, 0.0)
         np.testing.assert_allclose(gap, 3.0, atol=1e-12)
 
+    def test_endpoint_anchor(self):
+        """m=0 -> avg - amp, m=1 -> avg + amp (default phase_shift=pi)."""
+        zeros = np.zeros((8, 8))
+        ones = np.ones((8, 8))
+        gap_zero = gap_modulation(zeros, DELTA_AVG, DELTA_AMPLITUDE)
+        gap_one = gap_modulation(ones, DELTA_AVG, DELTA_AMPLITUDE)
+        # cos(pi + pi*0) = -1 ; cos(pi + pi*1) = +1
+        np.testing.assert_allclose(gap_zero, DELTA_AVG - DELTA_AMPLITUDE, atol=1e-12)
+        np.testing.assert_allclose(gap_one, DELTA_AVG + DELTA_AMPLITUDE, atol=1e-12)
+
+    def test_phase_2pi_periodicity(self):
+        """Gap is invariant under a 2*pi shift of phase_shift."""
+        pattern = np.random.default_rng(0).random((16, 16))
+        gap_a = gap_modulation(pattern, DELTA_AVG, DELTA_AMPLITUDE, phase_shift=0.3)
+        gap_b = gap_modulation(
+            pattern, DELTA_AVG, DELTA_AMPLITUDE, phase_shift=0.3 + 2 * np.pi
+        )
+        np.testing.assert_allclose(gap_a, gap_b, atol=1e-12)
+
 
 class TestCPDMAmplitude:
     def test_large_period_near_one(self):
@@ -61,6 +80,30 @@ class TestCPDMAmplitude:
         """Sb2Te3/FeTe moire period ~36.7 A should give reasonable CPDM."""
         amp = cpdm_amplitude(36.7, coherence_length=20.0)
         assert 0.5 < amp < 0.7
+
+    def test_exp_formula_anchor(self):
+        """CPDM amplitude follows the exp(-xi / L_m) scaling law."""
+        amp = cpdm_amplitude(36.7, 20.0)
+        assert amp == pytest.approx(np.exp(-20.0 / 36.7))
+
+    @pytest.mark.parametrize("L", [25.0, 36.7, 120.0])
+    def test_coherence_length_scaling(self, L):
+        """Doubling the coherence length squares the amplitude."""
+        xi = 20.0
+        assert cpdm_amplitude(L, 2 * xi) == pytest.approx(cpdm_amplitude(L, xi) ** 2)
+
+    def test_vectorized_matches_scalar(self):
+        """Array input returns an ndarray matching element-wise scalar calls."""
+        periods = np.array([10.0, 36.7, np.inf, -5.0, 1000.0])
+        vec = cpdm_amplitude(periods, coherence_length=20.0)
+        assert isinstance(vec, np.ndarray)
+        assert vec.shape == (5,)
+        for i, p in enumerate(periods):
+            scalar = cpdm_amplitude(float(p), coherence_length=20.0)
+            assert vec[i] == pytest.approx(scalar)
+        # inf and negative periods map to 0.0
+        assert vec[2] == 0.0
+        assert vec[3] == 0.0
 
 
 class TestSuperconductingValidation:

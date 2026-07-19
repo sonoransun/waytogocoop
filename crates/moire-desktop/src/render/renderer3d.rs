@@ -39,6 +39,11 @@ pub struct FrameInputs<'a> {
     /// Optional world-space clip-plane in normalized height coords (`[-1, 1]`);
     /// vertices above this plane are discarded. `None` disables clipping.
     pub clip_z: Option<f32>,
+    /// Optional per-vertex color field (row-major `n*n`, in `[0, 1]`) sampled
+    /// through `colormap` while `data` drives the height. `None` colors by
+    /// height — the flat-grid default; `Some` is the curved-sheet path where
+    /// geometry and color come from different fields.
+    pub color_data: Option<&'a [f64]>,
 }
 
 /// Minimal trait both backends satisfy.
@@ -68,19 +73,115 @@ impl Renderer3D for SoftwareRenderer {
         // via a WGSL uniform. When the software renderer learns to clip it
         // should branch here.
         let _ = inputs.clip_z;
-        crate::render::surface3d::render_surface_3d_opts(
-            inputs.data,
-            inputs.n,
-            inputs.size[0],
-            inputs.size[1],
-            inputs.camera,
-            inputs.colormap,
-            inputs.background,
-            inputs.opts,
-        )
+        match inputs.color_data {
+            // Curved-sheet path: geometry from `data`, color from `color_data`.
+            Some(colors) => crate::render::surface3d::render_surface_3d_colored(
+                inputs.data,
+                colors,
+                inputs.n,
+                inputs.size[0],
+                inputs.size[1],
+                inputs.camera,
+                inputs.colormap,
+                inputs.background,
+                inputs.opts,
+            ),
+            None => crate::render::surface3d::render_surface_3d_opts(
+                inputs.data,
+                inputs.n,
+                inputs.size[0],
+                inputs.size[1],
+                inputs.camera,
+                inputs.colormap,
+                inputs.background,
+                inputs.opts,
+            ),
+        }
     }
 
     fn backend_name(&self) -> &'static str {
         "software-raster"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::render::surface3d::{render_surface_3d_colored, render_surface_3d_opts};
+
+    fn ramp(n: usize) -> Vec<f64> {
+        (0..n * n).map(|i| i as f64 / (n * n) as f64).collect()
+    }
+
+    #[test]
+    fn test_software_renderer_matches_direct_call() {
+        let n = 16;
+        let data = ramp(n);
+        let camera = Camera3D::default();
+        let opts = SurfaceRenderOpts::default();
+        let bg = Color32::from_rgb(10, 20, 30);
+
+        let mut renderer = SoftwareRenderer;
+        let via_trait = renderer.render(FrameInputs {
+            data: &data,
+            n,
+            size: [64, 64],
+            camera: &camera,
+            colormap: moire_core::colormap::viridis,
+            background: bg,
+            opts: &opts,
+            clip_z: None,
+            color_data: None,
+        });
+        let direct = render_surface_3d_opts(
+            &data,
+            n,
+            64,
+            64,
+            &camera,
+            moire_core::colormap::viridis,
+            bg,
+            &opts,
+        );
+
+        assert_eq!(via_trait.size, direct.size);
+        assert_eq!(via_trait.pixels, direct.pixels);
+    }
+
+    #[test]
+    fn test_colored_dispatch() {
+        let n = 16;
+        let heights = ramp(n);
+        // A distinct color field so a wrong dispatch would visibly differ.
+        let colors: Vec<f64> = heights.iter().rev().copied().collect();
+        let camera = Camera3D::default();
+        let opts = SurfaceRenderOpts::default();
+        let bg = Color32::from_rgb(10, 20, 30);
+
+        let mut renderer = SoftwareRenderer;
+        let via_trait = renderer.render(FrameInputs {
+            data: &heights,
+            n,
+            size: [64, 64],
+            camera: &camera,
+            colormap: moire_core::colormap::coolwarm,
+            background: bg,
+            opts: &opts,
+            clip_z: None,
+            color_data: Some(&colors),
+        });
+        let direct = render_surface_3d_colored(
+            &heights,
+            &colors,
+            n,
+            64,
+            64,
+            &camera,
+            moire_core::colormap::coolwarm,
+            bg,
+            &opts,
+        );
+
+        assert_eq!(via_trait.pixels, direct.pixels);
     }
 }
