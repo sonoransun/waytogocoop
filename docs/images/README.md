@@ -1,63 +1,196 @@
-# docs/images
+# Figure Gallery
 
-[← Documentation index](../README.md)
+<sub>[Good Job Coop](../../README.md) › [Documentation](../README.md) · Look up: [Materials](../materials.md) · [Glossary](../glossary.md) · [References](../references.md) · **Figure gallery**</sub>
 
-Every PNG in this directory is **script-generated — never hand-captured**.
-Do not edit or replace images manually; rerun the matching capture script
-instead. Both scripts are deterministic: two runs produce byte-identical
-PNGs, so regenerated images diff cleanly.
+*All 44 figures of these docs, grouped by track, with the canonical captions that other pages reuse; opening this page downloads every full-size PNG, ≈ 11.4 MB.*
 
-## Regenerating
+> [!IMPORTANT]
+> **Script-generated only.** Never edit or replace these PNGs by hand. Change the scene in `scripts/capture_screenshots.py` (web) or `crates/moire-desktop/src/bin/capture.rs` (desktop), regenerate as described in [Screenshot capture](../../CONTRIBUTING.md#screenshot-capture), and update the figure's row in the [Inventory](#inventory).
 
-Python scenes (Plotly + kaleido; the Chromium fetch is a one-time install
-step):
+**Reading a tile.** Each thumbnail opens the full-size PNG. Under it come the scene name, the app that draws the figure (web or desktop) and its kind:
 
-```bash
-.venv/bin/plotly_get_chrome -y
-python scripts/capture_screenshots.py
-```
+- **app view**: the app's own figure at settings you can reach in the UI; the caption states any setting that is not the page default.
+- **presentation**: app physics plus exactly one named display step, such as a local average or a clipped color range.
+- **docs-only**: app physics in a chart that neither app draws.
 
-Rust scenes (headless CPU software rasterizer, no display needed):
+Web figures come in two frames: **Wide** (1600 × 1000) for plots and 3D scenes, and **Square** (1440 × 1440) for equal-aspect maps. Desktop captures are 1024 × 1024. Every PNG is opaque and dark, like both apps' default theme, so it reads the same in GitHub's light and dark modes. Gap and signed maps use the shared coolwarm colormap: red is high or positive, blue low or negative. **(SPECULATIVE)** marks output of a speculative module; see [Status labels](../theory/README.md#status-labels).
 
-```bash
-cargo run -p moire-desktop --bin capture --release
-```
+## Core pipeline
 
-Either script accepts `--only <scene>` to regenerate a single image. See the
-"Screenshot capture" section of
-[`CONTRIBUTING.md`](../../CONTRIBUTING.md#screenshot-capture) for details.
+**Explained in:** [Moire patterns](../theory/moire-patterns.md) · [Gap modulation](../theory/gap-modulation.md) · [Fourier analysis](../theory/fourier-analysis.md). Sb₂Te₃ on FeTe, untwisted, unless a caption says otherwise.
 
-## Image inventory
+<table>
+<tr>
+<td width="33%" valign="top"><a href="viewer-2d.png"><img src="viewer-2d.png" width="100%" alt="Square heatmap of moire intensity: fine atomic texture with faint vertical bands, ±100 Å on both axes"></a><br><sub><b>viewer-2d</b> · web · app view<br>Sb₂Te₃ on FeTe at the viewer defaults: atomic texture and a faint ≈111 Å beat along x.</sub></td>
+<td width="33%" valign="top"><a href="viewer-gap-2d.png"><img src="viewer-gap-2d.png" width="100%" alt="Square red and blue gap map with fine atomic texture between 2.6 and 3.6 meV, ±100 Å on both axes"></a><br><sub><b>viewer-gap-2d</b> · web · app view<br>Gap map Δ(r), 2.58–3.60 meV, mostly atomic-scale texture; red = high Δ.</sub></td>
+<td width="34%" valign="top"><a href="fourier.png"><img src="fourier.png" width="100%" alt="Log-power Fourier map with bright spots on a grid of sum and difference wavevectors and cross-shaped streaks"></a><br><sub><b>fourier</b> · web · app view<br>FFT power of the default pattern: sum and difference vectors of the two lattices.</sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="fourier-peaks.png"><img src="fourier-peaks.png" width="100%" alt="The same Fourier map with white rings around 22 detected peaks, wavelength labels and a dotted square at the center"></a><br><sub><b>fourier-peaks</b> · web · presentation<br>The 22 peaks the page detects, ringed, with λ = 2π/&#124;k&#124; labels and the DC mask.</sub></td>
+</tr>
+</table>
 
-Scenes named `rust-*` are defined in `crates/moire-desktop/src/bin/capture.rs`;
-all others in the `SCENES` dict of `scripts/capture_screenshots.py`.
+<table>
+<tr>
+<td width="33%" valign="top"><a href="viewer-3d.png"><img src="viewer-3d.png" width="100%" alt="3D surface of the moire intensity with sharp yellow atomic-scale peaks over a ±25 Å square"></a><br><sub><b>viewer-3d</b> · web · app view<br>3D Surface view at ±25 Å, grid 160: the atomic-scale peaks resolved.</sub></td>
+<td width="33%" valign="top"><a href="substrate-comparison.png"><img src="substrate-comparison.png" width="100%" alt="Six heatmaps of intensity and gap for three tellurides on FeTe: two columns show broad vertical stripes, one is flat"></a><br><sub><b>substrate-comparison</b> · web · presentation<br>Sb₂Te₃, Bi₂Te₃ and Sb₂Te on FeTe, averaged over 2 Å: beats of 111, 671 and 117 Å.</sub></td>
+<td width="34%" valign="top"><a href="sweep-twist.png"><img src="sweep-twist.png" width="100%" alt="Two falling curves against twist angle: moire period from about 440 to 44 Å, and CPDM amplitude from 0.96 to 0.63"></a><br><sub><b>sweep-twist</b> · web · app view<br>Twist sweep for an FeTe homo-bilayer: the period falls from 438 to 44 Å.</sub></td>
+</tr>
+</table>
 
-| Filename | Generator scene | Caption |
-|---|---|---|
-| `viewer-2d.png` | `viewer-2d` | Moire Viewer — real-space pattern of Sb₂Te₃ / FeTe (paper default preset). |
-| `viewer-3d.png` | `viewer-3d` | Moire Viewer 3D — triangulated `go.Mesh3d` surface (WebGL-friendly path for grid ≥ 150). |
-| `fourier.png` | `fourier` | FFT Analysis — log₁₀(\|F\|²) power spectrum showing the moire reciprocal vectors, shared-LUT `inferno`. |
-| `proximity-3d.png` | `proximity-3d` | Proximity 3D — nested Δ(x,y,z) isosurfaces annotated with the z=0 interface and ξ_prox. |
-| `proximity-3d-volume.png` | `proximity-3d-volume` | Proximity 3D — true volumetric rendering via `go.Volume`. |
-| `proximity-3d-clipped.png` | `proximity-3d-clipped` | Proximity 3D — clipping plane at z=100 Å reveals the interior decay profile. |
-| `magnetic-currents-3d.png` | `magnetic-currents-3d` | Magnetic — screening currents as native `go.Cone` quivers on a translucent gap surface at Bz = 4 T. |
-| `magnetic-vortex-2d.png` | `magnetic-vortex-2d` | Magnetic — moire gap heatmap with Abrikosov vortex cores overlaid as markers at Bz = 4 T. |
-| `magnetic-majorana-3d.png` | `magnetic-majorana-3d` | Majorana ZM 3D Density (SPECULATIVE) — isosurface of the envelope × Bessel oscillation × z-decay at Bz = 4 T. |
-| `phase-diagram.png` | `phase-diagram` | Fu-Kane phase boundary (SPECULATIVE) over (B, Δ) space. |
-| `sweep-twist.png` | `sweep-twist` | Parameter Sweep — moire period and CPDM amplitude vs twist angle for an FeTe homo-bilayer. |
-| `graphene-pattern.png` | `graphene-pattern` | Twisted-bilayer graphene moire pattern at the magic angle θ = 1.08° (L ≈ 130 Å). |
-| `graphene-bands.png` | `graphene-bands` | Bistritzer-MacDonald band structure along K → Γ → M → K′ at θ = 1.08°, flat bands highlighted. |
-| `graphene-dos.png` | `graphene-dos` | Gaussian-broadened BM density of states at θ = 1.08° — the flat-band peak at E = 0. |
-| `graphene-pseudo-field.png` | `graphene-pseudo-field` | Pseudo-magnetic field (SPECULATIVE) of a 2 Å sinusoidal ripple oriented 30° from zigzag, K valley. |
-| `graphene-curved-3d.png` | `graphene-curved-3d` | Curved sheet (SPECULATIVE) — Gaussian bump (5 Å, σ = 50 Å) colored by the flat-band gap × pseudo-field suppression. |
-| `graphene-supermoire.png` | `graphene-supermoire` | Supermoire — magic-angle TBG on Sb₂Te₃ with the stack, interface, and beat periods in the title. |
-| `rust-desktop-2d.png` | `rust-desktop-2d` | Rust desktop — top-down moire pattern with axes and colorbar. |
-| `rust-desktop-3d.png` | `rust-desktop-3d` | Rust desktop — shaded 3D surface with world axes and scale bar. |
-| `rust-desktop-wireframe.png` | `rust-desktop-wireframe` | Rust desktop — 3D surface with the wireframe toggle (W) on. |
-| `rust-density-3d.png` | `rust-density-3d` | Rust desktop — Cooper-pair density modulation surface with diverging `coolwarm`. |
-| `rust-graphene-pattern.png` | `rust-graphene-pattern` | Rust desktop — graphene stack pattern via `compute_graphene_stack_v2`, top view. |
-| `rust-curved-3d.png` | `rust-curved-3d` | Rust desktop — curved sheet with pseudo-field coloring via `render_surface_3d_colored`. |
+## Graphene track
 
-When the apps run live, the same figures are reachable interactively:
-Plotly's camera button in the web UI and **Ctrl+S** in the desktop app
-(timestamped PNG in the current working directory).
+**Explained in:** [Graphene stacks](../theory/graphene-stacks.md) · [BM model](../theory/bm-model.md) · [Curvature](../theory/curvature.md). Twisted bilayer graphene at 1.08° unless a caption says otherwise.
+
+<table>
+<tr>
+<td width="33%" valign="top"><a href="graphene-pattern.png"><img src="graphene-pattern.png" width="100%" alt="Smooth map of bright round spots on a triangular lattice with dark triangles between them, ±200 Å"></a><br><sub><b>graphene-pattern</b> · web · presentation<br>TBG at 1.08°, averaged over 1.5 Å: AA spots on a 130.5 Å triangular lattice.</sub></td>
+<td width="33%" valign="top"><a href="graphene-heterostrain.png"><img src="graphene-heterostrain.png" width="100%" alt="Bright elongated spots on a sheared, oblique lattice with dark regions between them, ±200 Å"></a><br><sub><b>graphene-heterostrain</b> · web · presentation<br>With 0.5% heterostrain the AA lattice shears; its longest period is 150.5 Å.</sub></td>
+<td width="34%" valign="top"><a href="graphene-supermoire.png"><img src="graphene-supermoire.png" width="100%" alt="Contrast map with flower-like rosettes of bright dots on a triangular lattice, ±200 Å"></a><br><sub><b>graphene-supermoire</b> · web · presentation<br>TBG on Sb₂Te₃ as 3 Å local contrast: only the 130.5 Å stack moire survives.</sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="graphene-supermoire-zoom.png"><img src="graphene-supermoire-zoom.png" width="100%" alt="Fine raw interference pattern of bright and dark dots over ±30 Å"></a><br><sub><b>graphene-supermoire-zoom</b> · web · app view<br>The raw pattern over ±30 Å: interference on the 5–6 Å interface and beat scales.</sub></td>
+<td width="33%" valign="top"><a href="graphene-pseudo-field.png"><img src="graphene-pseudo-field.png" width="100%" alt="Diagonal red and blue stripes of positive and negative pseudo-field across a ±200 Å map"></a><br><sub><b>graphene-pseudo-field</b> · web · app view<br>A 2 Å armchair ripple: pseudo-field stripes of ±34.2 T; red = positive. <b>(SPECULATIVE)</b></sub></td>
+<td width="34%" valign="top"><a href="graphene-bump-field.png"><img src="graphene-bump-field.png" width="100%" alt="Six lobes of alternating red and blue sign around the center of a ±100 Å map"></a><br><sub><b>graphene-bump-field</b> · web · app view<br>A 5 Å Gaussian bump: six pseudo-field lobes of alternating sign, ±5.7 T; red = positive. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="33%" valign="top"><a href="graphene-flatband.png"><img src="graphene-flatband.png" width="100%" alt="Blue velocity curve rising through zero near 1.08° and a sharp red gap peak at the same angle"></a><br><sub><b>graphene-flatband</b> · web · app view<br>The first-order Dirac velocity vanishes at 1.076°; the gap dome peaks at 0.30 meV. <b>(SPECULATIVE)</b></sub></td>
+<td width="33%" valign="top"><a href="graphene-bands.png"><img src="graphene-bands.png" width="100%" alt="Band structure along K, Γ, M, K′ with two thick red flat bands near zero energy and gray remote bands"></a><br><sub><b>graphene-bands</b> · web · app view<br>BM bands at 1.08° on a ±150 meV axis: flat-band width W = 32.4 meV.</sub></td>
+<td width="34%" valign="top"><a href="graphene-dos.png"><img src="graphene-dos.png" width="100%" alt="Density of states with a split central peak at zero energy and smaller remote-band peaks near ±105 meV"></a><br><sub><b>graphene-dos</b> · web · app view<br>BM density of states at 1.08°: the flat-band peak splits at ±3.8 meV.</sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="graphene-bandwidth.png"><img src="graphene-bandwidth.png" width="100%" alt="Flat-band width against twist with a sharp minimum near 0.95° and a dashed gap curve that dips below zero"></a><br><sub><b>graphene-bandwidth</b> · web · docs-only<br>Flat-band width vs twist: minimum 0.68 meV at 0.954°, not at 1.08°.</sub></td>
+<td width="33%" valign="top"><a href="graphene-curved-3d.png"><img src="graphene-curved-3d.png" width="100%" alt="3D Gaussian bump colored by the gap, with blue suppressed lobes on its flanks, pale red and white elsewhere"></a><br><sub><b>graphene-curved-3d</b> · web · presentation<br>The bump colored by the flat-band gap (red = high); six pseudo-field lobes suppress it to 43%. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+</table>
+
+## Speculative extensions
+
+**Explained in:** [Magnetic field](../theory/magnetic.md) · [Topological proximity](../theory/topological.md) · [Isotope effects](../theory/isotope-effects.md) · [Spin-fluctuation pairing](../theory/spin-fluctuation-pairing.md) · [Pair density waves](../theory/pair-density-waves.md). Every figure in this section is **(SPECULATIVE)**.
+
+<table>
+<tr>
+<td width="33%" valign="top"><a href="magnetic-vortex-2d.png"><img src="magnetic-vortex-2d.png" width="100%" alt="Red gap map with seven blue vortex cores marked by white crosses on a triangular lattice, ±300 Å"></a><br><sub><b>magnetic-vortex-2d</b> · web · presentation<br>At 4 T over ±300 Å: seven vortex cores (×), 244 Å apart; red = high Δ. <b>(SPECULATIVE)</b></sub></td>
+<td width="33%" valign="top"><a href="sf-fermi-surface.png"><img src="sf-fermi-surface.png" width="100%" alt="Rounded-square Fermi surface colored by scattering rate, bright at eight ringed hot spots near a dashed diamond boundary"></a><br><sub><b>sf-fermi-surface</b> · web · app view<br>Γ(φ) at 40 K: eight hot spots where the Fermi surface crosses the AFM zone boundary. <b>(SPECULATIVE)</b></sub></td>
+<td width="34%" valign="top"><a href="pdw-fft.png"><img src="pdw-fft.png" width="100%" alt="Fourier map with bright q and h peaks and small empty rings where the p peaks would be"></a><br><sub><b>pdw-fft</b> · web · presentation<br>UTe₂ at 3 K, top four decades: bright q and h peaks, empty p rings. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="pdw-moire-whatif.png"><img src="pdw-moire-whatif.png" width="100%" alt="Red round maxima on a triangular lattice, each ringed by a dark blue node circle, ±100 Å"></a><br><sub><b>pdw-moire-whatif</b> · web · app view<br>Moire-locked what-if at 16 K: red &#124;d&#124; maxima 42.4 Å apart, ringed by blue nodes. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="33%" valign="top"><a href="magnetic-currents-3d.png"><img src="magnetic-currents-3d.png" width="100%" alt="Flat red gap surface in a 3D box with small clusters of current cones at seven vortex cores"></a><br><sub><b>magnetic-currents-3d</b> · web · presentation<br>Screening-current cones around the seven cores at 4 T, over the averaged gap. <b>(SPECULATIVE)</b></sub></td>
+<td width="33%" valign="top"><a href="magnetic-majorana-3d.png"><img src="magnetic-majorana-3d.png" width="100%" alt="Seven spindle-shaped isosurfaces rising above cyan cross markers at the vortex cores in a 3D box"></a><br><sub><b>magnetic-majorana-3d</b> · web · app view<br>Majorana zero-mode density at the seven vortex cores, 4 T, ±300 Å. <b>(SPECULATIVE)</b></sub></td>
+<td width="34%" valign="top"><a href="proximity-decay.png"><img src="proximity-decay.png" width="100%" alt="Decay curve equal to 1 below z = 0, dropping to 0.8 at the interface and decaying exponentially to 300 Å"></a><br><sub><b>proximity-decay</b> · web · app view<br>The decay profile: f = 1 in FeTe, then 0.8·exp(−z/100 Å) in the TI. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="proximity-3d.png"><img src="proximity-3d.png" width="100%" alt="Five nearly flat isosurface sheets, red at the interface to blue on top; arrows on the box's front edge mark z = 0 and 100 Å"></a><br><sub><b>proximity-3d</b> · web · presentation<br>Five gap isosurfaces, 2.54 meV (red) at the interface to 0.63 meV (blue); arrows mark z = 0 and ξ<sub>prox</sub>. <b>(SPECULATIVE)</b></sub></td>
+<td width="33%" valign="top"><a href="proximity-3d-clipped.png"><img src="proximity-3d-clipped.png" width="100%" alt="Four stacked isosurface sheets in a 3D box whose z axis tops out at 100 Å; arrows on the front edge mark z = 0 and 100 Å"></a><br><sub><b>proximity-3d-clipped</b> · web · presentation<br>Clipped at z = ξ<sub>prox</sub> = 100 Å: the top sheet is gone and four remain. <b>(SPECULATIVE)</b></sub></td>
+<td width="34%" valign="top"><a href="proximity-3d-volume.png"><img src="proximity-3d-volume.png" width="100%" alt="Translucent volume: dense red columns in a thin bottom slab of a 3D box; arrows on the front edge mark z = 0 and 100 Å"></a><br><sub><b>proximity-3d-volume</b> · web · presentation<br>Volume view at ±30 Å, opacity 0.3: gap columns in FeTe, a faint TI; red = high Δ. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="phase-diagram.png"><img src="phase-diagram.png" width="100%" alt="Field and gap map split by a straight white boundary into a blue trivial wedge and a red topological region"></a><br><sub><b>phase-diagram</b> · web · app view<br>Fu–Kane map, g = 30: topological (red) above 1.78 T at Δ = 3.09 meV. <b>(SPECULATIVE)</b></sub></td>
+<td width="33%" valign="top"><a href="isotope-gap-shift.png"><img src="isotope-gap-shift.png" width="100%" alt="Three straight lines through the origin: gap shift in percent against α for three iron isotopes"></a><br><sub><b>isotope-gap-shift</b> · web · docs-only<br>Gap shift vs α for ⁵⁴Fe, ⁵⁷Fe and ⁵⁸Fe FeTe: +0.42, −0.24 and −0.45% at α = 0.4. <b>(SPECULATIVE)</b></sub></td>
+<td width="34%" valign="top"><a href="sf-magnetoresistance.png"><img src="sf-magnetoresistance.png" width="100%" alt="Four magnetoresistance curves rising with field to 35 T, purple at 20 K to yellow at 50 K, the 50 K curve highest"></a><br><sub><b>sf-magneto&shy;resistance</b> · web · app view<br>LCCO x = 0.159: Δρ/ρ(0) at 20 T grows from 2.0% (20 K) to 2.5% (50 K). <b>(SPECULATIVE)</b></sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="sf-coupling.png"><img src="sf-coupling.png" width="100%" alt="Critical temperature against coupling for 19 dopings: filled and hollow blue markers, solid power law, dotted McMillan fit"></a><br><sub><b>sf-coupling</b> · web · app view<br>λ<sub>tr</sub> (filled) and λ<sub>ρ</sub> (hollow) against T<sub>c</sub>, 19 dopings; McMillan's best fit misses the dome edge. <b>(SPECULATIVE)</b></sub></td>
+<td width="33%" valign="top"><a href="sf-glue-imprint.png"><img src="sf-glue-imprint.png" width="100%" alt="Imprint against operating critical temperature: a solid blue curve rising to a star at 5 K, just under a dotted green line"></a><br><sub><b>sf-glue-imprint</b> · web · app view<br>Clean coherence, L<sub>m</sub> = 36.7 Å: the dressed imprint peaks just below the amplitude-route 0.165. <b>(SPECULATIVE)</b></sub></td>
+<td width="34%" valign="top"><a href="pdw-tsweep.png"><img src="pdw-tsweep.png" width="100%" alt="Log-scale curves of three peak families against temperature, with a shaded band between 2.1 and 5 K"></a><br><sub><b>pdw-tsweep</b> · web · app view<br>UTe₂ peaks vs T at zero field: q and h outlive p into the 2.1–5 K PDW-only window. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="pdw-bsweep.png"><img src="pdw-bsweep.png" width="100%" alt="Log-scale peak curves against field: a dashed p curve appears near 5 T and a band near 30–35 T is shaded"></a><br><sub><b>pdw-bsweep</b> · web · app view<br>Peaks vs field along b* at 0.3 K: p₁,₂ appear above the 4.5 T onset. <b>(SPECULATIVE)</b></sub></td>
+<td width="33%" valign="top"><a href="pdw-regime-map.png"><img src="pdw-regime-map.png" width="100%" alt="Temperature and field map with four colored regimes and a white cross inside the blue PDW-only wedge"></a><br><sub><b>pdw-regime-map</b> · web · app view<br>Regimes over T and field along a; × marks the preset, PDW only. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+</table>
+
+## Desktop app
+
+The Rust desktop app draws the same physics; these captures use the app's own CPU drawing code (the rasterizer for 3D views) and, for 2D views, a CPU copy of its texture draw. See [Desktop app](../user-guide.md#desktop-app) in the user guide. Desktop extents are full widths: 200 Å here is ±100 Å on the web. In 3D views larger values draw higher, so maxima stand up and the blue +z axis points up; the red and green x, y axes lie under the surface, so a filled view shows only their ends past the mesh edge.
+
+<table>
+<tr>
+<td width="33%" valign="top"><a href="rust-desktop-2d.png"><img src="rust-desktop-2d.png" width="100%" alt="Desktop 2D texture of the moire intensity: fine atomic texture with faint vertical bands and no axes"></a><br><sub><b>rust-desktop-2d</b> · desktop · app view<br>Moire Pattern tab in 2D: the 256² texture over 200 Å, without egui's axes.</sub></td>
+<td width="33%" valign="top"><a href="rust-desktop-3d.png"><img src="rust-desktop-3d.png" width="100%" alt="Desktop 3D surface of the moire intensity in blue and green with sharp yellow peaks, seen at an angle"></a><br><sub><b>rust-desktop-3d</b> · desktop · app view<br>3D surface, 50 Å wide, iso camera; the yellow maxima stand up as sharp peaks.</sub></td>
+<td width="34%" valign="top"><a href="rust-desktop-wireframe.png"><img src="rust-desktop-wireframe.png" width="100%" alt="Desktop wireframe mesh of the same surface in light gray lines on a dark background"></a><br><sub><b>rust-desktop-wireframe</b> · desktop · app view<br>The same surface with the wireframe on; <kbd>W</kbd> toggles it.</sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="rust-density-3d.png"><img src="rust-density-3d.png" width="100%" alt="Desktop 3D gap surface in pale blue with red-tipped peaks at the gap maxima"></a><br><sub><b>rust-density-3d</b> · desktop · app view<br>Density Modulation tab in 3D: amplitude 0.46 meV; red = high Δ.</sub></td>
+<td width="33%" valign="top"><a href="rust-graphene-pattern.png"><img src="rust-graphene-pattern.png" width="100%" alt="Desktop 2D texture of bright round spots on a triangular lattice with dark triangles between them"></a><br><sub><b>rust-graphene-pattern</b> · desktop · presentation<br>TBG at 1.08° over 400 Å, averaged over 1.5 Å: the 130.5 Å moire.</sub></td>
+<td width="34%" valign="top"><a href="rust-curved-3d.png"><img src="rust-curved-3d.png" width="100%" alt="Desktop tilted 3D sheet with six red and blue lobes of alternating sign around its center"></a><br><sub><b>rust-curved-3d</b> · desktop · app view<br>Gaussian bump colored by the pseudo-field: six lobes; red = positive. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="rust-sf-glue-3d.png"><img src="rust-sf-glue-3d.png" width="100%" alt="Desktop tilted 3D surface of the gap: red faceted atomic-scale relief with scattered blue facets at the gap minima"></a><br><sub><b>rust-sf-glue-3d</b> · desktop · app view<br>Glue-modulated gap in 3D, T<sub>c</sub> target 5 K; red = larger Δ. Blue facets: sub-ξ local-limit dips toward T<sub>c</sub>(r) = 0. <b>(SPECULATIVE)</b></sub></td>
+<td width="33%" valign="top"><a href="rust-pdw-whatif-3d.png"><img src="rust-pdw-whatif-3d.png" width="100%" alt="Desktop 3D surface of red domes on a triangular lattice, each ringed by a blue trough, with pale saddles between"></a><br><sub><b>rust-pdw-whatif-3d</b> · desktop · app view<br>Moire-locked what-if at 16 K: red &#124;d&#124; domes 42.4 Å apart, each ringed by a blue trough of nodes. <b>(SPECULATIVE)</b></sub></td>
+</tr>
+</table>
+
+## Inventory
+
+<details>
+<summary><b>Inventory:</b> all 44 figures, with scene, generator, kind, frame, canonical caption and where used</summary>
+
+Scene names equal file stems. Python scenes are in the `SCENES` registry of `scripts/capture_screenshots.py`; Rust scenes are in `SCENES` in `crates/moire-desktop/src/bin/capture.rs`. Other pages may shorten a caption but keep its settings and its **(SPECULATIVE)** flag.
+
+| Image | Scene · generator | Kind | Frame (px) | Canonical caption | Used in |
+|---|---|---|---|---|---|
+| [viewer-2d.png](viewer-2d.png) | viewer-2d · Python | app view | Square 1440 × 1440 | Moire intensity of Sb₂Te₃ on FeTe at the Moire Viewer defaults (θ = 0°, ±100 Å): atomic-scale texture and a faint ≈111 Å beat along x. The app's 36.7 Å period estimate is not visible. | [Good Job Coop](../../README.md) · [Physics overview](../physics-overview.md) · [Theory index](../theory/README.md) · [Moire patterns](../theory/moire-patterns.md) · [Fourier analysis](../theory/fourier-analysis.md) · [User guide](../user-guide.md) · [History](../history.md) |
+| [viewer-3d.png](viewer-3d.png) | viewer-3d · Python | app view | Wide 1600 × 1000 | The same pattern in the Moire Viewer's **3D Surface** view at ±25 Å, grid 160 (the page opens as a ±100 Å heatmap, grid 200), resolving the atomic-scale peaks; viridis, yellow = high. | [User guide](../user-guide.md) |
+| [substrate-comparison.png](substrate-comparison.png) | substrate-comparison · Python | presentation | Wide 1600 × 1000 | Substrate Comparison maps of Sb₂Te₃, Bi₂Te₃ and Sb₂Te on FeTe, averaged over σ = 2 Å: intensity above, gap below (red = high Δ). Titles give the app's L<sub>m</sub> and the collinear beat: 111, 671, 117 Å. | [User guide](../user-guide.md) · [Materials](../materials.md) |
+| [sweep-twist.png](sweep-twist.png) | sweep-twist · Python | app view | Wide 1600 × 1000 | Parameter Sweep over **Twist angle** (not the default), FeTe homo-bilayer, 0.5–5°: the moire period L falls from 437.7 to 43.8 Å and the CPDM amplitude exp(−20 Å/L) from 0.955 to 0.633. | [Documentation](../README.md) · [Physics overview](../physics-overview.md) · [Moire patterns](../theory/moire-patterns.md) · [Gap modulation](../theory/gap-modulation.md) · [User guide](../user-guide.md) |
+| [viewer-gap-2d.png](viewer-gap-2d.png) | viewer-gap-2d · Python | app view | Square 1440 × 1440 | Gap map Δ(r) at the viewer defaults (Δ<sub>avg</sub> = 3.09, δΔ = 0.51 meV; coolwarm, red = high Δ): 2.58–3.60 meV, mostly atomic-scale texture. Averaged over 2 Å, only 3.00–3.17 meV remains. | [Good Job Coop](../../README.md) · [Physics overview](../physics-overview.md) · [Theory index](../theory/README.md) · [Gap modulation](../theory/gap-modulation.md) · [User guide](../user-guide.md) · [History](../history.md) · [Process technologies](../process-technologies.md) |
+| [fourier.png](fourier.png) | fourier · Python | app view | Square 1440 × 1440 | FFT power log₁₀&#124;F&#124;² of the default pattern. Spots sit at sum and difference vectors of the two lattices; the innermost give λ ≈ 7.3 Å. The ≈111 Å beat hides in the DC peak. | [Good Job Coop](../../README.md) · [Physics overview](../physics-overview.md) · [Theory index](../theory/README.md) · [Fourier analysis](../theory/fourier-analysis.md) · [User guide](../user-guide.md) · [Process technologies](../process-technologies.md) |
+| [fourier-peaks.png](fourier-peaks.png) | fourier-peaks · Python | presentation | Square 1440 × 1440 | The 22 peaks the Fourier page detects (threshold 0.3), ringed and labelled λ = 2π/&#124;k&#124;; its table lists 20. Dotted: the DC mask. The k<sub>x</sub> = ±2.9 Å⁻¹ pair aliases a 1.88 Å term. | [Physics overview](../physics-overview.md) · [Fourier analysis](../theory/fourier-analysis.md) |
+| [graphene-pattern.png](graphene-pattern.png) | graphene-pattern · Python | presentation | Square 1440 × 1440 | Twisted bilayer graphene at 1.08° (preset **Magic-angle TBG**), averaged over σ = 1.5 Å: bright AA regions on a triangular lattice, L = 130.5 Å. The page's 200-point grid aliases the raw pattern. | [Good Job Coop](../../README.md) · [Physics overview](../physics-overview.md) · [Theory index](../theory/README.md) · [Graphene stacks](../theory/graphene-stacks.md) · [User guide](../user-guide.md) · [Process technologies](../process-technologies.md) |
+| [graphene-heterostrain.png](graphene-heterostrain.png) | graphene-heterostrain · Python | presentation | Square 1440 × 1440 | The same bilayer with 0.5% uniaxial heterostrain on the top layer, along zigzag, averaged over σ = 1.5 Å. The AA lattice shears and its longest period grows to 150.5 Å. | [Graphene stacks](../theory/graphene-stacks.md) |
+| [graphene-supermoire.png](graphene-supermoire.png) | graphene-supermoire · Python | presentation | Square 1440 × 1440 | Magic-angle TBG on Sb₂Te₃ (preset `Supermoire on Sb2Te3`, interface twist 0°) as local RMS contrast over σ = 3 Å. Only the 130.5 Å stack moire survives; the interface (5.8 Å) and beat (6.1 Å) periods are atomic-scale. | [Good Job Coop](../../README.md) · [Graphene stacks](../theory/graphene-stacks.md) · [User guide](../user-guide.md) |
+| [graphene-supermoire-zoom.png](graphene-supermoire-zoom.png) | graphene-supermoire-zoom · Python | app view | Square 1440 × 1440 | The same preset, raw, at extent 30 Å, grid 300 (it opens at ±200 Å): graphene rows (2.13 Å) and Sb₂Te₃ rows (3.69 Å) interfere at the 5.8 Å interface and 6.1 Å beat periods. | [Graphene stacks](../theory/graphene-stacks.md) |
+| [graphene-flatband.png](graphene-flatband.png) | graphene-flatband · Python | app view | Wide 1600 × 1000 | The Graphene page's lower figure on the TBG presets: first-order v\*/v<sub>F</sub> (blue) vanishes at θ<sub>m</sub> = 1.076°; the gap dome Δ<sub>max</sub> (red, filling 2.4) peaks at 0.30 meV at θ<sub>m</sub> = 1.076°. **(SPECULATIVE)** | [Graphene stacks](../theory/graphene-stacks.md) · [User guide](../user-guide.md) |
+| [graphene-bands.png](graphene-bands.png) | graphene-bands · Python | app view | Wide 1600 × 1000 | BM bands along K–Γ–M–K′ at the 1.08° preset, on a ±150 meV axis (the app autoscales to ±1.3 eV). Red flat bands: W = 32.4 meV, gapped 22.9 meV from the remote bands. | [Good Job Coop](../../README.md) · [Documentation](../README.md) · [Physics overview](../physics-overview.md) · [Theory index](../theory/README.md) · [BM model](../theory/bm-model.md) · [User guide](../user-guide.md) · [History](../history.md) |
+| [graphene-dos.png](graphene-dos.png) | graphene-dos · Python | app view | Wide 1600 × 1000 | BM density of states at 1.08° in the **DOS** view (12 × 12 k-grid, 2 meV Gaussian broadening, ±150 meV). The flat-band peak splits at ±3.8 meV; the strongest remote-band peaks sit at ±104.8 meV. | [BM model](../theory/bm-model.md) · [User guide](../user-guide.md) |
+| [graphene-bandwidth.png](graphene-bandwidth.png) | graphene-bandwidth · Python | docs-only | Wide 1600 × 1000 | Flat-band width W (blue) and flat–remote gap (dashed) versus twist, BM defaults (w<sub>AA</sub> = 79.7, w<sub>AB</sub> = 97.5 meV). W bottoms out at 0.68 meV near 0.954°, below θ<sub>m</sub> = 1.076°; the gap turns negative below ≈0.87°. | [BM model](../theory/bm-model.md) |
+| [graphene-pseudo-field.png](graphene-pseudo-field.png) | graphene-pseudo-field · Python | app view | Square 1440 × 1440 | Pseudo-magnetic field of a 2 Å armchair ripple (preset **Armchair ripple pseudo-field**: λ = 100 Å, K valley, ±200 Å): stripes of ±34.2 T; coolwarm, red = positive B<sub>ps</sub>. **(SPECULATIVE)** | [Curvature](../theory/curvature.md) · [User guide](../user-guide.md) |
+| [graphene-bump-field.png](graphene-bump-field.png) | graphene-bump-field · Python | app view | Square 1440 × 1440 | The 5 Å Gaussian bump preset (σ = 50 Å) in the **Pseudo-field** view at ±100 Å, grid 201, not its 3D view at ±200 Å: six lobes of alternating sign, ±5.7 T; red = positive. **(SPECULATIVE)** | [Theory index](../theory/README.md) · [Curvature](../theory/curvature.md) · [User guide](../user-guide.md) |
+| [graphene-curved-3d.png](graphene-curved-3d.png) | graphene-curved-3d · Python | presentation | Wide 1600 × 1000 | The bump preset's **Curved 3D sheet** view at ±100 Å, colored by the flat-band gap averaged over σ = 1.5 Å times the pseudo-field suppression; red = high Δ. The six &#124;B<sub>ps</sub>&#124; lobes cut it to 43%. **(SPECULATIVE)** | [Curvature](../theory/curvature.md) · [User guide](../user-guide.md) |
+| [magnetic-vortex-2d.png](magnetic-vortex-2d.png) | magnetic-vortex-2d · Python | presentation | Square 1440 × 1440 | Combined gap at B<sub>z</sub> = 4 T over ±300 Å (the page opens at 0.5 T, ±100 Å), averaged over σ = 2 Å; red = high Δ. Seven cores (×) on a triangular lattice, a<sub>v</sub> = 244 Å. **(SPECULATIVE)** | [Good Job Coop](../../README.md) · [Physics overview](../physics-overview.md) · [Theory index](../theory/README.md) · [Magnetic field](../theory/magnetic.md) · [User guide](../user-guide.md) · [History](../history.md) |
+| [magnetic-currents-3d.png](magnetic-currents-3d.png) | magnetic-currents-3d · Python | presentation | Wide 1600 × 1000 | Screening-current cones around the seven cores at B<sub>z</sub> = 4 T, ±300 Å, over the combined gap averaged over σ = 2 Å (red = high Δ). Currents fall off about as 1/r, so few cones show. **(SPECULATIVE)** | [Magnetic field](../theory/magnetic.md) · [User guide](../user-guide.md) |
+| [proximity-decay.png](proximity-decay.png) | proximity-decay · Python | app view | Wide 1600 × 1000 | The 3D Proximity decay profile: f = 1 in FeTe, T·exp(−z/ξ<sub>prox</sub>) in the TI (T = 0.8, ξ<sub>prox</sub> = 100 Å), so f = 0.29 at 100 Å. The page's 30 z-layers slope the step. **(SPECULATIVE)** | [Topological proximity](../theory/topological.md) · [User guide](../user-guide.md) |
+| [proximity-3d.png](proximity-3d.png) | proximity-3d · Python | presentation | Wide 1600 × 1000 | Gap isosurfaces at 0.2–0.8 × peak (in-plane gap averaged over σ = 2 Å): five near-flat sheets from 2.54 meV (red) at the interface to 0.63 meV (blue). Front-edge arrows mark z = 0 and ξ<sub>prox</sub>. **(SPECULATIVE)** | [Topological proximity](../theory/topological.md) · [User guide](../user-guide.md) |
+| [proximity-3d-clipped.png](proximity-3d-clipped.png) | proximity-3d-clipped · Python | presentation | Wide 1600 × 1000 | The same, clipped at z = ξ<sub>prox</sub> = 100 Å, which drops the layers above (top drawn layer 94.8 Å): the 0.63 meV sheet disappears, four remain, and the ξ<sub>prox</sub> arrow sits at the clip plane. **(SPECULATIVE)** | [Topological proximity](../theory/topological.md) · [User guide](../user-guide.md) |
+| [proximity-3d-volume.png](proximity-3d-volume.png) | proximity-3d-volume · Python | presentation | Wide 1600 × 1000 | The 3D Proximity **Volume** view at extent 30 Å, grid 80, opacity 0.3 (page: 0.1). Opacity grows with Δ (red = high): gap columns fill FeTe, the TI stays faint; arrows mark z = 0 and ξ<sub>prox</sub>. **(SPECULATIVE)** | [Good Job Coop](../../README.md) · [Topological proximity](../theory/topological.md) · [User guide](../user-guide.md) |
+| [phase-diagram.png](phase-diagram.png) | phase-diagram · Python | app view | Wide 1600 × 1000 | Fu–Kane map over B 0–8 T and Δ 0.1–6 meV (non-default ranges, resolution 200), g = 30, μ = 0: topological (red) where gμ<sub>B</sub>B > Δ; the boundary crosses Δ<sub>avg</sub> = 3.09 meV at 1.78 T. **(SPECULATIVE)** | [Good Job Coop](../../README.md) · [Physics overview](../physics-overview.md) · [Theory index](../theory/README.md) · [Topological proximity](../theory/topological.md) · [User guide](../user-guide.md) |
+| [magnetic-majorana-3d.png](magnetic-majorana-3d.png) | magnetic-majorana-3d · Python | app view | Wide 1600 × 1000 | The Magnetic Field page's **Majorana 3D** view at B<sub>z</sub> = 4 T, ±300 Å, grid 81: &#124;ψ&#124;² isosurfaces (inferno, 0.08–0.6 × peak) at the seven vortex cores (cyan ×), z −40 to 200 Å. **(SPECULATIVE)** | [Topological proximity](../theory/topological.md) · [User guide](../user-guide.md) |
+| [isotope-gap-shift.png](isotope-gap-shift.png) | isotope-gap-shift · Python | docs-only | Wide 1600 × 1000 | Gap shift Δ/Δ₀ − 1 versus α for FeTe fully enriched in ⁵⁴Fe, ⁵⁷Fe or ⁵⁸Fe (Δ ∝ M<sup>−α</sup>, formula-unit mass): +0.42, −0.24 and −0.45% at α = 0.4. Dotted lines: literature α values. **(SPECULATIVE)** | [Physics overview](../physics-overview.md) · [Theory index](../theory/README.md) · [Isotope effects](../theory/isotope-effects.md) |
+| [sf-magnetoresistance.png](sf-magnetoresistance.png) | sf-magnetoresistance · Python | app view | Wide 1600 × 1000 | **Anti-Kohler magnetoresistance.** LCCO x = 0.159, 20–50 K: Δρ/ρ(0) at 20 T grows from 2.0% to 2.5% because the hot-spot-peaked inelastic scattering grows with temperature. **(SPECULATIVE)** | [Theory index](../theory/README.md) · [Spin-fluctuation pairing](../theory/spin-fluctuation-pairing.md) · [User guide](../user-guide.md) |
+| [sf-fermi-surface.png](sf-fermi-surface.png) | sf-fermi-surface · Python | app view | Square 1440 × 1440 | **Where electrons scatter.** Γ(φ) on the LCCO Fermi surface at 40 K: eight hot spots where it crosses the antiferromagnetic zone boundary, linked to their Q = (π, π) partners. **(SPECULATIVE)** | [Spin-fluctuation pairing](../theory/spin-fluctuation-pairing.md) · [User guide](../user-guide.md) |
+| [sf-coupling.png](sf-coupling.png) | sf-coupling · Python | app view | Wide 1600 × 1000 | **Scattering tracks T<sub>c</sub>.** The Fermi-surface-averaged T-linear coupling λ<sub>tr</sub> (filled) and the resistive λ<sub>ρ</sub> (hollow) against T<sub>c</sub> for 19 dopings, with the empirical power-law map and McMillan's best fit, which misses the dome edge. **(SPECULATIVE)** | [Physics overview](../physics-overview.md) · [Spin-fluctuation pairing](../theory/spin-fluctuation-pairing.md) · [User guide](../user-guide.md) |
+| [sf-glue-imprint.png](sf-glue-imprint.png) | sf-glue-imprint · Python | app view | Wide 1600 × 1000 | **Glue imprint against operating T<sub>c</sub>.** With λ moire-modulated by 10%, the local estimate climbs toward the dome edge; dressed by exp(−ξ/L<sub>m</sub>) (clean, L<sub>m</sub> = 36.7 Å), it peaks just below the amplitude-route 0.165. **(SPECULATIVE)** | [Spin-fluctuation pairing](../theory/spin-fluctuation-pairing.md) · [User guide](../user-guide.md) |
+| [pdw-tsweep.png](pdw-tsweep.png) | pdw-tsweep · Python | app view | Wide 1600 × 1000 | UTe₂ peaks versus T (preset `UTe2 300 mK, zero field`; shading darker than the app's). Above the 0.01 floor, p₃ lasts to ≈2.1 K (T<sub>c</sub> = 2.1 K), h to ≈3.4 K, q to ≈4.5 K (T<sub>PDW</sub> = 5 K). **(SPECULATIVE)** | [Good Job Coop](../../README.md) · [Documentation](../README.md) · [Physics overview](../physics-overview.md) · [Theory index](../theory/README.md) · [Pair density waves](../theory/pair-density-waves.md) · [User guide](../user-guide.md) · [History](../history.md) |
+| [pdw-fft.png](pdw-fft.png) | pdw-fft · Python | presentation | Square 1440 × 1440 | Hann-tapered FFT of ρ(r) for UTe₂ at 3 K (preset `UTe2 3 K — Cheshire-cat window`, ±40 Å), color range clipped to the top four decades: bright q and h peaks, empty p rings. **(SPECULATIVE)** | [Pair density waves](../theory/pair-density-waves.md) · [User guide](../user-guide.md) |
+| [pdw-bsweep.png](pdw-bsweep.png) | pdw-bsweep · Python | app view | Wide 1600 × 1000 | Peaks versus field along z ≈ b\* at 0.3 K (preset `UTe2 field-induced p2 (Bz ≈ b* = 6 T)`): p₁,₂ appear above the 4.5 T d-vector onset. Shaded (darker than the app's): PDW only, H<sub>c2</sub> = 29.1 T to H<sub>PDW</sub> = 35.3 T. **(SPECULATIVE)** | [Pair density waves](../theory/pair-density-waves.md) · [User guide](../user-guide.md) |
+| [pdw-regime-map.png](pdw-regime-map.png) | pdw-regime-map · Python | app view | Wide 1600 × 1000 | Regimes over T and &#124;B&#124; along a (preset `UTe2 4.2 K, By = a = 0.2 T (q fading)`): normal, PDW only (Cheshire cat, blue), uniform SC only, and PDW + uniform SC. × marks the preset, inside the PDW-only wedge. **(SPECULATIVE)** | [Pair density waves](../theory/pair-density-waves.md) · [User guide](../user-guide.md) |
+| [pdw-moire-whatif.png](pdw-moire-whatif.png) | pdw-moire-whatif · Python | app view | Square 1440 × 1440 | Preset `Moire what-if: intrinsic PDW above Tc` in the **Pair amplitude &#124;d(r)&#124;** view: Sb₂Te₃ on FeTe, θ = 0°, 16 K, T<sub>PDW</sub> = 1.5 T<sub>c</sub>. Red maxima sit 42.4 Å apart (2L<sub>m</sub>/√3), ringed by nodes. **(SPECULATIVE)** | [Good Job Coop](../../README.md) · [Pair density waves](../theory/pair-density-waves.md) · [User guide](../user-guide.md) |
+| [rust-desktop-2d.png](rust-desktop-2d.png) | rust-desktop-2d · Rust | app view | Rust 1024 × 1024; 1.42 MB, over the 800 KB soft cap: full-resolution bilinear texture of a high-entropy pattern, kept as the honest app view | Desktop **Moire Pattern** tab in 2D at the defaults: Sb₂Te₃ on FeTe, 256² samples over 200 Å (±100 Å), viridis, bilinear as on screen; faint ≈111 Å beat along x. egui's axes are not captured. | [Good Job Coop](../../README.md) · [Physics overview](../physics-overview.md) · [Moire patterns](../theory/moire-patterns.md) · [User guide](../user-guide.md) |
+| [rust-desktop-3d.png](rust-desktop-3d.png) | rust-desktop-3d · Rust | app view | Rust 1024 × 1024 | Desktop 3D surface (CPU rasterizer, default iso camera) over 50 Å, the extent slider's minimum; viridis. Larger values draw higher: the yellow maxima stand up as sharp peaks, the blue +z axis points up. | [Good Job Coop](../../README.md) · [User guide](../user-guide.md) |
+| [rust-desktop-wireframe.png](rust-desktop-wireframe.png) | rust-desktop-wireframe · Rust | app view | Rust 1024 × 1024 | The same surface with the wireframe toggle (<kbd>W</kbd>) on: the 64 × 64 mesh edges in light gray, without the colormap. | [User guide](../user-guide.md) |
+| [rust-density-3d.png](rust-density-3d.png) | rust-density-3d · Rust | app view | Rust 1024 × 1024 | Desktop **Density Modulation** tab in 3D, 50 Å wide: Δ = Δ<sub>avg</sub> − 0.15 Δ<sub>avg</sub> cos(πm), coolwarm, red = high Δ. The desktop amplitude is 0.46 meV, the web's 0.51 meV; maxima stand up as red-tipped peaks. | [Good Job Coop](../../README.md) · [User guide](../user-guide.md) |
+| [rust-graphene-pattern.png](rust-graphene-pattern.png) | rust-graphene-pattern · Rust | presentation | Rust 1024 × 1024 | Desktop TBG at 1.08°, computed at 0.25 Å over 400 Å and averaged over σ = 1.5 Å, as a 2D texture: AA spots, L = 130.5 Å. At this width the app's grids (≤ 512) alias. | [Graphene stacks](../theory/graphene-stacks.md) · [User guide](../user-guide.md) |
+| [rust-curved-3d.png](rust-curved-3d.png) | rust-curved-3d · Rust | app view | Rust 1024 × 1024 | Desktop curved sheet: the 5 Å Gaussian bump (σ = 50 Å, 200 Å wide, 220² grid) colored by the K-valley pseudo-field, red = positive (±5.7 T), from a tilted camera: six alternating lobes. **(SPECULATIVE)** | [Good Job Coop](../../README.md) · [Curvature](../theory/curvature.md) · [User guide](../user-guide.md) |
+| [rust-sf-glue-3d.png](rust-sf-glue-3d.png) | rust-sf-glue-3d · Rust | app view | Rust 1024 × 1024 | **Glue-modulated gap, desktop 3D.** Sb₂Te₃ on FeTe with moire-modulated glue (η = 0.1, clean coherence, T<sub>c</sub> target 5 K), 50 Å window; red = larger Δ; blue facets: sub-ξ local-limit dips toward T<sub>c</sub>(r) = 0. **(SPECULATIVE)** | [Spin-fluctuation pairing](../theory/spin-fluctuation-pairing.md) · [User guide](../user-guide.md) |
+| [rust-pdw-whatif-3d.png](rust-pdw-whatif-3d.png) | rust-pdw-whatif-3d · Rust | app view | Rust 1024 × 1024 | Desktop moire-locked what-if (Sb₂Te₃ on FeTe, 16 K, T<sub>PDW</sub> = 1.5 T<sub>c</sub>): &#124;d&#124; as a 3D surface on a 220² grid, tilted camera, red = high. Maxima stand up as red domes in blue node troughs. **(SPECULATIVE)** | [Pair density waves](../theory/pair-density-waves.md) · [User guide](../user-guide.md) |
+
+</details>
+
+> [!TIP]
+> **Try it:** the running apps export equivalent images live. On the web, the camera icon in a figure's toolbar downloads it as a PNG; on the desktop, <kbd>Ctrl</kbd>+<kbd>S</kbd> (<kbd>⌘</kbd>+<kbd>S</kbd> on macOS) saves the current map or 3D view as `moire-screenshot-<seconds>.png` in the working directory. Those exports are not docs figures.
+
+**Determinism.** Both capture scripts are deterministic: two runs on one machine give byte-identical PNGs. Text rendering depends on the Chromium build and the system fonts, so regenerate the whole set on one machine. Last captured on macOS (arm64) with plotly 7.1.0 (plotly.js 4.1.1), kaleido 1.5.0 with choreographer 1.4.0 and Chrome for Testing 142.0.7444.175, numpy 2.5.4 and scipy 1.18.1 on Python 3.15.0, and rustc 1.99.1.
+
+---
+
+[Good Job Coop](../../README.md) › [Documentation](../README.md) · Look up: [Materials](../materials.md) · [Glossary](../glossary.md) · [References](../references.md) · **Figure gallery**

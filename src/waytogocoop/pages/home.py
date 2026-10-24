@@ -188,21 +188,61 @@ layout = dbc.Container(
                                 html.Ul(
                                     [
                                         html.Li(
-                                            "Isotope effects on the gap and coherence length "
-                                            "(no direct Te-isotope data for FeTe; α taken from "
-                                            "Ba(Fe,Co)₂As₂ consensus). Includes a HIGHLY "
-                                            "SPECULATIVE exotic/synthetic-isotope mode "
-                                            "(radioactive and hypothetical masses — what-if "
-                                            "illustrations only)."
+                                            [
+                                                "Isotope effects on the gap and coherence length "
+                                                "(no direct Te-isotope data for FeTe; α = 0.4 is "
+                                                "the corrected iron-based isotope-effect "
+                                                "consensus, ",
+                                                html.A(
+                                                    "Khasanov et al., PRB 82, 212505 (2010)",
+                                                    href="https://doi.org/10.1103/PhysRevB.82.212505",
+                                                    target="_blank",
+                                                ),
+                                                "). Includes a HIGHLY SPECULATIVE "
+                                                "exotic/synthetic-isotope mode (radioactive and "
+                                                "hypothetical masses — what-if illustrations "
+                                                "only).",
+                                            ]
                                         ),
                                         html.Li(
-                                            "Topological proximity / Majorana modes — 3D "
-                                            "extensions of the 2D model."
+                                            "Topological proximity / Majorana modes — the 3D "
+                                            "proximity z-decay (z-slices, decay profile) and "
+                                            "vortex-bound Majorana modes, 3D extensions of the "
+                                            "2D model."
                                         ),
                                         html.Li(
                                             "Abrikosov vortex lattice + Zeeman / Pauli limits — "
                                             "simplified models not validated for these "
                                             "heterostructures."
+                                        ),
+                                        html.Li(
+                                            [
+                                                "Spin-fluctuation pairing — Boltzmann "
+                                                "magnetotransport of electron-doped LCCO in "
+                                                "which the anisotropic T-linear scattering "
+                                                "tracks Tc (",
+                                                html.A(
+                                                    "Duffy et al., Nat. Phys. 2026",
+                                                    href="https://doi.org/10.1038/s41567-026-03454-6",
+                                                    target="_blank",
+                                                ),
+                                                "), plus an empirical pairing map and a moire "
+                                                "glue-modulation what-if.",
+                                            ]
+                                        ),
+                                        html.Li(
+                                            [
+                                                "Pair-density-wave modalities — Landau model of "
+                                                "the PDW, its composite charge orders and their "
+                                                "survival above Tc in UTe2 (",
+                                                html.A(
+                                                    "Zhu et al., PNAS 2026",
+                                                    href="https://doi.org/10.1073/pnas.2602117123",
+                                                    target="_blank",
+                                                ),
+                                                "), plus a moire-locked what-if for these "
+                                                "heterostructures.",
+                                            ]
                                         ),
                                     ]
                                 ),

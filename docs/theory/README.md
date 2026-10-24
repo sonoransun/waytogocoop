@@ -23,6 +23,7 @@ CPDM physics is [Nature 652, 335 (2026); arXiv:2602.22637](../references.md#ref-
 | [Graphene stacks](graphene-stacks.md) | `src/waytogocoop/computation/graphene.py` | `crates/moire-core/src/graphene.rs` | Validated, except the flat-band SC dome (**SPECULATIVE**) |
 | [Bistritzer-MacDonald model](bm-model.md) | `src/waytogocoop/computation/bm_model.py` | `crates/moire-core/src/bm_model.rs` | Validated¹ |
 | [Curvature](curvature.md) | `src/waytogocoop/computation/curvature.py` | `crates/moire-core/src/curvature.rs` | Validated strain / pseudo-field; gap suppression **SPECULATIVE** |
+| [Pair density waves](pair-density-waves.md) | `src/waytogocoop/computation/pdw.py` | `crates/moire-core/src/pdw.rs` | **SPECULATIVE** — phenomenological Landau model of the UTe2 PDW modalities (Zhu et al. 2026); defaults tuned to the measured visibility windows |
 
 ¹ The **SPECULATIVE** flat-band superconducting dome plotted alongside BM results lives in the
 graphene-stacks module (`compute_flat_band_sc` in `src/waytogocoop/computation/graphene.py`),
@@ -63,6 +64,8 @@ Start with [moire patterns](moire-patterns.md) → [gap modulation](gap-modulati
 [Fourier analysis](fourier-analysis.md), which form the validated core pipeline (pattern →
 gap field → spectrum). The [graphene stacks](graphene-stacks.md) →
 [BM model](bm-model.md) → [curvature](curvature.md) sequence is self-contained and can be
-read independently. The three SPECULATIVE pages ([isotope effects](isotope-effects.md),
-[topological proximity](topological.md), [magnetic field](magnetic.md)) each build on the
-validated core and are best read after it.
+read independently. The SPECULATIVE pages ([isotope effects](isotope-effects.md),
+[topological proximity](topological.md), [magnetic field](magnetic.md),
+[pair density waves](pair-density-waves.md)) each build on the validated core and are best
+read after it. The PDW page in particular picks up the CPDM-versus-PDW distinction from
+[gap modulation](gap-modulation.md).

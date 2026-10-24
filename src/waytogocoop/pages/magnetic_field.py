@@ -207,7 +207,10 @@ def update_magnetic(
 
         # Magnetic field computation
         config = MagneticFieldConfig(Bx=Bx, By=By, Bz=Bz)
-        vortex_pos = generate_vortex_positions(Bz, extent, grid_size)
+        # generate_vortex_positions takes the full side length (it fills
+        # [-side/2, side/2], the Rust convention), but the web extent is a
+        # half-width (the grid spans [-extent, extent]), so pass 2 * extent.
+        vortex_pos = generate_vortex_positions(Bz, 2.0 * extent, grid_size)
         a_v = vortex_lattice_period(Bz)
         suppression = vortex_suppression_field(x, y, vortex_pos, DEFAULT_COHERENCE_LENGTH)
         combined_gap = combined_gap_with_vortices(gap_field, suppression)

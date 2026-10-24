@@ -89,6 +89,21 @@ pub fn show(ctx: &Context, app: &MoireApp) -> Option<MenuAction> {
                     ctx.open_url(egui::OpenUrl::new_tab("https://arxiv.org/abs/2602.22637"));
                     ui.close_menu();
                 }
+                if ui
+                    .button("Duffy et al., Nat. Phys. 2026 (spin fluctuations)")
+                    .clicked()
+                {
+                    ctx.open_url(egui::OpenUrl::new_tab(
+                        "https://doi.org/10.1038/s41567-026-03454-6",
+                    ));
+                    ui.close_menu();
+                }
+                if ui.button("Zhu et al., PNAS 2026 (PDW)").clicked() {
+                    ctx.open_url(egui::OpenUrl::new_tab(
+                        "https://doi.org/10.1073/pnas.2602117123",
+                    ));
+                    ui.close_menu();
+                }
             });
         });
     });

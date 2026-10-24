@@ -1,13 +1,20 @@
 use std::ops::RangeInclusive;
 
 use egui::{Color32, Pos2, Rect, Ui};
-use egui_plot::{GridInput, GridMark, Line, LineStyle, Plot, VLine};
+use egui_plot::{
+    GridInput, GridMark, HLine, Legend, Line, LineStyle, Plot, PlotPoint, Text, VLine,
+};
+use moire_core::pdw::{self, PdwFamily, PdwRegime};
 
-use crate::app::{CooperView, GrapheneView, MagneticView, MoireApp, Tab, ViewMode};
+use crate::app::{CooperView, GrapheneView, MagneticView, MoireApp, PdwView, Tab, ViewMode};
 use crate::render::axes::{self, AxesSpec, ColorbarSpec};
+use crate::ui::pdw_panel::{family_color, regime_color};
 
 /// Camera rotation sensitivity (radians per pixel of drag).
 const CAMERA_ROTATION_SENSITIVITY: f32 = 0.01;
+/// Width of the tab bar's 2D/3D toggle group before its first frame has
+/// measured it (see `show_tab_bar`).
+const VIEW_TOGGLE_WIDTH_ESTIMATE: f32 = 72.0;
 /// Camera zoom sensitivity (distance per pixel of scroll).
 const CAMERA_ZOOM_SENSITIVITY: f32 = 0.005;
 /// Bands whose energies never enter this +/- window (meV) are not drawn, so
@@ -21,22 +28,7 @@ const FLAT_BAND_COLOR: Color32 = Color32::from_rgb(255, 140, 0);
 pub fn show_viewport(ui: &mut Ui, app: &mut MoireApp) {
     let prev_tab = app.active_tab;
 
-    ui.horizontal(|ui| {
-        ui.selectable_value(&mut app.active_tab, Tab::Pattern, "Moire Pattern");
-        ui.selectable_value(&mut app.active_tab, Tab::Density, "Density Modulation");
-        ui.selectable_value(&mut app.active_tab, Tab::Fourier, "Fourier Spectrum");
-        ui.selectable_value(&mut app.active_tab, Tab::MagneticField, "Magnetic");
-        ui.selectable_value(&mut app.active_tab, Tab::CooperSurface3D, "Cooper 3D");
-        ui.selectable_value(&mut app.active_tab, Tab::Graphene, "Graphene");
-        ui.separator();
-        let _ = ui.selectable_value(&mut app.view_mode, ViewMode::Flat2D, "2D");
-        if ui
-            .selectable_value(&mut app.view_mode, ViewMode::Surface3D, "3D")
-            .changed()
-        {
-            app.needs_surface_rerender = true;
-        }
-    });
+    show_tab_bar(ui, app);
 
     if app.active_tab != prev_tab && app.view_mode == ViewMode::Surface3D {
         app.needs_surface_rerender = true;
@@ -67,10 +59,101 @@ pub fn show_viewport(ui: &mut Ui, app: &mut MoireApp) {
         return;
     }
 
+    // A failed PDW computation (e.g. identical lattices at zero twist in the
+    // moire-locked geometry) explains itself instead of "Computing...".
+    if app.active_tab == Tab::PairDensityWave {
+        if let Some(err) = app.pdw_error.as_ref() {
+            show_computing_message(ui, &format!("PDW model unavailable: {err}"));
+            return;
+        }
+    }
+
+    // The PDW sweeps and regime map live on (T, |B|) axes, not the moire grid.
+    if app.active_tab == Tab::PairDensityWave && app.pdw_view.is_plot() {
+        match app.pdw_view {
+            PdwView::TemperatureSweep => show_pdw_sweep_plot(ui, app, false),
+            PdwView::FieldSweep => show_pdw_sweep_plot(ui, app, true),
+            _ => show_pdw_regime_map(ui, app),
+        }
+        return;
+    }
+
+    // Every SF view but the glue map is a plot on its own axes. A failed SF
+    // computation, or a glue map with no moire to build on, explains itself
+    // instead of "Computing...".
+    if app.active_tab == Tab::SpinFluctuation {
+        if let Some(err) = app.sf_error.as_ref() {
+            show_computing_message(ui, &format!("Spin-fluctuation model unavailable: {err}"));
+            return;
+        }
+        if app.sf_view.is_plot() {
+            crate::ui::sf_plots::show(ui, app);
+            return;
+        }
+        if let Some(message) = app
+            .sf_result
+            .as_ref()
+            .and_then(|rt| rt.glue_message.as_ref())
+        {
+            show_computing_message(ui, message);
+            return;
+        }
+    }
+
     match app.view_mode {
         ViewMode::Flat2D => show_flat_2d(ui, app),
         ViewMode::Surface3D => show_surface_3d(ui, app),
     }
+}
+
+/// The tab bar and the 2D/3D toggle. Returns the bar's response. It fits one
+/// row of the default 1280 px window (a test checks it) and wraps in narrower
+/// windows (the minimum is 800 px) or a zoomed UI, so that neither a tab nor
+/// the toggle is clipped.
+pub fn show_tab_bar(ui: &mut Ui, app: &mut MoireApp) -> egui::Response {
+    ui.horizontal_wrapped(|ui| {
+        ui.selectable_value(&mut app.active_tab, Tab::Pattern, "Moire Pattern");
+        ui.selectable_value(&mut app.active_tab, Tab::Density, "Density Modulation");
+        ui.selectable_value(&mut app.active_tab, Tab::Fourier, "Fourier Spectrum");
+        ui.selectable_value(&mut app.active_tab, Tab::MagneticField, "Magnetic");
+        ui.selectable_value(&mut app.active_tab, Tab::CooperSurface3D, "Cooper 3D");
+        ui.selectable_value(&mut app.active_tab, Tab::Graphene, "Graphene");
+        ui.selectable_value(
+            &mut app.active_tab,
+            Tab::SpinFluctuation,
+            "Spin Fluctuations",
+        );
+        ui.selectable_value(
+            &mut app.active_tab,
+            Tab::PairDensityWave,
+            "Pair Density Wave",
+        );
+        // The separator and the two toggle buttons move to the next row as one
+        // unit (never "2D" ending a row and "3D" starting the next). A nested
+        // `ui.horizontal` would not do: egui hands it the rest of the current
+        // row, so it overflows instead of wrapping. The group therefore asks
+        // the wrapping layout for its own width, measured on the last frame.
+        let toggle_id = egui::Id::new("tab_bar_view_toggle");
+        let toggle_width = ui
+            .data(|d| d.get_temp::<f32>(toggle_id))
+            .unwrap_or(VIEW_TOGGLE_WIDTH_ESTIMATE);
+        let toggle = ui.allocate_ui_with_layout(
+            egui::vec2(toggle_width, ui.spacing().interact_size.y),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.separator();
+                let _ = ui.selectable_value(&mut app.view_mode, ViewMode::Flat2D, "2D");
+                if ui
+                    .selectable_value(&mut app.view_mode, ViewMode::Surface3D, "3D")
+                    .changed()
+                {
+                    app.needs_surface_rerender = true;
+                }
+            },
+        );
+        ui.data_mut(|d| d.insert_temp(toggle_id, toggle.response.rect.width()));
+    })
+    .response
 }
 
 /// Per-tab axis + colorbar metadata for the 2D view.
@@ -335,6 +418,84 @@ fn view_meta(app: &MoireApp) -> Option<ViewMeta> {
                 value_label,
             }
         }
+        Tab::SpinFluctuation => {
+            // Only the glue map reaches here; the plot views route earlier.
+            let glue = app
+                .sf_result
+                .as_ref()
+                .and_then(|rt| rt.glue.as_ref().map(|g| (&g.gap, rt.glue_extent)));
+            let shalf = glue.map_or(half, |(_, e)| e / 2.0);
+            let value_range = glue.map_or((0.0, 1.0), |(gap, _)| {
+                let lo = gap.iter().copied().fold(f64::INFINITY, f64::min);
+                let hi = gap.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                // A uniform map (η = 0) sits mid-colormap: centre a small span on it.
+                if hi - lo > 1e-12 {
+                    (lo, hi)
+                } else {
+                    (lo - 5e-4, hi + 5e-4)
+                }
+            });
+            ViewMeta {
+                x_range: (-shalf, shalf),
+                y_range: (-shalf, shalf),
+                x_label: "x (Å)",
+                y_label: "y (Å)",
+                colormap: app.cmap(moire_core::colormap::coolwarm),
+                value_range,
+                value_label: "Δ (meV)",
+            }
+        }
+        Tab::PairDensityWave => {
+            let (p_res, p_extent) = app
+                .pdw_result
+                .as_ref()
+                .map(|r| (r.fields.resolution, r.fields.physical_extent))
+                .unwrap_or((resolution, extent));
+            if app.pdw_view == PdwView::Fourier {
+                let k_nyq = if p_extent > 0.0 {
+                    std::f64::consts::PI * p_res as f64 / p_extent
+                } else {
+                    1.0
+                };
+                return Some(ViewMeta {
+                    x_range: (-k_nyq, k_nyq),
+                    y_range: (-k_nyq, k_nyq),
+                    x_label: "kx (1/Å)",
+                    y_label: "ky (1/Å)",
+                    colormap: app.cmap(moire_core::colormap::inferno),
+                    value_range: (0.0, 1.0),
+                    value_label: "log₁₀(|F|²) norm",
+                });
+            }
+            // Signed densities are mapped symmetrically, so the colorbar is too.
+            let symmetric = |field: &[f64]| {
+                let m = field.iter().fold(0.0_f64, |m, v| m.max(v.abs())).max(1e-12);
+                (-m, m)
+            };
+            let (value_range, value_label) = match (app.pdw_view, app.pdw_result.as_ref()) {
+                (PdwView::PairAmplitude, Some(r)) => {
+                    let pair = &r.fields.pair_amplitude;
+                    let lo = pair.iter().copied().fold(f64::INFINITY, f64::min);
+                    let hi = pair.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    ((lo, hi.max(lo + 1e-3)), "|d| (meV)")
+                }
+                (PdwView::SpinDensity, Some(r)) => {
+                    (symmetric(&r.fields.spin_density), "S_z (arb.)")
+                }
+                (_, Some(r)) => (symmetric(&r.fields.charge_density), "ρ (arb.)"),
+                (_, None) => ((-1.0, 1.0), "ρ (arb.)"),
+            };
+            let phalf = p_extent / 2.0;
+            ViewMeta {
+                x_range: (-phalf, phalf),
+                y_range: (-phalf, phalf),
+                x_label: "x (Å)",
+                y_label: "y (Å)",
+                colormap: app.cmap(moire_core::colormap::coolwarm),
+                value_range,
+                value_label,
+            }
+        }
     })
 }
 
@@ -346,6 +507,8 @@ fn show_flat_2d(ui: &mut Ui, app: &MoireApp) {
         Tab::MagneticField => app.magnetic_texture.as_ref(),
         Tab::CooperSurface3D => app.cooper_texture.as_ref(),
         Tab::Graphene => app.graphene_texture.as_ref(),
+        Tab::SpinFluctuation => app.sf_texture.as_ref(),
+        Tab::PairDensityWave => app.pdw_texture.as_ref(),
     };
 
     // The Fourier tab tucks a collapsible peak table below the spectrum. Only
@@ -386,7 +549,13 @@ fn paint_texture_view(ui: &Ui, app: &MoireApp, texture: Option<&egui::TextureHan
     };
 
     if let Some(tex) = texture {
-        let uv = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0));
+        // Data row 0 holds y_min (moire-core samples y = (iy / (n - 1) - 0.5) *
+        // extent; the shifted FFT's row 0 is -k_nyq), so flip v to put it at
+        // the bottom, where `draw_axes` labels `y_range.0`, as the web
+        // heatmaps and the 3D surface's +y axis do. The 3D image
+        // (`show_surface_3d`) and the regime map (built with T rising upward)
+        // keep uv (0,0)-(1,1).
+        let uv = Rect::from_min_max(Pos2::new(0.0, 1.0), Pos2::new(1.0, 0.0));
         ui.painter().image(tex.id(), image_rect, uv, Color32::WHITE);
 
         let axes_spec = AxesSpec {
@@ -500,9 +669,14 @@ fn show_surface_3d(ui: &mut Ui, app: &mut MoireApp) {
 
     if response.dragged() {
         let delta = response.drag_delta();
+        // Drag right: the world turns counter-clockwise seen from above, so
+        // the near edge follows the pointer.
         app.camera.yaw += delta.x * CAMERA_ROTATION_SENSITIVITY;
+        // Drag down (egui's delta.y > 0) to look more from above (pitch toward
+        // 0, the plan view), up to look more edge-on: the orbit convention of
+        // three.js, Blender and Plotly 3D.
         app.camera.pitch =
-            (app.camera.pitch + delta.y * CAMERA_ROTATION_SENSITIVITY).clamp(-1.4, 1.4);
+            (app.camera.pitch - delta.y * CAMERA_ROTATION_SENSITIVITY).clamp(-1.4, 1.4);
         app.needs_surface_rerender = true;
     }
 
@@ -542,7 +716,7 @@ fn show_surface_3d(ui: &mut Ui, app: &mut MoireApp) {
 }
 
 /// Centered placeholder text while a plot's backing data is missing.
-fn show_computing_message(ui: &mut Ui, message: &str) {
+pub(crate) fn show_computing_message(ui: &mut Ui, message: &str) {
     let rect = ui.available_rect_before_wrap();
     ui.allocate_rect(rect, egui::Sense::hover());
     ui.painter().text(
@@ -555,7 +729,7 @@ fn show_computing_message(ui: &mut Ui, message: &str) {
 }
 
 /// Line color for remote (non-flat) bands and reference lines.
-fn muted_line_color(dark_mode: bool) -> Color32 {
+pub(crate) fn muted_line_color(dark_mode: bool) -> Color32 {
     if dark_mode {
         Color32::from_gray(110)
     } else {
@@ -629,9 +803,9 @@ fn show_band_plot(ui: &mut Ui, app: &MoireApp) {
                     .map(|(&k, energies)| [k, energies[band]])
                     .collect();
                 let line = if band == flat_lo || band == flat_lo + 1 {
-                    Line::new(points).color(FLAT_BAND_COLOR).width(2.5)
+                    Line::new(points).color(FLAT_BAND_COLOR).width(2.5_f32)
                 } else {
-                    Line::new(points).color(remote_color).width(1.0)
+                    Line::new(points).color(remote_color).width(1.0_f32)
                 };
                 plot_ui.line(line);
             }
@@ -674,7 +848,7 @@ fn show_dos_plot(ui: &mut Ui, app: &MoireApp) {
                     .color(zero_color)
                     .style(LineStyle::dashed_loose()),
             );
-            plot_ui.line(Line::new(points).color(FLAT_BAND_COLOR).width(2.0));
+            plot_ui.line(Line::new(points).color(FLAT_BAND_COLOR).width(2.0_f32));
         });
 }
 
@@ -711,6 +885,222 @@ fn show_decay_plot(ui: &mut Ui, app: &MoireApp) {
                     .color(ref_color)
                     .style(LineStyle::dashed_loose()),
             );
-            plot_ui.line(Line::new(points).color(FLAT_BAND_COLOR).width(2.0));
+            plot_ui.line(Line::new(points).color(FLAT_BAND_COLOR).width(2.0_f32));
         });
+}
+
+/// Draw the PDW composite-peak intensities |ρ_k|² on a log₁₀ axis against
+/// temperature (`field_axis = false`) or |B| along the sweep axis. Members 1
+/// and 2 of a family are mirror partners and share one dashed line; member 3
+/// is solid. Dotted verticals mark the transitions, dashed the current value.
+fn show_pdw_sweep_plot(ui: &mut Ui, app: &MoireApp, field_axis: bool) {
+    let Some(rt) = app.pdw_result.as_ref() else {
+        show_computing_message(ui, "Computing PDW sweep...");
+        return;
+    };
+    let cfg = &rt.config;
+    let dark = app.dark_mode;
+    let sweep = if field_axis { &rt.b_sweep } else { &rt.t_sweep };
+    let floor = cfg.floor.max(1e-12).log10();
+    let y_min = floor - 2.0;
+
+    let pair_max =
+        |a: &[f64], b: &[f64]| -> Vec<f64> { a.iter().zip(b).map(|(x, y)| x.max(*y)).collect() };
+    let curves = [
+        (
+            "p₁,₂ (field-induced)",
+            PdwFamily::P,
+            pair_max(&sweep.intensity_p[0], &sweep.intensity_p[1]),
+            true,
+        ),
+        ("p₃", PdwFamily::P, sweep.intensity_p[2].clone(), false),
+        (
+            "q₁,₂",
+            PdwFamily::Q,
+            pair_max(&sweep.intensity_q[0], &sweep.intensity_q[1]),
+            true,
+        ),
+        ("q₃", PdwFamily::Q, sweep.intensity_q[2].clone(), false),
+        (
+            "h₁,₂",
+            PdwFamily::H,
+            pair_max(&sweep.intensity_h[0], &sweep.intensity_h[1]),
+            false,
+        ),
+    ];
+    let y_top = curves
+        .iter()
+        .flat_map(|(_, _, values, _)| values.iter())
+        .fold(floor, |m, &v| if v > 0.0 { m.max(v.log10()) } else { m })
+        + 0.3;
+
+    let (x_label, current, marks) = if field_axis {
+        let t = cfg.temperature;
+        let mut marks = vec![
+            (
+                pdw::critical_field_along(cfg.tc, &cfg.hc2, t, &rt.direction).unwrap_or(0.0),
+                "Hc2(T)",
+            ),
+            (
+                pdw::critical_field_along(cfg.t_pdw, &cfg.h_pdw, t, &rt.direction).unwrap_or(0.0),
+                "H_PDW(T)",
+            ),
+        ];
+        if cfg.overlap0.iter().any(|&c| c < 1.0) {
+            let onset = pdw::onset_field_along(&cfg.h_rot, &rt.direction).unwrap_or(0.0);
+            marks.push((onset, "d-vector onset"));
+        }
+        // Off-axis fields put the current state off this sweep: no marker.
+        let (along, on_axis) = rt.field_along_axis();
+        (
+            format!(
+                "|B| along {} (T)",
+                app.pdw_settings.sweep_axis.phrase(cfg.field)
+            ),
+            on_axis.then_some(along),
+            marks,
+        )
+    } else {
+        let shifted = |t_star: f64, critical: &[f64; 3]| {
+            t_star * (1.0 - pdw::reduced_field(&cfg.field, critical).unwrap_or(1.0)).max(0.0)
+        };
+        (
+            "T (K)".to_string(),
+            Some(cfg.temperature),
+            vec![
+                (shifted(cfg.tc, &cfg.hc2), "Tc(B)"),
+                (shifted(cfg.t_pdw, &cfg.h_pdw), "T_PDW(B)"),
+            ],
+        )
+    };
+    let ref_color = muted_line_color(dark);
+    let x_end = sweep.values.last().copied().unwrap_or(1.0);
+
+    Plot::new(if field_axis {
+        "pdw_field_sweep"
+    } else {
+        "pdw_temperature_sweep"
+    })
+    .legend(Legend::default())
+    .x_axis_label(x_label)
+    .y_axis_label("|ρ_k|² (log scale)")
+    .y_axis_formatter(|mark: GridMark, _range: &RangeInclusive<f64>| {
+        format!("{:.0e}", 10f64.powf(mark.value))
+    })
+    .include_y(y_min)
+    .include_y(y_top)
+    .show(ui, |plot_ui| {
+        plot_ui.hline(
+            HLine::new(floor)
+                .color(ref_color)
+                .style(LineStyle::dotted_dense()),
+        );
+        plot_ui.text(
+            Text::new(PlotPoint::new(x_end, floor), "detection floor")
+                .color(ref_color)
+                .anchor(egui::Align2::RIGHT_BOTTOM),
+        );
+        for (x, label) in marks {
+            if x.is_finite() && x > 0.0 {
+                plot_ui.vline(
+                    VLine::new(x)
+                        .color(ref_color)
+                        .style(LineStyle::dotted_loose()),
+                );
+                plot_ui.text(
+                    Text::new(PlotPoint::new(x, y_top), label)
+                        .color(ref_color)
+                        .anchor(egui::Align2::LEFT_TOP),
+                );
+            }
+        }
+        if let Some(current) = current {
+            plot_ui.vline(
+                VLine::new(current)
+                    .color(ref_color)
+                    .style(LineStyle::dashed_loose()),
+            );
+        }
+        for (name, family, values, dashed) in curves {
+            let points: Vec<[f64; 2]> = sweep
+                .values
+                .iter()
+                .zip(&values)
+                .filter(|(_, &v)| v > 0.0 && v.log10() >= y_min)
+                .map(|(&x, &v)| [x, v.log10()])
+                .collect();
+            let mut line = Line::new(points)
+                .name(name)
+                .color(family_color(family, dark))
+                .width(2.0_f32);
+            if dashed {
+                line = line.style(LineStyle::dashed_dense());
+            }
+            plot_ui.line(line);
+        }
+    });
+}
+
+/// Paint the PDW regime texture on (|B| along the sweep axis, T) axes with a
+/// swatch legend underneath and a cross at the current (|B|, T).
+fn show_pdw_regime_map(ui: &mut Ui, app: &MoireApp) {
+    let (Some(rt), Some(tex)) = (app.pdw_result.as_ref(), app.pdw_texture.as_ref()) else {
+        show_computing_message(ui, "Computing regime map...");
+        return;
+    };
+    // Room below the x-axis label for the swatch row.
+    const LEGEND_HEIGHT: f32 = 30.0;
+    let area = ui.available_rect_before_wrap();
+    ui.allocate_rect(area, egui::Sense::hover());
+    let map_area = Rect::from_min_max(area.min, Pos2::new(area.max.x, area.max.y - LEGEND_HEIGHT));
+    let (image_rect, _colorbar) = axes::layout(map_area);
+
+    let uv = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0));
+    ui.painter().image(tex.id(), image_rect, uv, Color32::WHITE);
+    let x_label = format!(
+        "|B| along {} (T)",
+        app.pdw_settings.sweep_axis.phrase(rt.config.field)
+    );
+    let spec = AxesSpec {
+        x_range: (0.0, rt.b_max),
+        y_range: (0.0, rt.t_max),
+        x_label: &x_label,
+        y_label: "T (K)",
+        ticks: 5,
+    };
+    axes::draw_axes(ui.painter(), image_rect, &spec, app.dark_mode);
+
+    // Cross at the current state, which lies on this map only when the
+    // applied field points along the sweep axis.
+    let (along, on_axis) = rt.field_along_axis();
+    let fx = (along / rt.b_max) as f32;
+    let fy = (rt.config.temperature / rt.t_max) as f32;
+    if on_axis && (0.0..=1.0).contains(&fx) && (0.0..=1.0).contains(&fy) {
+        let c = Pos2::new(
+            image_rect.min.x + fx * image_rect.width(),
+            image_rect.max.y - fy * image_rect.height(),
+        );
+        let stroke = egui::Stroke::new(2.0_f32, ui.visuals().strong_text_color());
+        let r = 6.0;
+        ui.painter()
+            .line_segment([c + egui::vec2(-r, -r), c + egui::vec2(r, r)], stroke);
+        ui.painter()
+            .line_segment([c + egui::vec2(-r, r), c + egui::vec2(r, -r)], stroke);
+    }
+
+    // Swatch legend row.
+    let mut cursor = Pos2::new(image_rect.min.x, image_rect.max.y + 38.0);
+    for regime in PdwRegime::ALL {
+        let swatch = Rect::from_min_size(cursor, egui::vec2(12.0, 12.0));
+        ui.painter()
+            .rect_filled(swatch, 2.0, regime_color(regime, app.dark_mode));
+        let label_rect = ui.painter().text(
+            swatch.right_center() + egui::vec2(4.0, 0.0),
+            egui::Align2::LEFT_CENTER,
+            regime.label(),
+            egui::FontId::proportional(12.0),
+            ui.visuals().text_color(),
+        );
+        cursor.x = label_rect.max.x + 14.0;
+    }
 }

@@ -222,11 +222,14 @@ def update_phase(
             dark=dark,
         )
 
-        # Mark the material's actual delta
+        # Mark the material's actual delta. White text on a dark translucent
+        # box reads over either phase color in both themes.
         phase_fig.add_hline(
             y=DELTA_AVG,
             line=dict(dash="dash", color="lime", width=2),
             annotation_text=f"Delta_avg = {DELTA_AVG:.2f} meV",
+            annotation_bgcolor="rgba(0, 0, 0, 0.6)",
+            annotation_font=dict(color="white"),
         )
 
         # Commensuration sweep

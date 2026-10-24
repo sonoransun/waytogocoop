@@ -2,7 +2,7 @@
 
 **Moire Engineering of Cooper-Pair Density Modulation States**
 
-A visualization and computation tool for exploring moire-induced Cooper-pair density modulation in topological-insulator / iron-chalcogenide heterostructures, with magnetic field analysis (Abrikosov vortex lattices, Zeeman splitting, screening currents), topological surface-state physics (proximity-induced gap decay, Majorana zero modes, topological phase diagrams), and speculative isotope-engineering capabilities for precision moire tuning. A second moire platform is built in as well: multilayer graphene stacks with magic-angle flat bands, Bistritzer-MacDonald band structures and density of states, heterostrain, supermoire, and curvature-induced pseudo-magnetic fields.
+A visualization and computation tool for exploring moire-induced Cooper-pair density modulation in topological-insulator / iron-chalcogenide heterostructures, with magnetic field analysis (Abrikosov vortex lattices, Zeeman splitting, screening currents), topological surface-state physics (proximity-induced gap decay, Majorana zero modes, topological phase diagrams), and speculative isotope-engineering capabilities for precision moire tuning. A second moire platform is built in as well: multilayer graphene stacks with magic-angle flat bands, Bistritzer-MacDonald band structures and density of states, heterostrain, supermoire, and curvature-induced pseudo-magnetic fields. A speculative pair-density-wave module follows the 2026 vector-field STM study of UTe2 (Zhu et al., PNAS), which found charge order that outlives superconductivity. It models the PDW, the composite charge orders it leaves behind, and their survival above Tc, and adds a moire-locked what-if for these heterostructures.
 
 Two implementations are provided:
 - **Python Web UI** (Plotly Dash) -- accessible via browser on any platform
@@ -16,7 +16,7 @@ This README is the overview and gallery; the deep dives live in [`docs/`](docs/R
 
 | | |
 |---|---|
-| **Learn** | [Theory index](docs/theory/README.md) — per-module physics: [moire patterns](docs/theory/moire-patterns.md), [gap modulation](docs/theory/gap-modulation.md), [Fourier analysis](docs/theory/fourier-analysis.md), [magnetic field](docs/theory/magnetic.md), [topological](docs/theory/topological.md), [isotope effects](docs/theory/isotope-effects.md), [graphene stacks](docs/theory/graphene-stacks.md), [BM model](docs/theory/bm-model.md), [curvature](docs/theory/curvature.md) |
+| **Learn** | [Theory index](docs/theory/README.md) — per-module physics: [moire patterns](docs/theory/moire-patterns.md), [gap modulation](docs/theory/gap-modulation.md), [Fourier analysis](docs/theory/fourier-analysis.md), [magnetic field](docs/theory/magnetic.md), [topological](docs/theory/topological.md), [isotope effects](docs/theory/isotope-effects.md), [graphene stacks](docs/theory/graphene-stacks.md), [BM model](docs/theory/bm-model.md), [curvature](docs/theory/curvature.md), [pair density waves](docs/theory/pair-density-waves.md) |
 | **Use** | [User guide](docs/user-guide.md) — every page, control, preset, and readout in both apps |
 | **Look up** | [Materials & isotope database](docs/materials.md) · [Glossary](docs/glossary.md) · [Annotated references](docs/references.md) |
 | **Context** | [Historical context](docs/history.md) · [Process technologies](docs/process-technologies.md) |
@@ -78,6 +78,15 @@ All images below are regenerated from physics — Python scenes via `python scri
 ![Magnetic — vortex overlay](docs/images/magnetic-vortex-2d.png)
 *Magnetic — Abrikosov vortex lattice (B_z = 4 T) overlaid on the moire-modulated gap.*
 
+![Pair Density Waves — temperature sweep](docs/images/pdw-tsweep.png)
+*Pair Density Waves (SPECULATIVE) — UTe2 composite CDW intensities vs T. The p peak dies at Tc, while q = 2p and the h harmonics survive into the shaded PDW-only window.*
+
+![Pair Density Waves — STM-style FFT](docs/images/pdw-fft.png)
+*Pair Density Waves (SPECULATIVE) — FFT of the charge density at 3 K: bright q and h peaks, empty p rings (the "Cheshire cat's grin").*
+
+![Pair Density Waves — moire what-if](docs/images/pdw-moire-whatif.png)
+*Pair Density Waves (SPECULATIVE) — FeTe/Sb₂Te₃ moire-locked what-if above Tc. The pair amplitude develops a lattice of nodes.*
+
 **Rust desktop (egui/eframe)**
 
 ![Rust Desktop 2D](docs/images/rust-desktop-2d.png) ![Rust Desktop 3D](docs/images/rust-desktop-3d.png)
@@ -88,6 +97,9 @@ All images below are regenerated from physics — Python scenes via `python scri
 
 ![Rust Graphene Pattern](docs/images/rust-graphene-pattern.png) ![Rust Curved Sheet](docs/images/rust-curved-3d.png)
 *Left: magic-angle twisted-bilayer graphene stack pattern (top-down). Right: curved sheet colored by the valley-antisymmetric pseudo-field B_ps — first exercise of the colored-surface render path.*
+
+![Rust PDW what-if 3D](docs/images/rust-pdw-whatif-3d.png)
+*Pair Density Wave tab (SPECULATIVE): the moire-locked what-if pair amplitude above Tc as a surface. The PDW nodes are the pits.*
 
 ### Advanced 3D Visualization
 
@@ -304,6 +316,11 @@ The `/graphene` page extends the same moire machinery to a second platform. Sele
   - [Isotope Database](#isotope-database)
   - [Recommended Isotopic Configurations](#recommended-isotopic-configurations)
   - [Nuclear Spin Engineering](#nuclear-spin-engineering)
+- [Pair Density Waves (Speculative)](#pair-density-waves-speculative)
+  - [The Modalities: One PDW, Three Charge Orders](#the-modalities-one-pdw-three-charge-orders)
+  - [Regimes and the Cheshire-Cat Window](#regimes-and-the-cheshire-cat-window)
+  - [Field-Induced Order and the d-Vector](#field-induced-order-and-the-d-vector)
+  - [Moire-Locked What-If](#moire-locked-what-if)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Installation and Usage](#installation-and-usage)
@@ -1018,6 +1035,51 @@ Published 125Te NMR on Fe(Te,Se) under pressure (arXiv:2505.11732) reveals that 
 
 ---
 
+## Pair Density Waves (Speculative)
+
+In 2026 a vector-magnet STM study of the spin-triplet superconductor UTe2 reported charge order that persists *above* the superconducting transition. The authors traced it to a **pair density wave (PDW)**, Cooper pairs condensed at finite momentum ±p that outlive the uniform condensate ([Zhu et al., PNAS 123, e2602117123 (2026)](https://doi.org/10.1073/pnas.2602117123); covered by ScienceAlert as "New Form of Superconductor Behavior Discovered That We've Never Seen Before"). "Pair density waves are the Cheshire Cat's grin of superconductivity," in co-author Eduardo Fradkin's words.
+
+The PDW is the spontaneous cousin of this project's moire-imprinted CPDM, so the project models it with the paper's own Landau free energy. The model lives in `computation/pdw.py` and `moire-core/src/pdw.rs`, and is shown on the **Pair Density Waves** web page (`/pdw`) and the desktop **Pair Density Wave** tab. Everything here is SPECULATIVE.
+
+### The Modalities: One PDW, Three Charge Orders
+
+| Charge order | Wavevector | Composite of | Above Tc? |
+|---|---|---|---|
+| **p** | p_i | PDW × uniform SC: rho ~ d0* · d_p + d0 · d*_-p | no, it dies at Tc |
+| **q** | 2 p_i | PDW alone: rho ~ d*_-p · d_p | yes, up to T_PDW ≈ 5 K |
+| **h** | 2p3 − 2p_j | q × q harmonics | yes, but fades first (≈ 3.5 K) |
+| **SDW** (predicted) | p_i | d0 × d_p, when the d-vectors are orthogonal | no |
+
+The UTe2 defaults put each PDW critical field where the q CDW was measured to vanish at 4.2 K: 2.24 / 0.60 / 6.0 T along c\* / a / b\*, inside the measured windows and in the b\* > c\* > a order of Hc2. With a 1% detection floor the model then reproduces the paper's other milestones:
+
+- p3 vanishes at Tc.
+- h vanishes near 3.5 K.
+- q fades by about 4.5 K.
+- p2 is switched on by a field and shows the reported windows at 300 mK and 1.6 K.
+
+### Regimes and the Cheshire-Cat Window
+
+Mean-field amplitudes follow |d|² ∝ 1 − T/T\* − h with an ellipsoidal reduced field. That splits the (|B|, T) plane into four regimes:
+
+- **Normal**
+- **PDW only**, the Cheshire-cat window: only q and h survive.
+- **Uniform SC only**: the field killed the PDW first, as along a in UTe2.
+- **PDW + uniform SC**: every charge order is present.
+
+Temperature and field sweeps plot every peak's intensity on a log axis against the detection floor, and a regime map shows the phases with the current state marked.
+
+### Field-Induced Order and the d-Vector
+
+UTe2 is a triplet superconductor. At zero field the PDW components p1 and p2 have d-vectors orthogonal to the uniform one, so their charge order is absent. A field rotates the d-vectors into alignment above an anisotropic onset (≈ 0.5 T along a and c\*, ≈ 5 T along b\*), so p1 and p2 appear. The same rotation converts the paper's predicted composite spin-density-wave weight into charge order.
+
+### Moire-Locked What-If
+
+The moire-locked geometry places the PDW at the heterostructure's moire wavevectors, 2π/L_m at 120°. An imprinted CPDM has T_PDW = Tc and therefore no Cheshire-cat window. Raising T_PDW/Tc above 1 asks what an *intrinsic* PDW at the moire period would look like above Tc. The answer is falsifiable: the charge modulation halves its period (only 2Q_m survives), and the pair amplitude develops a lattice of nodes.
+
+> **Read more:** [docs/theory/pair-density-waves.md](docs/theory/pair-density-waves.md) covers the free energy, the composite-order algebra, the h₂ sign correction to the paper's wavevectors, the calibration table, known gaps and the cross-stack parity anchors.
+
+---
+
 ## Features
 
 ### Core Computation
@@ -1076,6 +1138,15 @@ Published 125Te NMR on Fe(Te,Se) under pressure (arXiv:2505.11732) reveals that 
 - **Speculative flat-band SC**: Lorentzian Delta/Tc dome in twist x filling, plus pseudo-field pair-breaking suppression.
 - **Eight view modes** on the graphene page: pattern, gap map, pseudo-field, strain, curved 3D sheet, FFT, band structure, DOS.
 
+### Pair Density Waves (Speculative)
+- **Landau model of Zhu et al. (PNAS 2026)**: triplet PDW at ±p_i plus uniform SC, with the composite p, q = 2p and h charge orders and a predicted composite SDW.
+- **UTe2 surface preset**: wavevectors in units of the Te Bragg vector (with the mirror-consistent h₂), Tc = 2.1 K, T_PDW = 5 K, anisotropic critical fields in the paper's c\* / a / b\* magnet frame.
+- **Field-induced d-vector rotation**: switches on p1 and p2 above anisotropic onset fields and converts SDW weight into p-CDW weight.
+- **Four regimes**: normal, PDW only (Cheshire cat), uniform SC only, coexistence, shown on a (|B|, T) regime map with the current state marked.
+- **Sweeps**: peak intensities vs temperature and vs field along any magnet axis, on a log axis with the detection floor and the Tc / T_PDW / Hc2 / H_PDW / onset markers.
+- **Real-space and k-space views**: pair amplitude |d(r)|, charge density ρ(r), spin density S_z(r), a Hann-tapered STM-style FFT and a k-space peak map.
+- **Moire-locked what-if**: the PDW at the heterostructure's moire wavevectors, with a T_PDW/Tc slider that opens a period-halving window above Tc.
+
 ### Visualization
 - **Multiple view modes**: 2D heatmap, contour, interactive 3D surface rendering, 3D isosurfaces, and vector quiver plots.
 - **Dual-panel display**: Moire pattern and gap modulation shown simultaneously.
@@ -1092,22 +1163,22 @@ Published 125Te NMR on Fe(Te,Se) under pressure (arXiv:2505.11732) reveals that 
 graph TB
     subgraph "Python Web UI (Plotly Dash)"
         APP[app.py<br/>Dash factory]
-        PAGES[pages/<br/>home, viewer, sweep,<br/>fourier, comparison,<br/>magnetic_field,<br/>proximity_3d,<br/>phase_diagram,<br/>graphene]
-        COMP[components/<br/>material_selector,<br/>parameter_panel,<br/>isotope_panel,<br/>magnetic_panel,<br/>graphene_panel,<br/>figure_factory]
+        PAGES[pages/<br/>home, viewer, sweep,<br/>fourier, comparison,<br/>magnetic_field,<br/>proximity_3d,<br/>phase_diagram,<br/>graphene,<br/>pair_density_wave]
+        COMP[components/<br/>material_selector,<br/>parameter_panel,<br/>isotope_panel,<br/>magnetic_panel,<br/>graphene_panel,<br/>pdw_panel,<br/>figure_factory]
 
         APP --> PAGES
         PAGES --> COMP
     end
 
     subgraph "Shared Physics"
-        PYCOMP[Python computation/<br/>moire, superconducting,<br/>fourier, isotope_effects,<br/>magnetic, topological,<br/>graphene, curvature,<br/>bm_model]
+        PYCOMP[Python computation/<br/>moire, superconducting,<br/>fourier, isotope_effects,<br/>magnetic, topological,<br/>graphene, curvature,<br/>bm_model, pdw]
         PYMAT[Python materials/<br/>database, lattice,<br/>isotopes]
-        RSCORE[Rust moire-core<br/>moire, density, fft,<br/>isotope_effects, magnetic,<br/>topological, graphene,<br/>curvature, bm_model,<br/>lattice, materials,<br/>isotopes, colormap]
+        RSCORE[Rust moire-core<br/>moire, density, fft,<br/>isotope_effects, magnetic,<br/>topological, graphene,<br/>curvature, bm_model, pdw,<br/>lattice, materials,<br/>isotopes, colormap]
     end
 
     subgraph "Rust Desktop App (egui/eframe)"
         RSAPP[app.rs<br/>MoireApp state]
-        RSUI[ui/<br/>sidebar, viewport,<br/>info_panel, isotope_panel,<br/>magnetic_panel,<br/>graphene_panel]
+        RSUI[ui/<br/>sidebar, viewport,<br/>info_panel, isotope_panel,<br/>magnetic_panel,<br/>graphene_panel, pdw_panel]
         RSRENDER[render/<br/>DensityMap, ColorImage,<br/>TextureHandle, Surface3D,<br/>vortex overlay]
 
         RSAPP --> RSUI
@@ -1136,6 +1207,7 @@ Both implementations share identical physics. The Python version computes patter
 | Graphene stacks | `computation/graphene.py` | `moire-core/src/graphene.rs` | Stacking phases, heterostrain, supermoire, magic angles |
 | Curvature | `computation/curvature.py` | `moire-core/src/curvature.rs` | Height fields, Monge strain, pseudo-field B_ps |
 | BM model | `computation/bm_model.py` | `moire-core/src/bm_model.rs` | Momentum-lattice Hamiltonian, bands, DOS |
+| Pair density waves | `computation/pdw.py` | `moire-core/src/pdw.rs` | PDW Landau model: composite CDWs, d-vector rotation, regimes, sweeps (speculative) |
 | Material data | `materials/database.py` | `moire-core/src/materials.rs` | Lattice constants, space groups, roles |
 | Isotope data | `materials/isotopes.py` | `moire-core/src/isotopes.rs` | Masses, abundances, Debye temps, Gruneisen params |
 
@@ -1179,6 +1251,7 @@ The web UI will be available at `http://localhost:8050`.
 | 3D Proximity | `/proximity3d` | Isosurface and z-slice views of proximity-induced gap into TI |
 | Phase Diagram | `/phase` | Topological-trivial phase boundary sweep over (B, Delta) space |
 | Graphene | `/graphene` | Stacked/twisted graphene, magic-angle flat bands, BM bands/DOS, curvature pseudo-fields |
+| Pair Density Waves | `/pdw` | PDW modalities (UTe2 or moire-locked): composite charge orders, sweeps, regime map (speculative) |
 
 Every page's controls, presets, and readouts are documented in the [user guide](docs/user-guide.md).
 
@@ -1228,11 +1301,11 @@ waytogocoop/
     references.md                   # Annotated bibliography
     history.md                      # Historical context
     process-technologies.md         # MBE, STM/STS, enrichment, graphene fabrication
-    theory/                         # Per-module physics deep-dives (9 pages + index)
-    images/                         # Script-generated screenshots (23 PNGs)
+    theory/                         # Per-module physics deep-dives (10 pages + index)
+    images/                         # Script-generated screenshots (27 PNGs)
 
   scripts/
-    capture_screenshots.py          # Headless Plotly/kaleido screenshot generator (17 scenes)
+    capture_screenshots.py          # Headless Plotly/kaleido screenshot generator (20 scenes)
 
   src/waytogocoop/                  # Python Web UI
     app.py                          # Dash entry point (create_app factory)
@@ -1253,6 +1326,7 @@ waytogocoop/
       graphene.py                   # Stacking phases, heterostrain, supermoire, magic angles
       curvature.py                  # Height fields, Monge strain, pseudo-field B_ps
       bm_model.py                   # Bistritzer-MacDonald bands and DOS
+      pdw.py                        # Pair-density-wave Landau model (speculative)
     pages/
       home.py                       # Landing page with material table + physics reference
       moire_viewer.py               # Interactive moire + gap viewer
@@ -1263,12 +1337,14 @@ waytogocoop/
       proximity_3d.py               # 3D proximity gap isosurface/volume/z-slice
       phase_diagram.py              # Topological phase diagram sweeps
       graphene.py                   # Graphene stacks, BM bands/DOS, curvature
+      pair_density_wave.py          # PDW modalities, sweeps, regime map
     components/
       material_selector.py          # Dropdown material picker
       parameter_panel.py            # Slider controls
       isotope_panel.py              # Isotope enrichment controls
       magnetic_panel.py             # Magnetic field and proximity controls
       graphene_panel.py             # Stack/supermoire/curvature controls + figure builders
+      pdw_panel.py                  # PDW geometry/temperature/field/coupling controls
       controls.py                   # Shared control builders
       figure_factory.py             # Plotly figure builders
       colormaps.py                  # Cross-stack colormap LUT loader
@@ -1289,12 +1365,13 @@ waytogocoop/
         graphene.rs                 # Stacking phases, heterostrain, supermoire, magic angles
         curvature.rs                # Height fields, Monge strain, pseudo-field
         bm_model.rs                 # Bistritzer-MacDonald bands and DOS
+        pdw.rs                      # Pair-density-wave Landau model (speculative)
         colormap.rs                 # viridis/inferno/coolwarm/plasma LUTs
         bin/dump_lut.rs             # Regenerates components/colormaps_data.json
     moire-desktop/                  # Rust egui desktop app
       src/
         app.rs                      # MoireApp state, recompute-on-change
-        bin/capture.rs              # Headless screenshot generator (6 scenes)
+        bin/capture.rs              # Headless screenshot generator (7 scenes)
         ui/
           sidebar.rs                # Parameter controls
           viewport.rs               # Pattern/density/FFT rendering + tabs
@@ -1302,6 +1379,7 @@ waytogocoop/
           isotope_panel.rs          # Isotope enrichment controls
           magnetic_panel.rs         # Magnetic field and proximity controls
           graphene_panel.rs         # Graphene stack/curvature controls
+          pdw_panel.rs              # Pair Density Wave controls + palette
           menu.rs, about.rs         # Menu bar, F1 physics reference
         render/                     # DensityMap -> ColorImage -> TextureHandle
           pattern.rs, surface3d.rs, renderer3d.rs, axes.rs, screenshot.rs
@@ -1311,7 +1389,7 @@ waytogocoop/
   tests/                            # Python tests (Rust tests are inline #[cfg(test)] modules)
     test_materials.py  test_moire.py  test_superconducting.py  test_fourier.py
     test_isotopes.py   test_magnetic.py  test_topological.py  test_topological_3d.py
-    test_graphene.py   test_curvature.py  test_bm_model.py
+    test_graphene.py   test_curvature.py  test_bm_model.py  test_pdw.py
 ```
 
 ---
@@ -1383,6 +1461,12 @@ Annotated versions of all references — what each work established and where th
 24. J. M. Park, Y. Cao, K. Watanabe, T. Taniguchi, and P. Jarillo-Herrero, "Tunable strongly coupled superconductivity in magic-angle twisted trilayer graphene," Nature 590, 249 (2021).
 
 25. N. Levy et al., "Strain-Induced Pseudo-Magnetic Fields Greater Than 300 Tesla in Graphene Nanobubbles," Science 329, 544 (2010).
+
+### Pair Density Waves
+
+26. Z. Zhu, Y. Huang, J. May-Mann, K. Liu, Z. Wu, S. R. Saha, J. Paglione, A. G. Eaton, A. Cabala, M. Vališka, E. Fradkin, and V. Madhavan, "Evidence of intertwined pair density and charge density wave orders in UTe2," PNAS 123 (29), e2602117123 (2026); [arXiv:2603.08688](https://arxiv.org/abs/2603.08688).
+
+27. D. F. Agterberg et al., "The physics of pair-density waves: cuprate superconductors and beyond," Annu. Rev. Condens. Matter Phys. 11, 231 (2020).
 
 ---
 

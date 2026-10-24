@@ -11,6 +11,8 @@ pub mod topological;
 pub mod graphene;
 pub mod curvature;
 pub mod bm_model;
+pub mod pdw;
+pub mod spin_fluctuation;
 
 pub use materials::{LatticeType, Material};
 pub use lattice::Lattice2D;
@@ -24,3 +26,5 @@ pub use topological::{ProximityConfig, ProximityResult, CooperSurface3D};
 pub use graphene::{GrapheneStackConfig, GrapheneStackConfigV2, GrapheneStackResult, FlatBandConfig, FlatBandResult, StackingKind, SupermoireConfig, SupermoireResult};
 pub use curvature::{CurvatureConfig, CurvatureResult, CurvatureGeometry};
 pub use bm_model::{BMConfig, BandStructure, DosResult, compute_band_structure, compute_dos, flat_band_width_mev};
+pub use pdw::{PdwConfig, PdwFields, PdwGeometry, PdwPeak, PdwRegime, PdwState, PdwSweep};
+pub use spin_fluctuation::{SfCoherence, SfConfig, SfDopingRegime, SfFermiSurface, SfGlueConfig, SfGlueResult, SfInelasticForm, SfMagnetoresistance, SfPairingForm, SfPairingMap, SF_GLUE_MOIRE_PERIOD};

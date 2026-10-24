@@ -20,12 +20,13 @@ Theory pages share one template: Overview → Model → Assumptions & validity �
 | [Graphene stacks](theory/graphene-stacks.md) | Stacking as reciprocal-space phases, heterostrain, supermoire, magic angles; speculative flat-band dome |
 | [BM model](theory/bm-model.md) | Bistritzer-MacDonald momentum lattice, band structure along K to Gamma to M to K-prime, DOS, chiral-limit test anchor |
 | [Curvature](theory/curvature.md) | Curved-sheet height fields, Monge-gauge strain, valley-antisymmetric pseudo-magnetic field; speculative gap suppression |
+| [Pair density waves](theory/pair-density-waves.md) | Speculative — Landau model of the PDW and its composite charge orders (UTe2, Zhu et al. 2026), the Cheshire-cat window above Tc, d-vector rotation, moire-locked what-if |
 
 ## Use
 
 | Page | What it covers |
 |------|----------------|
-| [User guide](user-guide.md) | Walkthrough of all nine web pages and the Rust desktop app: controls with defaults, how to read each output, keyboard shortcuts, web-vs-desktop feature matrix |
+| [User guide](user-guide.md) | Walkthrough of all ten web pages and the Rust desktop app: controls with defaults, how to read each output, keyboard shortcuts, web-vs-desktop feature matrix |
 
 ## Look up
 

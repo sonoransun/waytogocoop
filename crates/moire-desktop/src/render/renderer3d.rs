@@ -6,6 +6,10 @@
 //! - A wgpu/egui-wgpu GPU renderer in [`crate::render::gpu`] — behind the
 //!   `gpu` cargo feature.
 //!
+//! Both share one world convention (see `surface3d`): the data grid spans the
+//! x-y plane with row 0 at `-y`, and the plotted value is the height, drawn
+//! upward with the eye above the plane.
+//!
 //! The GPU path is scaffolding for the rewrite described in `CONTRIBUTING.md`
 //! ("wgpu 3D renderer"). Its shader, mesh, camera, and readback modules are
 //! in place; runtime integration with `app::rerender_surface` is feature-

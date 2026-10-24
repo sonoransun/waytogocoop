@@ -14,6 +14,7 @@ Anchor quick-reference (for linking from other pages):
 - **Phonon engineering**: `ref-bessas-2012`, `ref-weng-2021`, `ref-lindsay-2008`, `ref-lindsay-2013`
 - **Graphene & twistronics**: `ref-castro-neto-2009`, `ref-bistritzer-macdonald-2011`, `ref-koshino-2018`, `ref-tarnopolsky-2019`, `ref-khalaf-2019`, `ref-cao-2018`, `ref-cao-2018b`, `ref-park-2021`, `ref-huder-2018`, `ref-wang-2019`
 - **Strain & pseudo-magnetic fields**: `ref-vozmediano-2010`, `ref-guinea-2010`, `ref-levy-2010`, `ref-meyer-2007`, `ref-blakslee-1970`
+- **Pair density waves & UTe2**: `ref-zhu-2026`, `ref-agterberg-2020`, `ref-fradkin-2015`, `ref-aishwarya-2023`, `ref-gu-2023`, `ref-wu-2024`, `ref-aoki-2020`, `ref-kengle-2024`
 
 ## Primary papers
 
@@ -240,3 +241,56 @@ Found that free-standing graphene is intrinsically rippled on the nanometre scal
 **O. L. Blakslee, D. G. Proctor, E. J. Seldin, G. B. Spence, and T. Weng**, "Elastic Constants of Compression-Annealed Pyrolytic Graphite," J. Appl. Phys. 41, 3373 (1970). [DOI: 10.1063/1.1659428](https://doi.org/10.1063/1.1659428)
 
 Classic measurement of graphite's elastic constants, still the standard source for the in-plane Poisson ratio of graphene. Source of `POISSON_GRAPHENE` = 0.16 in `src/waytogocoop/config.py`, used by `strained_g_vectors` in `src/waytogocoop/computation/graphene.py` to contract the transverse axis under heterostrain.
+
+## Pair density waves & UTe2
+
+Everything in `src/waytogocoop/computation/pdw.py` / `crates/moire-core/src/pdw.rs` is SPECULATIVE. It is a phenomenological Landau model calibrated against the visibility windows reported below. Treat its outputs as exploratory illustrations, not quantitative predictions.
+
+<a id="ref-zhu-2026"></a>
+**Z. Zhu, Y. Huang, J. May-Mann, K. Liu, Z. Wu, S. R. Saha, J. Paglione, A. G. Eaton, A. Cabala, M. Vališka, E. Fradkin, and V. Madhavan**, "Evidence of intertwined pair density and charge density wave orders in UTe2," Proc. Natl. Acad. Sci. USA 123 (29), e2602117123 (2026). [DOI: 10.1073/pnas.2602117123](https://doi.org/10.1073/pnas.2602117123); [arXiv:2603.08688](https://arxiv.org/abs/2603.08688)
+
+The basis of the PDW module. The authors used vector-magnetic-field STM on molten-salt-flux UTe2 ($T_c \approx 2.1$ K) and resolved two families of non-dispersive CDWs:
+
+- The $\mathbf{p}_i$ peaks vanish at $T_c$. $\mathbf{p}_3$ appears at zero field; $\mathbf{p}_{1,2}$ only appear in a field.
+- The $\mathbf{q}_i = 2\mathbf{p}_i$ peaks survive to about 5 K. Their field suppression at 4.2 K follows the $H_{c2}$ hierarchy b\* > c\* > a.
+- Harmonics appear at $\mathbf{h}_{1,2} = \mathbf{q}_3 - \mathbf{q}_{2,1}$.
+
+The paper's Landau free energy (Eq. 1) attributes the q CDW to the PDW alone, the p CDW to PDW × uniform superconductivity and h to harmonics. It is implemented by `compute_pdw_state`. The measured temperatures and fields calibrate `config.py`'s UTe2 block (`T_PDW_UTE2`, `H_PDW_UTE2`, `H_ROT_UTE2`). *Note: the printed $\mathbf{h}_2 = (0.26, -0.14)\,|q_{Te}|$ contradicts the paper's own Table 1 relations and the $\mathbf{p}_1$/$\mathbf{p}_2$ mirror symmetry. The module uses $\mathbf{h}_2 = (0.26, +0.14)$, which closes $\mathbf{h}_1 + \mathbf{h}_2 + \mathbf{p}_3 = 0$.*
+
+The result reached a general audience as "New Form of Superconductor Behavior Discovered That We've Never Seen Before" (ScienceAlert, 19 October 2026), following the University of Illinois Materials Research Laboratory release. That coverage quotes Fradkin: "Pair density waves are the Cheshire Cat's grin of superconductivity."
+
+<a id="ref-agterberg-2020"></a>
+**D. F. Agterberg et al.**, "The physics of pair-density waves: cuprate superconductors and beyond," Annu. Rev. Condens. Matter Phys. 11, 231 (2020).
+
+Review of PDW order and its descendants: the $2\mathbf{Q}$ CDW, the PDW-times-uniform $\mathbf{Q}$ CDW, and vestigial phases. It is the general framework behind the composite-order table in [the PDW theory page](theory/pair-density-waves.md).
+
+<a id="ref-fradkin-2015"></a>
+**E. Fradkin, S. A. Kivelson, and J. M. Tranquada**, "Colloquium: Theory of intertwined orders in high temperature superconductors," Rev. Mod. Phys. 87, 457 (2015).
+
+The intertwined-orders picture in which superconductivity, CDW and SDW share a common origin, rather than simply competing. It is the conceptual frame of Zhu et al., and the reason the module treats charge order as a *descendant* of the PDW.
+
+<a id="ref-aishwarya-2023"></a>
+**A. Aishwarya et al.**, "Magnetic-field-sensitive charge density waves in the superconductor UTe2," Nature 618, 928 (2023).
+
+The first report of the field-sensitive incommensurate $\mathbf{q}_i$ CDWs on the UTe2 surface, which melt near $H_{c2}$. Zhu et al. reinterpret them as PDW-only composites. Their field suppression above $T_c$ is the measurement behind `H_PDW_UTE2`.
+
+<a id="ref-gu-2023"></a>
+**Q. Gu et al.**, "Detection of a pair density wave state in UTe2," Nature 618, 921 (2023).
+
+Earlier PDW detection in UTe2, the "previously detected" work the 2026 coverage refers to. It is context for the module; no constant derives from it.
+
+<a id="ref-wu-2024"></a>
+**Z. Wu et al.**, "Enhanced triplet superconductivity in next-generation ultraclean UTe2," Proc. Natl. Acad. Sci. USA 121, e2403067121 (2024).
+
+Molten-salt-flux crystals with $T_c$ up to 2.10 K and enhanced $H_{c2}$ along all axes; zero resistance persists to 34.0 T for fields within 5° of b at 0.4 K. Source of `TC_UTE2` and the b\* entry of `HC2_UTE2`.
+
+<a id="ref-aoki-2020"></a>
+**D. Aoki, F. Honda, G. Knebel, D. Braithwaite, A. Nakamura, D. Li, Y. Homma, Y. Shimizu, Y. J. Sato, J.-P. Brison, and J. Flouquet**, "Multiple Superconducting Phases and Unusual Enhancement of the Upper Critical Field in UTe2," J. Phys. Soc. Jpn. 89, 053705 (2020); [arXiv:2003.09782](https://arxiv.org/abs/2003.09782).
+
+Early-crystal upper critical fields of about 6.5 T (a) and 11 T (c). Scaled by $(2.1/1.6)^2$, these give the a and c\* entries of `HC2_UTE2`, a rough estimate.
+
+<a id="ref-kengle-2024"></a>
+**C. S. Kengle et al.**, "Absence of bulk charge density wave order in the normal state of UTe2," Nat. Commun. 15, 9713 (2024).
+
+Resonant X-ray scattering finds no bulk CDW above $T_c$. That is consistent with Zhu et al.'s conclusion that a PDW above the bulk $T_c$ must live at the surface, and it is why the module is strictly 2D and makes no bulk claims.
+

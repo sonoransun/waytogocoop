@@ -57,3 +57,41 @@
 .js-plotly-plot .plotly {
     width: 100% !important;
 }
+
+/* Navbar: the current page's plain link, or the menu that holds it, carries
+ * class "active" (dbc.NavLink active="exact"; the highlight callback in
+ * app.py for the menu toggles). Both Bootswatch themes colour every navbar
+ * link white, so mark the active one.
+ */
+.navbar .navbar-nav .nav-link.active {
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.4em;
+}
+
+/* Dash 4 core controls (dcc.Dropdown, dcc.Slider, dcc.RadioItems, dcc.Input)
+ * draw with design tokens that Dash defines on :root for a light page: white
+ * surfaces, navy text. Under DARKLY that gave white dropdowns whose white
+ * (inherited) labels vanished, a white slider tooltip and direct-input box
+ * with white text, and navy slider marks and radio labels on dark cards.
+ * The theme toggle in app.py sets body.dark-theme / body.light-theme, so the
+ * dark values are redefined on body.dark-theme: every control inherits them,
+ * including the dropdown menu, which Dash portals to <body>. Light mode keeps
+ * Dash's defaults.
+ */
+body.dark-theme {
+    --Dash-Fill-Inverse-Strong: #444;                 /* dropdown, menu, input, tooltip surfaces */
+    --Dash-Text-Strong: rgba(255, 255, 255, 0.92);    /* values, marks, options, radio labels */
+    --Dash-Text-Primary: rgba(255, 255, 255, 0.87);
+    --Dash-Text-Weak: rgba(255, 255, 255, 0.65);
+    --Dash-Text-Disabled: rgba(255, 255, 255, 0.55);  /* placeholder, marks outside the range */
+    --Dash-Stroke-Strong: rgba(255, 255, 255, 0.35);  /* control borders */
+    --Dash-Stroke-Weak: rgba(255, 255, 255, 0.12);
+    --Dash-Fill-Disabled: rgba(255, 255, 255, 0.2);   /* slider track, mark ticks, option separators */
+    --Dash-Fill-Interactive-Weak: rgba(255, 255, 255, 0.08);
+    --Dash-Fill-Primary-Hover: rgba(255, 255, 255, 0.08);
+    --Dash-Fill-Primary-Active: rgba(255, 255, 255, 0.2);
+    --Dash-Shading-Strong: rgba(0, 0, 0, 0.7);        /* menu and tooltip shadows */
+    --Dash-Shading-Weak: rgba(0, 0, 0, 0.45);
+}

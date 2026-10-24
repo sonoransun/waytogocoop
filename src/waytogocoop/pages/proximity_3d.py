@@ -17,6 +17,7 @@ import numpy as np
 import plotly.graph_objects as go
 from dash import Input, Output, State, callback, dcc, html
 
+from waytogocoop.components.colormaps import CAMERA_PRESETS
 from waytogocoop.components.controls import loading_spinner
 from waytogocoop.components.figure_factory import (
     create_3d_isosurface,
@@ -47,6 +48,61 @@ dash.register_page(
 
 _PREFIX = "prox3d"
 _URL_ID = f"{_PREFIX}-url"
+
+
+def _front_edge(x: np.ndarray, y: np.ndarray, eye: dict) -> tuple[float, float]:
+    """(x, y) of the stack's vertical edge nearest a camera at ``eye``.
+
+    The camera sits on the eye's side of the box in x and in y, so the
+    nearest vertical edge is the grid corner on that side.
+    """
+    edge_x = float(np.max(x)) if eye["x"] >= 0 else float(np.min(x))
+    edge_y = float(np.max(y)) if eye["y"] >= 0 else float(np.min(y))
+    return edge_x, edge_y
+
+
+def _height_markers(
+    x: np.ndarray, y: np.ndarray, z_top: float, xi_prox: float, dark: bool
+) -> tuple[list[dict], go.Scatter3d | None]:
+    """Arrows to z = 0 and z = ξ_prox on the stack's front edge, and that edge.
+
+    Both arrows point at the vertical edge nearest the default camera, where
+    the iso sheets end at their own heights. (At the box centre the opaque
+    sheets hide the anchor, and the arrows seem to label the top sheet.)
+    The view is drawn up to ``z_top``; a marker above it is left out, because
+    Plotly stretches a 3D axis to reach every annotation. When both heights
+    are marked, the edge between them is drawn as a line.
+    """
+    edge_x, edge_y = _front_edge(x, y, CAMERA_PRESETS["iso"]["eye"])
+    ink = "white" if dark else "black"
+    backing = "rgba(0, 0, 0, 0.6)" if dark else "rgba(255, 255, 255, 0.7)"
+    markers = (
+        # height, label, arrow-tail offset (px), side of the tail for the label
+        (0.0, "Interface (z=0)", (40, 30), "left"),
+        (xi_prox, f"ξ_prox ≈ {xi_prox:.0f} Å", (-35, -35), "right"),
+    )
+    annotations = [
+        dict(
+            x=edge_x, y=edge_y, z=z,
+            text=text,
+            showarrow=True, arrowhead=2, arrowwidth=2, arrowcolor=ink,
+            ax=ax, ay=ay, xanchor=xanchor,
+            bgcolor=backing,
+            font=dict(size=11, color=ink),
+        )
+        for z, text, (ax, ay), xanchor in markers
+        if z <= z_top
+    ]
+    edge = None
+    if len(annotations) == len(markers):
+        edge = go.Scatter3d(
+            x=[edge_x, edge_x], y=[edge_y, edge_y], z=[0.0, xi_prox],
+            mode="lines",
+            line=dict(color=ink, width=4),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    return annotations, edge
 
 
 layout = dbc.Container(
@@ -298,25 +354,11 @@ def update_proximity(
         clip_arg = None if clip_z >= float(prox_result.z_coords[-1]) else clip_z
 
         if view_mode in ("iso", "volume"):
-            # Annotate the interface plane and the proximity decay length to
-            # orient the viewer inside the isosurface volume.
-            x_mid = float((x[0] + x[-1]) / 2.0)
-            y_mid = float((y[0] + y[-1]) / 2.0)
-            xi_z = min(xi_prox, float(prox_result.z_coords[-1]))
-            iso_annotations = [
-                dict(
-                    x=x_mid, y=y_mid, z=0.0,
-                    text="Interface (z=0)",
-                    showarrow=True, arrowhead=2, ax=30, ay=-30,
-                    font=dict(size=11, color="white" if dark else "black"),
-                ),
-                dict(
-                    x=x_mid, y=y_mid, z=xi_z,
-                    text=f"ξ_prox ≈ {xi_prox:.0f} Å",
-                    showarrow=True, arrowhead=2, ax=40, ay=-40,
-                    font=dict(size=11, color="white" if dark else "black"),
-                ),
-            ]
+            # Mark the interface plane and the proximity decay length on the
+            # stack's front edge. The view is drawn up to the clip plane, or
+            # to the top z-layer when clipping is off.
+            z_top = clip_arg if clip_arg is not None else float(prox_result.z_coords[-1])
+            iso_annotations, edge = _height_markers(x, y, z_top, xi_prox, dark)
             if view_mode == "iso":
                 main_fig = create_3d_isosurface(
                     x, y, prox_result.z_coords, prox_result.gap_3d,
@@ -338,6 +380,8 @@ def update_proximity(
                     annotations=iso_annotations,
                     clip_z=clip_arg,
                 )
+            if edge is not None:
+                main_fig.add_trace(edge)
         else:
             # Z-slice heatmap
             slice_data = prox_result.gap_3d[z_idx]

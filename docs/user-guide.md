@@ -20,7 +20,7 @@ pip install -e ".[dev]"
 python -m waytogocoop.app        # serves http://localhost:8050
 ```
 
-The navbar links the nine pages in the order documented below, plus a Light/Dark theme toggle (persisted in browser local storage). Every figure is a Plotly graph: use the modebar (top-right of each figure) to zoom, pan, rotate 3D views, or download a PNG.
+The navbar links the ten pages in the order documented below, plus a Light/Dark theme toggle (persisted in browser local storage). Every figure is a Plotly graph: use the modebar (top-right of each figure) to zoom, pan, rotate 3D views, or download a PNG.
 
 **Shared controls.** Most pages compose the same two sidebar cards — a material selector (`src/waytogocoop/components/material_selector.py`, `create_material_selector`) and a parameter panel (`src/waytogocoop/components/parameter_panel.py`, `create_parameter_panel`). Hover the ⓘ badge next to a label for the built-in help text. Their controls and defaults:
 
@@ -238,6 +238,48 @@ Presets: **Magic-angle TBG** (θ = 1.08°, also the page default), **Alt-twist t
 
 Theory: [graphene stacks](theory/graphene-stacks.md), [BM model](theory/bm-model.md), [curvature](theory/curvature.md).
 
+### Pair Density Waves (`/pdw`)
+
+**Status: SPECULATIVE.** This page is a phenomenological Landau model of the pair-density-wave (PDW) modalities reported in UTe2 by [Zhu et al. (PNAS 2026)](references.md#ref-zhu-2026). Its defaults are tuned to the paper's visibility windows; the moire-locked geometry is a what-if. Every figure title carries the (SPECULATIVE) tag.
+
+A PDW is a superconductor whose pairs condense at finite momentum ±p. Together with the uniform condensate it leaves three charge orders: **p** (PDW × uniform SC, gone above Tc), **q = 2p** (the PDW alone, surviving up to T_PDW) and the **h** harmonics. The window between Tc and T_PDW, where only q and h remain, is the "Cheshire cat's grin" of the press coverage (`src/waytogocoop/pages/pair_density_wave.py`; computation in `src/waytogocoop/computation/pdw.py`).
+
+![Peak intensities vs temperature](images/pdw-tsweep.png)
+
+![STM-style FFT in the Cheshire-cat window](images/pdw-fft.png)
+
+![Moire-locked what-if above Tc](images/pdw-moire-whatif.png)
+
+Presets:
+- **UTe2 300 mK, zero field** (the page default)
+- **UTe2 3 K — Cheshire-cat window**
+- **UTe2 field-induced p2 (Bz ≈ b\* = 6 T)**
+- **UTe2 4.2 K, By = a = 0.2 T (q fading)**
+- **Moire-locked CPDM (FeTe / Sb2Te3)**
+- **Moire what-if: intrinsic PDW above Tc**
+
+| Control | Meaning | Default |
+|---|---|---|
+| Geometry | UTe2 surface (Zhu et al. 2026) or Moire-locked heterostructure (what-if; uses the material dropdowns and twist, with the shared two-lattice period $L = a_1 a_2/\sqrt{a_1^2 + a_2^2 - 2a_1a_2\cos\theta}$) | UTe2 |
+| Temperature T (K) | Slider range follows the geometry: 0–6 K for UTe2, 0–30 K for the FeTe films | 0.3 K |
+| T_PDW / Tc | PDW onset relative to the uniform Tc; 1 closes the Cheshire-cat window. Switching geometry swaps the other geometry's default for this one's (5 / 2.1 for UTe2, 1 for moire); a ratio you set yourself is kept | 5 / 2.1 (UTe2) |
+| Applied field | Bx (≈ c\*), By (= a), Bz (≈ b\*) in the paper's vector-magnet frame | 0, 0, 0 T |
+| Field-sweep axis | Direction of the field sweep and regime map: x, y, z, or along the applied B | z (≈ b\*) |
+| Landau couplings (collapsed) | κ_p, κ_q, κ_h, κ_harm (q fed as a harmonic of p), and the log₁₀ detection floor | 1, 1, 1, 0, −2 |
+| Material dropdowns | Substrate / overlayer for the moire-locked geometry (hidden for UTe2) | FeTe / Sb2Te3 |
+| Grid size / Physical extent (Å) | Real-space window (half-width) | 200 / 40 |
+| View mode | Charge density ρ(r), Pair amplitude \|d(r)\|, Spin density S_z(r) (speculative), STM-style FFT of ρ(r), Peak map (k-space) | Charge density |
+
+**Reading the output.**
+- The **info card** names the regime (normal, PDW only, uniform SC only, coexistence) with a one-line explanation, the system, Tc and T_PDW, the normalized amplitudes δ0 and δp with their meV values, and the d-vector overlaps d̂0 · d̂p. It also lists the critical fields Hc2(T) and H_PDW(T) and the d-vector onset along the sweep axis, plus a peak table (|k|, λ = 2π/|k|, |ρ|², whether the peak clears the detection floor).
+- The **two sweep plots** show every peak's |ρ|² on a log axis, against temperature at the applied field and against |B| along the sweep axis at the current temperature. Dotted lines mark the transitions, a dashed line marks the current value and the shaded band is the PDW-only window. Members 1 and 2 of each family share a dashed curve; member 3 is solid.
+- The **regime map** colors the (|B|, T) plane by regime. Orange is PDW + uniform SC (p, q and h all present), blue is the PDW-only window, and the grays have no charge order. A cross marks the current state, but only when the applied field points along the sweep axis; otherwise the state is off the map, and the info card says so.
+- The **FFT view** resamples ρ(r) on its own 256² grid, applies a Hann taper and zero-padding, and crops to the peak region, as in STM practice. Every peak is ringed and labelled; open rings mark peaks below the floor.
+
+Full URL sharing is wired for every control.
+
+Theory: [pair density waves](theory/pair-density-waves.md), [gap modulation](theory/gap-modulation.md#cpdm-versus-pdw) (CPDM versus PDW).
+
 ## Desktop app (Rust egui)
 
 Launch:
@@ -257,7 +299,7 @@ The window has three regions: a **menu bar** on top, a scrollable **sidebar** on
 
 ### Viewport: tabs and 2D/3D toggle
 
-Six tabs (`crates/moire-desktop/src/ui/viewport.rs`, `show_viewport`): **Moire Pattern**, **Density Modulation**, **Fourier Spectrum**, **Magnetic**, **Cooper 3D**, **Graphene** — followed by a **2D / 3D** toggle that applies to every tab. 2D shows a colormapped texture with axes and a colorbar; 3D renders the same field as a height surface (drag to rotate, scroll to zoom). The Cooper 3D tab renders the proximity-decayed gap through four views (see the Cooper 3D panel below); the web app's isosurface and volume renders remain web-only, but the z-slice browser and decay profile now have desktop equivalents. The Fourier tab additionally offers a collapsible **FFT peaks (top 20)** table below the spectrum (kx, ky, |k|, wavelength, amplitude). In the Graphene tab, the Bands and DOS views are drawn as line plots (egui_plot) rather than textures, so the 2D/3D toggle is inert there — as is the Cooper 3D tab's Decay profile view.
+Seven tabs (`crates/moire-desktop/src/ui/viewport.rs`, `show_viewport`): **Moire Pattern**, **Density Modulation**, **Fourier Spectrum**, **Magnetic**, **Cooper 3D**, **Graphene**, **Pair Density Wave** — followed by a **2D / 3D** toggle that applies to every tab. 2D shows a colormapped texture with axes and a colorbar; 3D renders the same field as a height surface (drag to rotate, scroll to zoom). The Cooper 3D tab renders the proximity-decayed gap through four views (see the Cooper 3D panel below); the web app's isosurface and volume renders remain web-only, but the z-slice browser and decay profile now have desktop equivalents. The Fourier tab additionally offers a collapsible **FFT peaks (top 20)** table below the spectrum (kx, ky, |k|, wavelength, amplitude). In the Graphene tab, the Bands and DOS views are drawn as line plots (egui_plot) rather than textures, so the 2D/3D toggle is inert there. The same holds for the Cooper 3D tab's Decay profile view and for the Pair Density Wave tab's sweeps and regime map.
 
 ### Sidebar controls
 
@@ -278,7 +320,7 @@ Top to bottom (`crates/moire-desktop/src/ui/sidebar.rs`, `show_sidebar`):
 
 A **Colormap** combo (Auto / viridis / inferno / coolwarm / plasma) sits with the 3D overlay toggles: Auto keeps each view's semantic default (viridis for unsigned fields, coolwarm for signed, inferno for FFT), while a named choice overrides every texture, 3D surface, comparison thumbnail, and colorbar globally.
 
-Below these sit the isotope, magnetic, Cooper 3D, and graphene panels, then a **Compare All Substrates** button that opens the Substrate Comparison window (all overlayers vs. the current substrate, moire + density thumbnails with mismatch and period) and a **Phase Diagram (speculative)** button that opens the Fu-Kane phase-diagram window — a binary topological/trivial map over (B, Delta) with the experimental Delta_avg marked, B-max / Delta-max / mu sliders, and a vortex-period commensuration plot underneath. The **Results** panel at the bottom of the sidebar mirrors the web info cards: materials, mismatch, moire period, viewport/resolution, gap range, and — when active — magnetic, Cooper 3D, and isotope readouts, each speculative group labeled in red.
+Below these sit the isotope, magnetic, Cooper 3D, graphene, and pair-density-wave panels, then a **Compare All Substrates** button that opens the Substrate Comparison window (all overlayers vs. the current substrate, moire + density thumbnails with mismatch and period) and a **Phase Diagram (speculative)** button that opens the Fu-Kane phase-diagram window — a binary topological/trivial map over (B, Delta) with the experimental Delta_avg marked, B-max / Delta-max / mu sliders, and a vortex-period commensuration plot underneath. The **Results** panel at the bottom of the sidebar mirrors the web info cards: materials, mismatch, moire period, viewport/resolution, gap range, and — when active — magnetic, Cooper 3D, and isotope readouts, each speculative group labeled in red.
 
 ### Isotope panel
 
@@ -300,13 +342,29 @@ Below these sit the isotope, magnetic, Cooper 3D, and graphene panels, then a **
 
 ![Desktop curved sheet colored by pseudo-field](images/rust-curved-3d.png)
 
+### Pair Density Wave panel
+
+`crates/moire-desktop/src/ui/pdw_panel.rs`, `show_pdw_panel`. This panel holds the controls for the **Pair Density Wave** tab (SPECULATIVE), mirroring the web page. It offers the same six presets; the moire-locked presets use whatever substrate and overlayer the main sidebar selects. The rest of the panel, top to bottom:
+
+- **Geometry** combo: UTe2 surface or Moire-locked.
+- **Temperature** slider: 0–6 K for UTe2, 0–30 K for the FeTe films.
+- **T_PDW / Tc** slider: 0.5–3.
+- **Field**: three drag values for Bx (≈ c\*), By (= a) and Bz (≈ b\*), 0–60 T.
+- **Sweep axis** combo.
+- **View** combo: Charge density, Pair amplitude, Spin density, STM-style FFT, Peaks vs temperature, Peaks vs field, Regime map.
+- Collapsible **Landau couplings**: κ_p, κ_q, κ_h, κ_harm and the log₁₀ detection floor.
+
+The field views render as textures, so they work in 2D and 3D, and their colorbars are symmetric for the signed densities. The two sweeps are egui_plot line charts on a log₁₀ axis. The regime map is a themed texture on (|B|, T) axes with a swatch legend. Like the band plots, these three ignore the 2D/3D toggle and are not captured by Ctrl+S. The panel's readout shows the regime swatch, δ0 / δp and the list of visible peaks. If the moire-locked geometry has no moire (identical lattices at zero twist), the tab shows the reason in place of its views. The Results panel adds a "Pair density wave (speculative)" block: system, regime, T / Tc / T_PDW, Δ0 / Δp, the d-vector overlaps and the visible-peak count.
+
+![Desktop PDW what-if surface](images/rust-pdw-whatif-3d.png)
+
 ### Menus and keyboard shortcuts
 
-Menu bar (`crates/moire-desktop/src/ui/menu.rs`): **File** (Save screenshot…, Quit), **Edit** (Reset parameters), **View** (Reset 3D camera, Wireframe, World axes + scale bar, Switch to light/dark), **Help** (About…, a link to arXiv:2602.22637). The About dialog (F1) mirrors the web About accordion — validated vs. speculative modules and this shortcut list.
+Menu bar (`crates/moire-desktop/src/ui/menu.rs`): **File** (Save screenshot…, Quit), **Edit** (Reset parameters), **View** (Reset 3D camera, Wireframe, World axes + scale bar, Switch to light/dark), **Help** (About…, links to arXiv:2602.22637 and to the Zhu et al. PNAS 2026 PDW paper). The About dialog (F1) mirrors the web About accordion — validated vs. speculative modules and this shortcut list.
 
 | Shortcut | Action |
 |---|---|
-| Ctrl+S (Cmd+S on macOS) | Save screenshot — a timestamped PNG (`moire-screenshot-<unix-time>.png`) in the working directory; the current 3D view is re-rendered at 1024×1024. Bands/DOS/decay-profile line plots are not captured. |
+| Ctrl+S (Cmd+S on macOS) | Save screenshot — a timestamped PNG (`moire-screenshot-<unix-time>.png`) in the working directory; the current 3D view is re-rendered at 1024×1024. Bands/DOS/decay-profile line plots and the PDW sweeps / regime map are not captured. |
 | Ctrl+R (Cmd+R) | Reset parameters to defaults (theme is kept) |
 | R | Reset the 3D camera |
 | W | Toggle the wireframe overlay |
@@ -328,6 +386,7 @@ Built from the Dash pages versus the desktop tab and view lists (`crates/moire-d
 | Screening currents, susceptibility | `/magnetic` (3D cones, chi heatmap) | Magnetic tab — Susceptibility (chi) + Screening (\|j\|) views (2D plasma magnitude maps; no 3D cones) |
 | Moire-vortex beating + field-response sweeps (speculative) | `/magnetic` (Beating view, Field-Tunable CPDM + pinning sweeps, Bc2 slider) | not available |
 | Majorana density (2D / 3D, speculative) | `/magnetic` views | Cooper 3D tab, Majorana view — z-resolved, vortex-bound (speculative) |
+| PDW modalities (speculative) | `/pdw` — charge / pair / spin maps, STM-style FFT, k-space peak map, T and B sweeps, regime map | Pair Density Wave tab — charge / pair / spin maps, FFT, T and B sweeps, regime map (no k-space peak map; visible peaks listed in the panel) |
 | 3D proximity volume (isosurface / volume / z-slice, decay profile) | `/proximity3d` | Cooper 3D tab — interface gap + Z-slice browser + decay profile (no isosurface/volume) |
 | TI surface Dirac cone plot | `/proximity3d` | not available |
 | Topological phase diagram | `/phase` | Phase Diagram window (speculative) — Fu-Kane (B, Delta) map + commensuration plot |

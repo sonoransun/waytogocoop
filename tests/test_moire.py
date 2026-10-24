@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from waytogocoop.computation.moire import (
+    estimate_moire_period,
     generate_moire_pattern,
     moire_periodicity_1d,
     moire_periodicity_with_twist,
@@ -43,6 +44,20 @@ class TestMoirePeriodicity:
     def test_twist_zero_returns_inf(self):
         period = moire_periodicity_with_twist(4.0, 0.0)
         assert np.isinf(period)
+
+    @pytest.mark.parametrize("twist", [0.0, 2.0])
+    def test_estimate_matches_generated_period(self, fete, sb2te3, twist):
+        result = generate_moire_pattern(
+            substrate_a=fete.a,
+            overlayer_a=sb2te3.a,
+            overlayer_lattice_type="hexagonal",
+            twist_angle_deg=twist,
+            grid_size=4,
+        )
+        assert estimate_moire_period(fete.a, sb2te3.a, twist) == result["moire_period"]
+
+    def test_estimate_identical_lattices_infinite(self):
+        assert np.isinf(estimate_moire_period(3.82, 3.82))
 
 
 class TestGenerateMoirePattern:

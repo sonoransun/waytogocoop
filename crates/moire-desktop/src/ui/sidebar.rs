@@ -261,6 +261,24 @@ pub fn show_sidebar(ui: &mut Ui, app: &mut MoireApp) {
         app.needs_graphene_recompute = true;
     }
 
+    ui.add_space(16.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    // --- Spin Fluctuations ---
+    if super::sf_panel::show_sf_panel(ui, app) {
+        app.needs_sf_recompute = true;
+    }
+
+    ui.add_space(16.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    // --- Pair Density Wave ---
+    if super::pdw_panel::show_pdw_panel(ui, app) {
+        app.needs_pdw_recompute = true;
+    }
+
     if changed {
         app.needs_recompute = true;
     }

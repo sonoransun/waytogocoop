@@ -2,9 +2,116 @@
 
 from __future__ import annotations
 
+import json
+from string import Template
+
 import dash
 import dash_bootstrap_components as dbc
 from dash import Dash, Input, Output, clientside_callback, dcc
+
+# Navbar, in display order: (label, href) is a plain link, (label, items) a
+# dropdown menu of (label, href) pages. Home and Graphene stay plain links;
+# the other pages are grouped by track so the bar is one row from 1280 px up
+# and every page is at most two clicks away. The user guide quotes this table.
+NAVBAR: tuple[tuple[str, str | tuple[tuple[str, str], ...]], ...] = (
+    ("Home", "/"),
+    (
+        "Core",
+        (
+            ("Moire Viewer", "/viewer"),
+            ("Parameter Sweep", "/sweep"),
+            ("Fourier Analysis", "/fourier"),
+            ("Substrate Comparison", "/comparison"),
+        ),
+    ),
+    ("Graphene", "/graphene"),
+    (
+        "Speculative",
+        (
+            ("Magnetic Field", "/magnetic"),
+            ("3D Proximity", "/proximity3d"),
+            ("Phase Diagram", "/phase"),
+            ("Spin Fluctuations", "/spinfluct"),
+            ("Pair Density Waves", "/pdw"),
+        ),
+    ),
+)
+NAV_LOCATION_ID = "app-location"
+
+
+def nav_menu_id(label: str) -> str:
+    """Component id of a navbar dropdown menu, e.g. "nav-menu-core"."""
+    return f"nav-menu-{label.lower()}"
+
+
+def nav_item_id(href: str) -> str:
+    """Component id of a page's menu item, e.g. "nav-item-viewer" for "/viewer"."""
+    return f"nav-item-{href.strip('/')}"
+
+
+def _navbar_children() -> list:
+    children: list = []
+    for label, target in NAVBAR:
+        if isinstance(target, str):
+            # active="exact" highlights the link on its own page.
+            children.append(dbc.NavItem(dbc.NavLink(label, href=target, active="exact")))
+        else:
+            children.append(
+                dbc.DropdownMenu(
+                    [
+                        dbc.DropdownMenuItem(name, href=href, id=nav_item_id(href))
+                        for name, href in target
+                    ],
+                    label=label,
+                    id=nav_menu_id(label),
+                    nav=True,
+                    in_navbar=True,
+                )
+            )
+    children.append(
+        dbc.NavItem(
+            dbc.Button(
+                "Light Mode",
+                id="theme-toggle-btn",
+                color="outline-light",
+                size="sm",
+                className="ms-3",
+            )
+        )
+    )
+    return children
+
+
+# Marks the current page's menu (toggle class "active") and item (active=True)
+# from the URL path; the menus' own links give no such hint.
+_HIGHLIGHT_JS = Template(
+    """
+    function(pathname) {
+        const menus = $menus;
+        const hrefs = $hrefs;
+        const path = (pathname || "/").replace(/\\/+$$/, "") || "/";
+        const toggles = menus.map(m => m.includes(path) ? "active" : "");
+        return toggles.concat(hrefs.map(h => h === path));
+    }
+    """
+)
+
+
+def _register_navbar_highlight() -> None:
+    menus = [
+        (label, [href for _name, href in items])
+        for label, items in NAVBAR
+        if not isinstance(items, str)
+    ]
+    hrefs = [href for _label, items in menus for href in items]
+    clientside_callback(
+        _HIGHLIGHT_JS.substitute(
+            menus=json.dumps([items for _label, items in menus]), hrefs=json.dumps(hrefs)
+        ),
+        *[Output(nav_menu_id(label), "toggle_class_name") for label, _items in menus],
+        *[Output(nav_item_id(href), "active") for href in hrefs],
+        Input(NAV_LOCATION_ID, "pathname"),
+    )
 
 
 def create_app() -> Dash:
@@ -19,27 +126,9 @@ def create_app() -> Dash:
     app.layout = dbc.Container(
         [
             dcc.Store(id="theme-store", data="dark", storage_type="local"),
+            dcc.Location(id=NAV_LOCATION_ID, refresh=False),
             dbc.NavbarSimple(
-                children=[
-                    dbc.NavItem(dbc.NavLink("Home", href="/")),
-                    dbc.NavItem(dbc.NavLink("Moire Viewer", href="/viewer")),
-                    dbc.NavItem(dbc.NavLink("Parameter Sweep", href="/sweep")),
-                    dbc.NavItem(dbc.NavLink("Fourier Analysis", href="/fourier")),
-                    dbc.NavItem(dbc.NavLink("Substrate Comparison", href="/comparison")),
-                    dbc.NavItem(dbc.NavLink("Magnetic Field", href="/magnetic")),
-                    dbc.NavItem(dbc.NavLink("3D Proximity", href="/proximity3d")),
-                    dbc.NavItem(dbc.NavLink("Phase Diagram", href="/phase")),
-                    dbc.NavItem(dbc.NavLink("Graphene", href="/graphene")),
-                    dbc.NavItem(
-                        dbc.Button(
-                            "Light Mode",
-                            id="theme-toggle-btn",
-                            color="outline-light",
-                            size="sm",
-                            className="ms-3",
-                        )
-                    ),
-                ],
+                children=_navbar_children(),
                 brand="Good Job Coop!",
                 brand_href="/",
                 color="primary",
@@ -50,6 +139,8 @@ def create_app() -> Dash:
         fluid=True,
         className="px-0",
     )
+
+    _register_navbar_highlight()
 
     # Clientside callback to swap the Bootstrap stylesheet and body class
     clientside_callback(

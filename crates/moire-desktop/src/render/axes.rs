@@ -96,8 +96,14 @@ fn format_tick(value: f64, range: f64) -> String {
 }
 
 /// Draw axis ticks and labels around an image rect.
+///
+/// Labels follow the data convention of the web heatmaps: x increases to the
+/// right and y increases upward, so the bottom tick reads `y_range.0`. A
+/// texture from `pattern::create_texture` has data row 0 (y_min) in its top
+/// row and must be painted with v flipped (`uv = (0, 1)-(1, 0)`) to agree
+/// with these labels, as `ui/viewport.rs::paint_texture_view` does.
 pub fn draw_axes(painter: &Painter, image: Rect, spec: &AxesSpec, dark: bool) {
-    let stroke = Stroke::new(1.0, stroke_color(dark));
+    let stroke = Stroke::new(1.0_f32, stroke_color(dark));
     let tc = text_color(dark);
     let tick_len: f32 = 5.0;
 
@@ -176,7 +182,7 @@ pub fn draw_axes(painter: &Painter, image: Rect, spec: &AxesSpec, dark: bool) {
 
 /// Paint a vertical colorbar gradient with ticks and a label.
 pub fn draw_colorbar(painter: &Painter, rect: Rect, spec: &ColorbarSpec, dark: bool) {
-    let stroke = Stroke::new(1.0, stroke_color(dark));
+    let stroke = Stroke::new(1.0_f32, stroke_color(dark));
     let tc = text_color(dark);
     let slices: i32 = 96;
 

@@ -65,6 +65,26 @@ def moire_periodicity_with_twist(a, theta_deg):
     return float(result) if result.ndim == 0 else result
 
 
+def estimate_moire_period(
+    substrate_a: float,
+    overlayer_a: float,
+    twist_angle_deg: float = 0.0,
+) -> float:
+    """Moire period reported for a substrate/overlayer pair (Angstrom).
+
+    Uses the twist formula with ``a_eff = (substrate_a + overlayer_a) / 2``
+    when the twist exceeds ``SMALL_ANGLE_THRESHOLD``, otherwise the 1D
+    mismatch formula; returns ``inf`` for identical lattices at zero twist.
+    This is the estimate :func:`generate_moire_pattern` reports.
+    """
+    if abs(twist_angle_deg) > SMALL_ANGLE_THRESHOLD:
+        a_eff = (substrate_a + overlayer_a) / 2.0
+        return moire_periodicity_with_twist(a_eff, twist_angle_deg)
+    if abs(substrate_a - overlayer_a) < ZERO_THRESHOLD:
+        return np.inf
+    return moire_periodicity_1d(substrate_a, overlayer_a)
+
+
 def _reciprocal_g_vectors_square(a: float) -> np.ndarray:
     """First-order reciprocal lattice vectors for a square lattice.
 
@@ -217,16 +237,7 @@ def generate_moire_pattern(
     else:
         pattern = np.zeros_like(pattern)
 
-    # Estimate moire period
-    if abs(twist_angle_deg) > SMALL_ANGLE_THRESHOLD:
-        # Use twist formula with effective average lattice constant
-        a_eff = (substrate_a + overlayer_a) / 2.0
-        moire_period = moire_periodicity_with_twist(a_eff, twist_angle_deg)
-    else:
-        if abs(substrate_a - overlayer_a) < ZERO_THRESHOLD:
-            moire_period = np.inf
-        else:
-            moire_period = moire_periodicity_1d(substrate_a, overlayer_a)
+    moire_period = estimate_moire_period(substrate_a, overlayer_a, twist_angle_deg)
 
     return {
         "x": x,
